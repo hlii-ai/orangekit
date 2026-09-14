@@ -1,0 +1,48 @@
+{
+  "combo": "react-vite+aws-container",
+  "frontendPack": "frontend/react-vite",
+  "backendPack": "backend/aws-container",
+  "seamVersion": "3.12.0",
+  "verified": "2026-08-22",
+  "extractedFrom": "skills/react-aws-frontend-guide + skills/react-aws-backend-guide (v3.11.0)",
+  "prebuilt": true,
+
+  "contract": "contract.md",
+
+  "hubs": {
+    "frontend": "frontend/HUB.md",
+    "backend": "backend/HUB.md"
+  },
+
+  "note": "A prebuilt seam carries the full hub text verbatim. The assembler does not compose the pack's PACK.md fragments; it copies this HUB.md — only then is the assembled result identical to the v3.11.0 prebuilt guide apart from the unified domain vocabulary (regression-verifiable).",
+
+  "frontend": {
+    "resources": [
+      { "file": "data-fetching.md",    "nav": "Fetching list/detail data · query keys · cache invalidation · API client · enforcing the HTTP boundary with lint" },
+      { "file": "auth-and-session.md", "nav": "Login/logout · token storage · 401 handling · cache cleanup · swapping the issuer" },
+      { "file": "complete-example.md", "nav": "One feature end to end, from list query to create" }
+    ],
+    "provides": ["Task", "http", "ApiError", "Page", "useAuth", "useTasksQuery", "taskKeys", "useCreateTaskMutation", "AuthWiring", "userManager", "oidcSettings", "getAccessToken", "setTokenGetter", "refreshOnce", "readGroups", "useCan", "Ability", "ApiErrorCode", "FieldErrors", "CreateTaskInput", "TaskFilter", "TaskStatus", "createTask", "listTasks", "onSigninCallback", "CreateTaskDialog"]
+  },
+
+  "backend": {
+    "resources": [
+      { "file": "api-endpoints.md",        "nav": "Adding routes and handlers · request/response envelope · pagination contract · CORS · status code mapping · onError · PostgreSQL error translation · handler-layer testing" },
+      { "file": "auth-boundaries.md",      "nav": "Token verification · requireAuth wiring · roles and scopes · login/logout flow · return path validation" },
+      { "file": "complete-example.md",     "nav": "Migration → schema → query → service → handler → test, the whole span" }
+    ],
+    "provides": ["app", "AppEnv", "AppError", "onError", "notFound", "ErrorCode", "ErrorStatus", "Cursor", "requireAuth", "makeRequireAuth", "AuthUser", "TokenVerifier", "makeJwksVerifier", "verifyWithJwks", "requireGroup", "safeReturnPath", "signState", "verifyState", "isUniqueViolation", "insertTask", "findAnyTask", "tasksRoutes", "authRoutes", "adminRoutes", "createTask", "getTask", "listTasks", "updateTask", "deleteTask"]
+  },
+
+  "packRequiresSatisfied": {
+    "frontend/react-vite": ["Task", "http", "ApiError", "Page", "useAuth", "useTasksQuery"],
+    "backend/aws-container": ["app", "AppEnv", "AppError", "onError", "requireAuth", "AuthUser", "safeReturnPath", "isUniqueViolation", "insertTask"]
+  },
+
+  "knownGaps": [
+    {
+      "symbol": "FullPageSpinner",
+      "detail": "The frontend/react-vite pack consumes it 3 times but there is no definition anywhere in the pack or the seam. A defect inherited from v3.11.0 — either the seam fills it by putting it in provides or the pack defines it, but improving the body text is out of scope this time"
+    }
+  ]
+}

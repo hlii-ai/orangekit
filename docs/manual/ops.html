@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="The ORANGEKIT admin map — 12 runbooks keyed to what you are changing, six kinds of part and what they cost, doctor's 8 modes, code contracts, the self-repair loops, and eight invariants.">
+<meta property="og:title" content="ORANGEKIT Admin Map">
+<meta property="og:description" content="The ORANGEKIT admin map — 12 runbooks keyed to what you are changing, six kinds of part and what they cost, doctor's 8 modes, code contracts, the self-repair loops, and eight invariants.">
+<meta property="og:type" content="article">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔧</text></svg>">
+<style>:root{color-scheme:light dark}body{margin:0;padding:0}img{max-width:100%}</style>
+<title>ORANGEKIT Admin Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --ground:#E8EBEA; --surface:#F7F9F8; --sunk:#DDE2E1;
+    --ink:#14191A; --soft:#4C5A58; --faint:#7B8886;
+    --line:#C4CCCA; --line-hard:#9EAAA8;
+    --skill:#0B7B85;  --skill-soft:#D2E6E7;
+    --rule:#2F4BA8;   --rule-soft:#DCE2F5;
+    --hook:#A8461B;   --hook-soft:#F6E0D5;
+    --agent:#6E3596;  --agent-soft:#EADCF3;
+    --store:#5A6472;  --store-soft:#DFE3E6;
+    --webbing:#B87E05; --webbing-soft:#F6E7BE;
+    --alert:#A81F23;  --alert-soft:#F3D8D8;
+    --display:"Archivo Black","IBM Plex Sans",sans-serif;
+    --body:"IBM Plex Sans",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1413; --surface:#171E1D; --sunk:#1F2827;
+      --ink:#E7EEEC; --soft:#A0B0AD; --faint:#7A8886;
+      --line:#2B3634; --line-hard:#43524F;
+      --skill:#3FC8D2; --skill-soft:#12363A;
+      --rule:#8CA2F0;  --rule-soft:#1A2140;
+      --hook:#E8975E;  --hook-soft:#3A2115;
+      --agent:#C08BE0; --agent-soft:#2C1B38;
+      --store:#9BA6B3; --store-soft:#232A2E;
+      --webbing:#F0BE45; --webbing-soft:#3A2E10;
+      --alert:#EF6A6D; --alert-soft:#3A1B1C;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1413; --surface:#171E1D; --sunk:#1F2827;
+    --ink:#E7EEEC; --soft:#A0B0AD; --faint:#7A8886;
+    --line:#2B3634; --line-hard:#43524F;
+    --skill:#3FC8D2; --skill-soft:#12363A;
+    --rule:#8CA2F0;  --rule-soft:#1A2140;
+    --hook:#E8975E;  --hook-soft:#3A2115;
+    --agent:#C08BE0; --agent-soft:#2C1B38;
+    --store:#9BA6B3; --store-soft:#232A2E;
+    --webbing:#F0BE45; --webbing-soft:#3A2E10;
+    --alert:#EF6A6D; --alert-soft:#3A1B1C;
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.72;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px 96px}
+
+  .strap{background:var(--ink);color:var(--ground);font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:9px 24px;display:flex;gap:18px;flex-wrap:wrap;border-bottom:3px solid var(--webbing)}
+  .strap span:last-child{margin-left:auto;opacity:.65}
+  .strap a{color:inherit;text-decoration:none;border-bottom:1.5px solid currentColor;padding-bottom:1px}
+  .strap a:hover{opacity:.7}
+  .strap a:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+
+  header{padding:58px 0 34px;border-bottom:2px solid var(--ink)}
+  h1{font-family:var(--display);font-weight:400;font-size:clamp(36px,6.6vw,66px);line-height:1.05;margin:0 0 18px;text-wrap:balance;letter-spacing:-.01em}
+  .lede{font-size:clamp(16.5px,2.1vw,20px);color:var(--soft);max-width:60ch;margin:0}
+  .lede strong{color:var(--ink);font-weight:600}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--webbing);margin:0 0 20px;font-weight:600}
+
+  .legend{display:flex;flex-wrap:wrap;gap:0 20px;margin:24px 0 0;font-family:var(--mono);font-size:12px;color:var(--soft)}
+  .legend b{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+  .legend i{width:11px;height:11px;display:inline-block}
+
+  nav.toc{display:flex;flex-wrap:wrap;gap:2px;background:var(--line);margin:26px 0 0}
+  nav.toc a{background:var(--surface);padding:11px 14px;font-size:13px;text-decoration:none;color:var(--soft);flex:1 1 auto;text-align:center}
+  nav.toc a:hover{background:var(--webbing-soft);color:var(--ink)}
+  nav.toc a:focus-visible{outline:2px solid var(--webbing);outline-offset:-2px}
+
+  section{padding:56px 0;border-bottom:1px solid var(--line);scroll-margin-top:12px}
+  section:last-of-type{border-bottom:0}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+  h2{font-family:var(--display);font-weight:400;font-size:clamp(25px,4vw,38px);line-height:1.14;margin:0 0 16px;text-wrap:balance}
+  h3{font-size:17px;font-weight:700;margin:36px 0 10px}
+  .say{font-size:clamp(15.5px,1.9vw,17.5px);color:var(--soft);max-width:70ch;margin:0}
+  .say strong{color:var(--ink);font-weight:600}
+  .m{font-family:var(--mono)}
+
+  figure{margin:30px 0 0}
+  figure svg{display:block;width:100%;max-width:100%;height:auto}
+  .scroller{overflow-x:auto}
+  figcaption{margin-top:14px;font-size:14px;color:var(--soft);max-width:74ch;border-left:3px solid var(--webbing);padding-left:14px}
+
+  .tbl-wrap{overflow-x:auto;margin-top:22px}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11.5px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600;border-bottom:2px solid var(--line-hard)}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  .paths{font-family:var(--mono);font-size:12px;color:var(--soft);line-height:1.65}
+
+  .pill{display:inline-block;font-family:var(--mono);font-size:12.5px;font-weight:600;padding:2px 8px;border:1.5px solid currentColor;white-space:nowrap}
+  .p-skill{color:var(--skill)} .p-rule{color:var(--rule)} .p-hook{color:var(--hook)} .p-agent{color:var(--agent)} .p-store{color:var(--store)}
+  .badge{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.06em;padding:2px 6px;border:1.5px solid currentColor}
+
+  /* ── runbook explorer ── */
+  .rb{margin-top:28px;background:var(--line);display:grid;gap:2px}
+  .rb-tabs{background:var(--surface);padding:18px 20px;display:flex;flex-wrap:wrap;gap:2px}
+  .rb-tabs button{font-family:var(--body);font-size:13.5px;padding:9px 14px;background:var(--sunk);color:var(--soft);border:0;cursor:pointer;text-align:left}
+  .rb-tabs button:hover{background:var(--webbing-soft);color:var(--ink)}
+  .rb-tabs button[aria-selected="true"]{background:var(--ink);color:var(--surface);font-weight:600}
+  .rb-tabs button:focus-visible{outline:2px solid var(--webbing);outline-offset:2px}
+  .rb-body{background:var(--surface);padding:24px}
+  .rb-body h4{margin:0 0 6px;font-size:19px;font-weight:700}
+  .rb-body .trigger{margin:0 0 18px;font-size:13.5px;color:var(--soft);padding-bottom:16px;border-bottom:2px solid var(--line)}
+  .rb-body .trigger b{color:var(--webbing);font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}
+  .rb-body ol{margin:0;padding-left:22px;font-size:14.5px;line-height:1.85}
+  .rb-body ol > li{margin-bottom:9px}
+  .rb-body ol b{font-weight:600}
+  .rb-body .why{margin:18px 0 0;padding:15px 18px;background:var(--alert-soft);border-left:4px solid var(--alert);font-size:13.5px}
+  .rb-body .why b{display:block;font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--alert);margin-bottom:5px}
+  .rb-body .cmds{margin:16px 0 0;padding:14px 16px;background:var(--sunk);font-family:var(--mono);font-size:12.5px;line-height:1.9;overflow-x:auto}
+  .rb-body .cmds div{white-space:nowrap}
+
+  .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2px;margin-top:22px;background:var(--line)}
+  .blocks > div{background:var(--surface);padding:18px 20px}
+  .blocks h4{margin:0 0 11px;font-size:13.5px;font-weight:700}
+  .blocks ul{margin:0;padding-left:16px;font-size:13px;color:var(--soft);line-height:1.85}
+  .blocks .m{font-size:12px}
+
+  .inv{list-style:none;padding:0;margin:26px 0 0;display:grid;gap:2px;background:var(--line);counter-reset:i}
+  .inv li{background:var(--surface);padding:15px 20px;display:grid;grid-template-columns:30px 1fr 1fr;gap:16px;align-items:baseline;font-size:14px}
+  .inv li::before{counter-increment:i;content:counter(i);font-family:var(--mono);font-size:12px;color:var(--webbing);font-weight:600}
+  .inv b{font-weight:600}
+  .inv span{color:var(--alert);font-size:13px}
+  @media (max-width:700px){.inv li{grid-template-columns:26px 1fr;gap:8px}.inv span{grid-column:2}}
+
+  .pull{margin:30px 0 0;padding:22px 26px;background:var(--alert-soft);border-left:5px solid var(--alert);font-size:clamp(16.5px,2.2vw,20px);font-weight:600;line-height:1.5}
+  .note{margin:22px 0 0;padding:16px 22px;background:var(--sunk);font-size:14px;color:var(--soft)}
+  .note b{color:var(--ink)}
+
+  code{font-family:var(--mono);font-size:13px;background:var(--sunk);padding:2px 6px}
+  footer{padding:44px 0 0;border-top:2px solid var(--ink);margin-top:20px}
+  footer p{margin:0 0 10px;font-size:14px;color:var(--soft)}
+
+  svg text{font-family:var(--body)}
+  svg .mm{font-family:var(--mono)}
+</style>
+
+<div class="strap"><span>ORANGEKIT Devkit</span><span>For maintainers</span><a href="user.html">For users →</a><span>v1.0.0</span></div>
+
+<div class="wrap">
+
+<header>
+  <p class="kicker">3 plugins · 5 hooks · 9 cards · 27 skills · 49 nodes</p>
+  <h1>ORANGEKIT<br>Admin Map</h1>
+  <p class="lede">Users clip into this gear and trust it. <strong>A bolt you mis-torque here stays quietly loose over there for four months.</strong></p>
+  <div class="legend">
+    <b><i style="background:var(--skill)"></i>skill</b>
+    <b><i style="background:var(--rule)"></i>rule card</b>
+    <b><i style="background:var(--hook)"></i>hook</b>
+    <b><i style="background:var(--agent)"></i>agent</b>
+    <b><i style="background:var(--store)"></i>store</b>
+  </div>
+  <nav class="toc">
+    <a href="#where">Where to look</a>
+    <a href="#parts">Parts &amp; cost</a>
+    <a href="#runbook">Runbook explorer</a>
+    <a href="#doctor">doctor · 8 modes</a>
+    <a href="#contracts">Code contracts</a>
+    <a href="#loop">Self-repair loops</a>
+    <a href="#invariants">8 invariants</a>
+    <a href="#cannot">What this repo can't do</a>
+  </nav>
+</header>
+
+<!-- ══════════ boundary ══════════ -->
+<section id="where">
+  <p class="eyebrow">The boundary of this page</p>
+  <h2>Nothing canonical is copied here</h2>
+  <p class="say"><strong>A copy is a source of drift.</strong> This page carries only <strong>"when this happens, do these things in this order."</strong> Every judgement rule points at its original. <strong>If this page and the repo disagree, the repo is right.</strong></p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:320px">What you want to know</th><th>Where it lives</th></tr></thead>
+      <tbody>
+        <tr><td><b>What to do, in what order</b> — procedure, runbooks</td><td><b>This page</b> · <code>docs/operations-manual.md</code></td></tr>
+        <tr><td><b>Why</b> a device has this shape — design rationale</td><td><code>docs/harness-anatomy.md</code> — 1,132 lines</td></tr>
+        <tr><td>The <b>norms</b> that govern changing the harness</td><td><code>rules/harness-change.md</code> — a T1 card</td></tr>
+        <tr><td>What Claude Code actually <b>guarantees</b></td><td><code>docs/platform-contract.md</code> — <b>never assert from memory</b></td></tr>
+        <tr><td>Whether something is <b>broken right now</b></td><td><code>scripts/doctor.sh</code> — machine judgement</td></tr>
+        <tr><td>What we <b>got wrong before</b></td><td><code>docs/lessons.md</code> · <code>docs/lessons-archive.md</code></td></tr>
+        <tr><td>How users are meant to <b>use</b> this</td><td><a href="user.html" style="color:var(--skill)">Harness Map</a> · <code>docs/user-manual.md</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note"><b>Reading order for a new maintainer</b> — ① <code>rules/harness-change.md</code> (the norms) → ② the parts and runbooks on this page → ③ <code>doctor.sh --help</code> → ④ <code>docs/lessons.md</code> (past failures) → ⑤ the relevant section of <code>harness-anatomy.md</code> when you need it. <b>Do not skip ④</b> — most of what is recorded there are <b>fixes that looked plausible and did nothing.</b></div>
+</section>
+
+<!-- ══════════ parts ══════════ -->
+<section id="parts">
+  <p class="eyebrow">What you own</p>
+  <h2>Three plugins, six kinds of part</h2>
+  <p class="say">This repo holds <strong>one marketplace with three plugins</strong>, and their <strong>versions are independent</strong>.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:180px">Plugin</th><th style="width:90px">Version</th><th style="width:130px">source</th><th>What it is, and who installs it</th></tr></thead>
+      <tbody>
+        <tr><td><b>orangekit-product</b></td><td class="m">3.30.0</td><td class="m">./</td><td>The body of the work — 26 skills · 9 cards · 5 hooks · guide packs. <b>"Bump the version in four places" means this one only.</b></td></tr>
+        <tr><td><b>orangekit-marketing</b></td><td class="m">1.1.0</td><td class="m">./marketing/</td><td>Five marketing skills. <b>It is versioned separately so it never spends the development session's description budget.</b></td></tr>
+        <tr><td><b>orangekit-harness</b></td><td class="m">1.1.0</td><td class="m">./harness/</td><td><b>The one you install.</b> <code>harness-evaluation</code> and the <code>harness-authoring</code> card live here — useless to anyone who merely <em>uses</em> the devkit.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Six parts — what comes along when you touch one</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:140px">Part</th><th style="width:210px">On disk</th><th class="num" style="width:80px">Size</th><th>What you must look at with it</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill p-hook">hooks</span></td><td class="m">hooks/hooks.json<br>scripts/*.sh</td><td class="num">5 files<br>6 regs</td><td>source <code>common.sh</code> · <b>per-event output contract</b> · fixtures · graph node</td></tr>
+        <tr><td><span class="pill p-rule">rule cards</span></td><td class="m">rules/*.md</td><td class="num">9 cards<br>1,071 ln</td><td><code>paths:</code> reach · version stamp · the line-count claim in README</td></tr>
+        <tr><td><b>operating contract (T0)</b></td><td class="m">templates/operating-contract.md</td><td class="num">42 ln<br>budget</td><td><b>Injected every session — the most expensive seat in the house.</b> The budget constant in <code>doctor.sh</code> (<code>T0_BUDGET</code>) is canonical</td></tr>
+        <tr><td><span class="pill p-skill">skills</span></td><td class="m">skills/*/SKILL.md</td><td class="num">26</td><td>description budget <b>12,000 bytes</b> · graph declaration · <code>${CLAUDE_SKILL_DIR}</code></td></tr>
+        <tr><td><span class="pill p-agent">agents</span></td><td class="m">agents/*.md</td><td class="num">2</td><td><b>They do not inherit <code>.claude/rules/</code></b> — norms go straight into the agent prompt</td></tr>
+        <tr><td><b>guides</b></td><td class="m">guides/{frontend,backend,seams}</td><td class="num">154 files<br>2 MB</td><td><code>pack.json</code> · <code>policies.md</code> · <code>ledger.md</code> <b>together</b> · <code>guide-gate</code> + <code>pack-smoke</code></td></tr>
+        <tr><td><b>graph</b></td><td class="m">workflow.graph.json</td><td class="num">49 nodes<br>90 edges</td><td>The declaration of every asset. <b>Four documents quote these numbers</b> and go stale with it</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Only two assets ever leave the machine <span class="m">— one was added 2026-09-12</span></h3>
+  <p class="say">Every other skill finishes locally. <b>These two cross the boundary, and both require consent first.</b></p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Asset</th><th>What leaves</th><th>Cost</th><th>Consent</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill p-skill">/codex-claude-loop</span></td><td>Plan text or a <span class="m">git diff</span> — <b>never the whole tree</b></td><td>Covered by the subscription</td><td>Every time — not recorded</td></tr>
+        <tr><td><span class="pill p-skill">/image-generator</span></td><td><b>The image prompt only</b> — source never leaves</td><td><b>Billed separately from the subscription</b></td><td>Once per project → <span class="m">assets.imageProvider</span> in <span class="m">orangekit.config.json</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b><span class="pill p-skill" style="font-size:11px">/image-generator</span> is the harness's first paid external call.</b> So it holds three lines — ① <b>it shows the price as a number before asking you to choose</b> ("this costs money" is not something you can decide on) ② <b>it validates size, quality and format before the call</b>, so bad input never costs anything ③ <b>it reports the response's <span class="m">usage</span> verbatim afterwards</b> — the bill rests on a measurement, not an estimate.<br><br>The key is never stored. Only the <span class="m">OPENAI_API_KEY</span> environment variable is read — writing it into <span class="m">.env</span>, <span class="m">orangekit.config.json</span> or a shell profile is blocked by this harness's own <span class="pill p-hook" style="font-size:11px">security-check</span>. <b>No key means undecidable (exit 2), not blocked</b> — it falls through to hand-off mode and writes a prompt a human can paste into ChatGPT (invariant ①).</div>
+
+  <h3>Cost is decided by when a thing loads</h3>
+  <figure class="scroller">
+    <svg viewBox="0 0 1120 260" role="img" aria-label="Three load tiers. The operating contract, the routing card and all skill descriptions load every session and are paid in full each time. Eight conditional cards load only when the edited path matches. Skill bodies and guide pack resources load only when invoked.">
+      <rect x="20" y="26" width="1080" height="70" fill="var(--alert-soft)" stroke="var(--alert)" stroke-width="2.5"/>
+      <text class="mm" x="38" y="50" font-size="12" font-weight="600" fill="var(--alert)">ALWAYS · PAID IN FULL EVERY SESSION</text>
+      <text x="38" y="74" font-size="15" font-weight="700" fill="currentColor">T0 operating contract (42-line budget) + workflow-routing card + all 26 skill descriptions</text>
+      <text class="mm" x="1082" y="52" font-size="11.5" fill="var(--alert)" text-anchor="end">the most expensive seat</text>
+      <text class="mm" x="1082" y="72" font-size="11" fill="var(--soft)" text-anchor="end">description budget 12,000 bytes</text>
+
+      <rect x="20" y="112" width="660" height="60" fill="var(--webbing-soft)" stroke="var(--webbing)" stroke-width="2.5"/>
+      <text class="mm" x="38" y="136" font-size="12" font-weight="600" fill="var(--webbing)">CONDITIONAL · ONLY WHEN THE PATH MATCHES</text>
+      <text x="38" y="160" font-size="15" fill="currentColor">8 rule cards — the <tspan class="mm" font-size="13">paths:</tspan> front-matter decides</text>
+      <text class="mm" x="700" y="148" font-size="11.5" fill="var(--soft)">only on that task</text>
+
+      <rect x="20" y="188" width="360" height="58" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="2.5"/>
+      <text class="mm" x="38" y="212" font-size="12" font-weight="600" fill="var(--skill)">ONLY WHEN INVOKED</text>
+      <text x="38" y="235" font-size="15" fill="currentColor">skill bodies · guide pack resources</text>
+      <text class="mm" x="400" y="223" font-size="11.5" fill="var(--soft)">put the detail here — it costs nothing</text>
+    </svg>
+    <figcaption>Where a new norm belongs is decided by <strong>"when is it needed?"</strong> Needed <b>before</b> any file is opened → always. Needed when a particular file is touched → conditional. Everything else → the skill body. <strong>Get it wrong and it never arrives at all</strong> — that is why 697 lines of rules reached no project for four months in v2.</figcaption>
+  </figure>
+  <div class="note">Put <code>paths:</code> on <code>workflow-routing.md</code> and it becomes conditional, which means <b>it is absent at exactly the moment it is needed — before any file has been opened.</b> <code>doctor --fast</code> fails on this one specifically.</div>
+</section>
+
+<!-- ══════════ runbook ══════════ -->
+<section id="runbook">
+  <p class="eyebrow">By case — what are you trying to change?</p>
+  <h2>Runbook explorer</h2>
+  <p class="say">Pick what you are about to touch and you get <strong>the whole procedure for that case</strong> — the order, the commands to run, and <strong>why the procedure has that shape</strong>.</p>
+
+  <div class="rb" id="rb">
+    <div class="rb-tabs" role="tablist" aria-label="Pick a runbook"></div>
+    <div class="rb-body" id="rb-body" role="tabpanel"></div>
+  </div>
+</section>
+
+<!-- ══════════ doctor ══════════ -->
+<section id="doctor">
+  <p class="eyebrow">Diagnosis</p>
+  <h2>doctor supplies the facts</h2>
+  <p class="say"><strong>The skill judges; doctor measures.</strong> <code>/harness-evaluation</code> takes doctor's output as its input and only forms an opinion — and a Critical is confirmed only by reproducing it in isolation.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:150px">Mode</th><th class="num" style="width:80px">Checks</th><th style="width:300px">What it answers</th><th>When to run it</th></tr></thead>
+      <tbody>
+        <tr><td class="m">--fast</td><td class="num">52</td><td>hook contract · rule budget · dangling refs · manifests · <b>numbers written by hand</b></td><td>always (part of the default)</td></tr>
+        <tr><td class="m">--graph</td><td class="num">12</td><td>unreachable nodes · dangling edges · <b>stores nothing reads</b> · phase vocabulary match</td><td>when you touch the graph (part of the default)</td></tr>
+        <tr><td class="m">--self-test</td><td class="num">89</td><td><b>feeds 45 real stdin fixtures into the hooks</b> and compares effects — down to the blocking reason</td><td><b>mandatory</b> after touching a hook or a blocking device</td></tr>
+        <tr><td class="m">--consumer</td><td class="num">16</td><td><b>proves the consumer layout</b> — cache paths plus hooks run in an empty / pre-first-commit project</td><td>when you touch hooks or installers</td></tr>
+        <tr><td class="m">--usage</td><td class="num">3</td><td>hook heartbeat · skill invocations · <b>edge traversal</b></td><td>to check the telemetry is alive</td></tr>
+        <tr><td class="m">--lessons</td><td class="num">1</td><td>category tally + promotion candidates + <b>per-device false-positive shrink candidates</b></td><td>periodically</td></tr>
+        <tr><td class="m">--inventory</td><td class="num">—</td><td>asset inventory by area. <b>No judgement.</b></td><td>as the input to <code>/harness-evaluation</code></td></tr>
+        <tr><td class="m">--all</td><td class="num">all</td><td>everything above</td><td>before a release</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The hand-written numbers doctor checks for you</h3>
+  <p class="say">A number written by hand in a document <strong>will go stale.</strong> So a machine compares it against the real thing.</p>
+  <div class="blocks">
+    <div><h4>README.md</h4><ul><li>nodes N · edges N</li><li>skills N</li><li>T1 N cards, L lines</li><li>T0 budget N lines</li></ul></div>
+    <div><h4>harness-anatomy.md</h4><ul><li>each row of the graph <span class="m">kind</span> table</li><li>nodes N · edges N (2 places)</li><li>T0 <b>injected</b> line count (comments stripped)</li></ul></div>
+    <div><h4>agents</h4><ul><li>front-matter <span class="m">tools:</span> against the tables in README and the anatomy doc — <b>is it the same set?</b></li></ul></div>
+    <div><h4>declarations</h4><ul><li><span class="m">skills/</span> listing ↔ graph nodes</li><li><span class="m">hooks.json</span> ↔ graph nodes (<b>matched by path</b>)</li><li>routing-card phases ↔ graph <span class="m">phase</span></li></ul></div>
+  </div>
+  <div class="note"><b>Change a graph number and fix four documents with it</b> — <code>README.md</code> · <code>harness-anatomy.md</code> (two places) · <code>operations-manual.md</code>. Skip it and <code>--default</code> fails. <b>That is the feature.</b></div>
+</section>
+
+<!-- ══════════ contracts ══════════ -->
+<section id="contracts">
+  <p class="eyebrow">Code contracts</p>
+  <h2>Hooks and check scripts follow different rules</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:190px">Item</th><th style="width:330px">Hook (<span class="m">scripts/*.sh</span>)</th><th>Check script (<span class="m">skills/*/scripts/</span>)</th></tr></thead>
+      <tbody>
+        <tr><td><code>common.sh</code></td><td><b>source it</b> — start with <code>orangekit_begin</code></td><td><b>do not source it</b> — its <code>set -Eeuo pipefail</code> and ERR trap fight the policy that every check must run to the end</td></tr>
+        <tr><td>instead</td><td>—</td><td><b>copy</b> <code>doctor.sh</code>'s <code>ok/warn/bad/sec</code> + <code>num()</code> + <code>--help</code>-is-the-header-comment, and write <code>return 0</code> explicitly</td></tr>
+        <tr><td>why <code>return 0</code></td><td>—</td><td>the originals return 1 when <code>$2</code> is empty, so <code>A &amp;&amp; warn || ok</code> <b>runs both branches</b></td></tr>
+        <tr><td>exit codes</td><td>follow the per-event contract</td><td><code>0</code> pass · <code>1</code> defect · <code>2</code> <b>cannot determine</b></td></tr>
+        <tr><td>placement</td><td>repo-root <code>scripts/</code> — hooks, doctor and <b>installers only</b></td><td><code>skills/&lt;skill&gt;/scripts/</code> — put it at the root and <b>doctor's own lint false-positives on your regex strings</b></td></tr>
+        <tr><td>how it is called</td><td>—</td><td><code>${CLAUDE_SKILL_DIR}</code> — a hand-rolled variable is never substituted and <b>fails in the consumer</b> (doctor catches it)</td></tr>
+        <tr><td>reference</td><td><code>session-brief.sh</code>, 338 lines</td><td><code>ui-probe.sh</code> · <code>design-sync.sh</code> · <code>guide-gate.sh</code> · <code>pack-smoke.sh</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What <code>common.sh</code> gives you — use only these</h3>
+  <div class="blocks">
+    <div><h4>root and numbers</h4><ul><li><span class="m">orangekit_root()</span> — <b>never <span class="m">BASH_SOURCE</span> or <span class="m">dirname ../..</span></b>. Exits 2 if the root cannot be settled</li><li><span class="m">orangekit_num()</span> — <b>never <span class="m">|| echo 0</span></b></li><li><span class="m">orangekit_count_lines()</span></li></ul></div>
+    <div><h4>output — it hides the event contract</h4><ul><li><span class="m">orangekit_emit_context()</span></li><li><span class="m">orangekit_emit_block()</span></li><li><span class="m">orangekit_emit_notice()</span></li><li><b>Unsupported fields are silently ignored</b> — which is why you never hand-write the JSON</li></ul></div>
+    <div><h4>state and telemetry</h4><ul><li><span class="m">orangekit_state_dir()</span> · <span class="m">orangekit_handoff_dir()</span></li><li><span class="m">orangekit_heartbeat()</span> · <span class="m">orangekit_edge()</span> — <b>writes an edge into graph.log</b></li><li><span class="m">orangekit_worktree_snapshot()</span></li></ul></div>
+  </div>
+
+  <h3>Every event supports different fields</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:180px">Event</th><th style="width:270px">How it blocks</th><th>Watch out</th></tr></thead>
+      <tbody>
+        <tr><td class="m">PreToolUse</td><td><b>exit 2</b> — the tool call itself is refused</td><td>The simplest blocking point. Content checks are portable; path checks are not</td></tr>
+        <tr><td class="m">Stop</td><td><code>continue:false</code> + <code>systemMessage</code></td><td><b>It does not support <code>decision</code> / <code>reason</code>.</b> v2 didn't know that and never blocked once</td></tr>
+        <tr><td class="m">PreCompact · SessionEnd</td><td>cannot block</td><td><b>Plain stdout does not become context</b> → JSON required</td></tr>
+        <tr><td class="m">SessionStart</td><td>cannot block</td><td>One of the <b>few events where plain stdout does become context</b></td></tr>
+        <tr><td class="m">PostToolUse</td><td>cannot block</td><td>Telemetry. <code>matcher: Skill</code> narrows it to skill invocations</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>Verify before you assert.</b> Before assuming "Claude Code behaves this way", read <code>docs/platform-contract.md</code>. If it isn't there, check the official docs and <b>add it with the source URL and the date you checked</b> — never from memory. Without this discipline, <b>hand-rolled substitution variables that are never expanded grew to 28 places.</b></div>
+</section>
+
+<!-- ══════════ loops ══════════ -->
+<section id="loop">
+  <p class="eyebrow">Self-repair</p>
+  <h2>The harness measures and repairs itself</h2>
+
+  <figure class="scroller">
+    <svg viewBox="0 0 1120 300" role="img" aria-label="The self-repair loops. Telemetry feeds doctor, doctor feeds the evaluation skill, the defect list drives asset promotion and the result returns to the work. Separately, a user's correction goes into the lessons store; three in one category promote an asset and move the entries to the archive, and two false positives on one device narrow that device instead of adding a rule.">
+      <defs><marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--line-hard)"/></marker></defs>
+      <g>
+        <rect x="20" y="40" width="200" height="76" fill="var(--store-soft)" stroke="var(--store)" stroke-width="1.6"/>
+        <text x="34" y="66" font-size="14" font-weight="700" fill="currentColor">telemetry</text>
+        <text class="mm" x="34" y="87" font-size="10.5" fill="var(--soft)">track-skill · graph.log</text>
+        <text class="mm" x="34" y="104" font-size="10.5" fill="var(--soft)">only 7 of 90 edges are emitted</text>
+
+        <rect x="260" y="40" width="200" height="76" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.6"/>
+        <text class="mm" x="274" y="66" font-size="14" font-weight="600" fill="currentColor">doctor.sh</text>
+        <text class="mm" x="274" y="87" font-size="10.5" fill="var(--soft)">8 modes · facts only</text>
+        <text class="mm" x="274" y="104" font-size="10.5" fill="var(--soft)">reports numbers, passes no judgement</text>
+
+        <rect x="500" y="40" width="220" height="76" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.6"/>
+        <text class="mm" x="514" y="66" font-size="13" font-weight="600" fill="var(--skill)">/harness-evaluation</text>
+        <text class="mm" x="514" y="87" font-size="10.5" fill="var(--soft)">8 axes · judgement only</text>
+        <text class="mm" x="514" y="104" font-size="10.5" fill="var(--soft)">Critical confirmed by isolated repro</text>
+
+        <rect x="760" y="40" width="200" height="76" fill="var(--store-soft)" stroke="var(--store)" stroke-width="1.6"/>
+        <text x="774" y="66" font-size="14" font-weight="700" fill="currentColor">defect list</text>
+        <text class="mm" x="774" y="87" font-size="10.5" fill="var(--soft)">dev/docs/harness-evaluation/</text>
+        <text class="mm" x="774" y="104" font-size="10.5" fill="var(--soft)">ranked by severity · uncertainty map</text>
+
+        <rect x="1000" y="40" width="100" height="76" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.6"/>
+        <text x="1050" y="72" font-size="13" font-weight="700" fill="var(--rule)" text-anchor="middle">asset</text>
+        <text x="1050" y="92" font-size="13" font-weight="700" fill="var(--rule)" text-anchor="middle">promotion</text>
+      </g>
+      <g stroke="var(--line-hard)" stroke-width="1.6" marker-end="url(#la)">
+        <line x1="224" y1="78" x2="254" y2="78"/><line x1="464" y1="78" x2="494" y2="78"/>
+        <line x1="724" y1="78" x2="754" y2="78"/><line x1="964" y1="78" x2="994" y2="78"/>
+      </g>
+      <path d="M1050 120 V 152 Q1050 164 1038 164 H 132 Q120 164 120 152 V 124" fill="none" stroke="var(--line-hard)" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#la)"/>
+      <rect x="450" y="156" width="270" height="16" fill="var(--ground)"/>
+      <text class="mm" x="585" y="168" font-size="10.5" fill="var(--soft)" text-anchor="middle">defects return to the work</text>
+
+      <g>
+        <rect x="20" y="200" width="240" height="72" fill="var(--webbing-soft)" stroke="var(--webbing)" stroke-width="1.6"/>
+        <text x="34" y="226" font-size="14" font-weight="700" fill="currentColor">a user corrects you</text>
+        <text class="mm" x="34" y="248" font-size="10.5" fill="var(--soft)">immediately, whatever the path</text>
+        <text class="mm" x="34" y="264" font-size="10.5" fill="var(--soft)">docs/lessons.md</text>
+
+        <rect x="300" y="200" width="240" height="72" fill="var(--surface)" stroke="var(--line-hard)" stroke-width="1.4"/>
+        <text class="mm" x="314" y="226" font-size="12.5" font-weight="600" fill="currentColor">doctor --lessons</text>
+        <text class="mm" x="314" y="248" font-size="10.5" fill="var(--soft)">tallies by category</text>
+        <text class="mm" x="314" y="264" font-size="10.5" fill="var(--soft)">a device: line tallies it per device</text>
+
+        <rect x="580" y="200" width="250" height="72" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.6"/>
+        <text class="mm" x="594" y="226" font-size="12.5" font-weight="600" fill="var(--rule)">3 in a category → promote</text>
+        <text class="mm" x="594" y="248" font-size="10.5" fill="var(--soft)">produce the answering asset</text>
+        <text class="mm" x="594" y="264" font-size="10.5" fill="var(--soft)">move entries to lessons-archive.md</text>
+
+        <rect x="870" y="200" width="230" height="72" fill="var(--alert-soft)" stroke="var(--alert)" stroke-width="1.6"/>
+        <text class="mm" x="884" y="226" font-size="12.5" font-weight="600" fill="var(--alert)">2 false positives → shrink</text>
+        <text class="mm" x="884" y="248" font-size="10.5" fill="var(--soft)">do not add a rule</text>
+        <text class="mm" x="884" y="264" font-size="10.5" fill="var(--soft)">narrow that device's condition</text>
+      </g>
+      <g stroke="var(--line-hard)" stroke-width="1.6" marker-end="url(#la)">
+        <line x1="264" y1="236" x2="294" y2="236"/><line x1="544" y1="236" x2="574" y2="236"/>
+      </g>
+      <path d="M705 200 V 190 H 990 V 200" fill="none" stroke="var(--line-hard)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#la)"/>
+    </svg>
+    <figcaption>There are two loops — <strong>above, evaluation</strong> (is this asset still pulling its weight?) and <strong>below, lessons</strong> (what did we get wrong?). <strong>Both end by returning to the work.</strong></figcaption>
+  </figure>
+
+  <h3>A third loop — re-checking the built-ins (P6-②)</h3>
+  <p class="say"><strong>Built-ins keep getting better along with the model.</strong> So "is this custom asset still necessary?" is not a question you ask once.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:220px">Verdict</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td><b>Replace with native</b></td><td>The built-in is now enough — retire the custom asset</td></tr>
+        <tr><td><b>Keep custom</b></td><td>It covers ground the built-in does not — write down why</td></tr>
+        <tr><td><b>Compose</b></td><td>The custom asset must be a <b>thin layer wrapping the built-in</b>, and <b>must not reimplement what the built-in already does</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>Both conditions must hold to skip it</b> — the last verdict is within 30 days <b>and</b> there have been zero harness-asset commits since. <b>The date alone is not enough.</b></div>
+</section>
+
+<!-- ══════════ invariants ══════════ -->
+<section id="invariants">
+  <p class="eyebrow">Invariants</p>
+  <h2>These never break</h2>
+
+  <ul class="inv">
+    <li><b>Cannot-determine is not a block</b><span>false positive → the user turns the hook off → blocking power 0</span></li>
+    <li><b>Never make a copy (one source + references)</b><span>drift — the failure mode that killed v2</span></li>
+    <li><b>Verify the path of reach</b><span>697 lines of rules reached nobody for four months</span></li>
+    <li><b>A blocking device proves it blocks — for the intended reason</b><span>a dead device pretending to be alive</span></li>
+    <li><b>Numbers in documents are machine-checked</b><span>false statements get shipped</span></li>
+    <li><b>Never touch the consumer's own files unasked</b><span>loss of trust</span></li>
+    <li><b>Existing code patterns beat the plugin's guides</b><span>the harness silently overwrites the project</span></li>
+    <li><b>The safety floor can only be raised by a project</b><span>the safety devices become bypassable</span></li>
+  </ul>
+
+  <h3>⑦ and ⑧ are a pair — two layers pointing in opposite directions</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:180px">Layer</th><th style="width:320px">What it covers</th><th>The rule</th></tr></thead>
+      <tbody>
+        <tr><td><b style="color:var(--alert)">safety floor</b></td><td>reversibility class · verification duty · secret boundary · decision points</td><td>A project can <b>only raise it</b>. Lowering it requires an explicit request from the user<br><span style="color:var(--soft)">How to raise it: drop files into <code>.claude/resources/</code> and the skills read them automatically</span></td></tr>
+        <tr><td><b style="color:var(--skill)">procedure &amp; form</b></td><td>stack conventions from the guide packs · skill workflows · naming · document format</td><td><b>The project wins.</b> Order: the user's request → the project's <code>CLAUDE.md</code> → the project's <code>.claude/rules/</code> → <b>the repository's existing code patterns</b> → the plugin's guides</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>"Existing code patterns beat the plugin's guides"</b> is the load-bearing half. When a guide recommends one shape and the repository actually uses another, <b>follow the repository.</b> Changing an existing pattern on the strength of a guide is a refactor, and refactors happen when someone asks for one.</div>
+
+  <p class="pull">Fold cannot-determine into blocking and you get a false positive,<br>a false positive makes the user turn the hook off,<br>and a hook that is off blocks nothing.</p>
+</section>
+
+<!-- ══════════ limits ══════════ -->
+<section id="cannot">
+  <p class="eyebrow">Limits</p>
+  <h2>Some things cannot be checked here</h2>
+  <p class="say">This repository <strong>has no consumer.</strong> So whether a rule actually arrives in a consumer project cannot be verified from here. <strong>Every self-check can pass and that question stays unanswered.</strong></p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:230px">What to confirm</th><th style="width:300px">How</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><b>Installed ≠ arrived</b></td><td>the Skills count in <code>claude plugin details</code></td><td>"It installed" does not mean the assets are visible</td></tr>
+        <tr><td><b>Cards arrived</b></td><td>look at the consumer's <code>.claude/rules/</code> <b>with your eyes</b></td><td><b>This is precisely the one thing v2 missed for four months</b></td></tr>
+        <tr><td><b>Hooks actually fire</b></td><td><code>doctor --usage</code> on the consumer side</td><td>Registered and fired are different claims</td></tr>
+        <tr><td><b>False positives in the first session</b></td><td>open one session right after a fresh install</td><td>The hook roll-call used to <b>count "had no chance to run" as "did not fire"</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note"><b>What never gets created in this repo</b> — <code>orangekit.config.json</code> · <code>dev/active/</code> · stack guides. This is the <b>plugin source</b>, not a consumer project. <code>rules/</code> is an asset to be shipped, not configuration that loads here — which is exactly why a separate <code>CLAUDE.md</code> exists.</div>
+</section>
+
+<footer>
+  <p>The canonical sources live in the repo — <code>rules/harness-change.md</code> (norms) · <code>docs/operations-manual.md</code> (full runbooks) · <code>docs/harness-anatomy.md</code> (design rationale, 1,132 lines) · <code>docs/platform-contract.md</code> (platform guarantees) · <code>docs/presets.md</code> (axes and guides) · <code>docs/lessons.md</code> (past failures).</p>
+  <p style="color:var(--faint)">This page is a picture summary. <b>The judgement rules live in those files</b> — where this page and a file disagree, the file is right.</p>
+</footer>
+
+</div>
+
+
+<script>
+(function(){
+  var RB = [
+    { id:'add', tab:'Add an asset',
+      title:'You want to build a new hook, rule or skill',
+      trig:'The moment you think "it would be nice if we had one of these"',
+      steps:[
+        '<b>Pass the three questions first.</b> A yes to any one of them stops you — ⓐ does it overlap an existing asset or a <b>Claude Code built-in</b> ⓑ has the model got good enough that it is no longer needed ⓒ are you changing something that already works',
+        'Check the built-ins <b>for real</b> — <code>/code-review</code> · <code>/simplify</code> · <code>/security-review</code> · <code>/init</code> · <code>/run</code> · <code>/loop</code> · <code>skill-creator</code>. Never build something that competes with them. There are only three verdicts: <b>replace · keep · compose</b>',
+        '<b>Respect the order of remedies</b> — ① add one to three lines to an existing document ② extend an existing hook ③ add a feature to an existing script ④ write a new script (last resort)',
+        '<b>Verify the path of reach</b> — if conditional, does <code>paths:</code> include the real edit path · if it ships in the plugin, is it a <b>supported component type</b> (there is <b>no</b> <code>rules</code> type) · if it must exist in the project, does <code>orangekit-init</code> install it · <b>does it reach in every preset combination</b>',
+        '<b>Declare it in the graph.</b> An undeclared asset is caught by doctor — it means nothing justifies calling it',
+        'Write the two lines of justification into the commit (next tab)'
+      ],
+      why:'In v2, 697 lines of rules reached no project for four months. The cause was the absence of this check: nobody verified that the plugin manifest has no <code>rules</code> component type at all.'
+    },
+    { id:'why', tab:'The two-line justification',
+      title:'You added or changed an intervention — hook, rule, skill, briefing',
+      trig:'Every commit that touches an intervention. No exceptions.',
+      steps:[
+        '<b>(a) The failure you are preventing</b> — it must have been <b>observed at least twice</b>',
+        '<b>(b) The risk of breaking something that worked</b>',
+        'If you cannot write (a), <b>it is a hypothesis, not a pattern — do not add it</b>',
+        'Never hard-code the answer to one incident. <b>Keep only interventions that will be reused</b> on the next task',
+        'If it is worth adding even though (a) is not literally satisfied, <b>say so in the commit</b> — "judged on a structural gap, not an observation count" is better than passing over it quietly'
+      ],
+      why:'A plausible fix and an effective fix are different things, and only re-running tells them apart. An intervention stacked without evidence leaves no evidence for removing it later either.'
+    },
+    { id:'card', tab:'Change a rule card',
+      title:'Editing rules/*.md',
+      trig:'Changing a norm, or adjusting when a card fires',
+      steps:[
+        'Check the <code>paths:</code> front-matter still fits — <b>too broad and it spins uselessly every session; too narrow and it never arrives</b>',
+        'Bump <code>&lt;!-- orangekit-rule-version: X.Y.Z --&gt;</code> to the current version',
+        '<b>Never put <code>paths:</code> on <code>workflow-routing.md</code></b> — it becomes conditional and is missing at the exact moment it is needed. <code>doctor --fast</code> fails on it',
+        'If the line count changed, README\'s "T0 N lines + T1 M cards, L lines" claim is now stale — doctor compares it',
+        '<b>Never quote a plugin-repo path in the card body</b> — the consumer has no such file. Use the <code>&lt;plugin-root&gt;/…</code> notation'
+      ],
+      cmds:['bash scripts/doctor.sh --default','bash scripts/install-rules.sh --dry-run'],
+      why:'A shipped card once pointed at a file that cannot exist in a consumer. A sentence that was true in its original context becomes false in the shipping context — it was not written wrongly, it was written correctly and then moved, so no human eye catches it.'
+    },
+    { id:'skill', tab:'Change a skill',
+      title:'Editing skills/*/SKILL.md',
+      trig:'Changing a skill\'s procedure or when it fires',
+      steps:[
+        '<b>The description is a resident cost</b> — 12,000 bytes across all 26. Grow it and <b>every session pays</b>',
+        'The body loads only when invoked, so <b>put the detail in the body</b>',
+        'Skill-only scripts live in <code>skills/&lt;skill&gt;/scripts/</code> and are called through <code>${CLAUDE_SKILL_DIR}</code> — a hand-rolled variable is never substituted and fails in the consumer',
+        'To make it manual-only, set <code>disable-model-invocation: true</code> — and put <code>manual: true</code> on the graph node too, or doctor cannot confirm they agree',
+        'Overlapping skills are <b>not always answered by merging</b> — first decide between keep · split the boundary · make it manual · merge · delete'
+      ],
+      cmds:['bash scripts/doctor.sh --default','bash scripts/doctor.sh --graph'],
+      why:'Defining the treatment of overlapping skills as "merge and drop one" once forced together two skills whose boundaries should have been separated.'
+    },
+    { id:'hook', tab:'Change a hook',
+      title:'scripts/*.sh + hooks/hooks.json',
+      trig:'Changing a blocking condition or catching a new event',
+      steps:[
+        'Source <code>scripts/lib/common.sh</code> and start with <code>orangekit_begin</code>',
+        'Get the root only from <code>orangekit_root()</code> — <b>never <code>BASH_SOURCE</code> or <code>dirname ../..</code></b>. Pass numbers through <code>orangekit_num()</code> — <b>never <code>|| echo 0</code></b>',
+        'Emit only through <code>orangekit_emit_context</code> / <code>orangekit_emit_block</code> — <b>every event supports different fields and unsupported ones are silently ignored</b>',
+        '<code>Stop</code> does not support <code>decision</code>/<code>reason</code> → use <code>continue</code>+<code>systemMessage</code>. <code>PreCompact</code>/<code>SessionEnd</code> plain stdout never becomes context → JSON required',
+        'If you registered it in <code>hooks.json</code>, <b>add the node and edges to <code>workflow.graph.json</code></b>',
+        '<b>Actually run it</b> — check the exit code and the expected output'
+      ],
+      cmds:['bash scripts/doctor.sh --default','bash scripts/doctor.sh --self-test','bash scripts/doctor.sh --consumer'],
+      why:'v2\'s build-gate never blocked once. It emitted <code>{"decision":"block"}</code>, but the Stop event does not support that field — and nothing errored. Unsupported fields are silently ignored.'
+    },
+    { id:'check', tab:'Write a check script',
+      title:'A checking tool that is not a hook',
+      trig:'You want a machine to compare something',
+      steps:[
+        '<b>Do not source <code>common.sh</code></b> — its <code>set -Eeuo pipefail</code> and ERR trap fight the policy that every check runs to the end',
+        'Instead <b>copy</b> <code>doctor.sh</code>\'s <code>ok/warn/bad/sec</code> + <code>num()</code> + <code>--help</code>-is-the-header-comment, and write <code>return 0</code> explicitly',
+        'Why <code>return 0</code> — the originals return 1 when <code>$2</code> is empty, so <code>A &amp;&amp; warn || ok</code> <b>runs both branches</b>',
+        'Exit codes are <code>0</code> pass · <code>1</code> defect · <code>2</code> <b>cannot determine</b>. If "cannot determine" has several causes, <b>report them in different words</b>',
+        'Put it in <code>skills/&lt;skill&gt;/scripts/</code> — at the repo root, <b>doctor\'s own lint false-positives on your regex strings</b>',
+        'Give it a <code>--self-test</code> (next tab)'
+      ],
+      cmds:['bash skills/<skill>/scripts/<check>.sh --help','bash skills/<skill>/scripts/<check>.sh --self-test'],
+      why:'Fold cannot-determine into blocking and you get a false positive; a false positive makes the user turn the device off; a device that is off blocks nothing.'
+    },
+    { id:'prove', tab:'Prove it blocks',
+      title:'You built or changed a blocking device',
+      trig:'Any change to code that can exit 1 or exit 2',
+      steps:[
+        'Check that a fixture with a planted defect <b>receives the blocking code</b>',
+        'And that it receives it <b>for the intended reason</b> — <b>build the expected-reason comparison into the self-test</b>',
+        '<b>Prove the exemptions just as hard</b> — does a bypass-attempt fixture still get blocked',
+        '<b>Judge exemptions on the first token.</b> Exempt on substring and <code>…doctor.sh …; psql -c "DROP TABLE"</code> sails through whole (this actually happened)',
+        'When a command is chained with <code>;</code> <code>&amp;&amp;</code> <code>||</code>, <b>judge each segment separately</b>',
+        '<b>Never put a real credential shape in a fixture file</b> — GitHub push protection will block the push. Use a <code>@@FILL&lt;n&gt;@@</code> placeholder and let <code>_fx_fill()</code> assemble it at run time'
+      ],
+      cmds:['bash scripts/doctor.sh --self-test   # 45 fixtures · 89 checks'],
+      why:'An evaluation found that only 4 of 22 blocking points were proven by a fixture. One bypass lived for four months in a spot with no fixture. <b>Alive is not the same as working.</b>'
+    },
+    { id:'guide', tab:'Change a guide pack',
+      title:'Editing under guides/ — 154 files, 2 MB',
+      trig:'Changing a stack convention, or adding an axis or seam',
+      steps:[
+        'When you touch a pack resource, look at <code>ledger.md</code> · <code>pack.json</code> · <code>policies.md</code> <b>together</b>',
+        'In the policy table the <b>proof example and <code>fixesVariants</code> are mandatory</b> — a missing one is a FAIL',
+        '<code>fixesVariants</code> declares <b>what that axis pins down</b>. Next.js pins only <code>store: zustand</code> and <code>forms: react-hook-form</code> — leave it out and <b>the pack gives wrong guidance to a Redux project</b>',
+        'The <code>serverRuntime</code> value is <b>always passed to the backend axis when a seam is generated</b> — where the handlers live is the premise of the entire backend guide',
+        'In a contract (<code>seams/*/contract.md</code>), <b>values belong only in lists and table rows</b>. Backticks in prose are explanation, and <b>a negative in a list reads as a requirement in both directions</b>',
+        '<b>Failing self-verification means it is not installed</b> — that makes a false placeholder contract structurally impossible'
+      ],
+      cmds:['bash skills/stack-guide-generator/scripts/guide-gate.sh --pack','bash skills/stack-guide-generator/scripts/pack-smoke.sh --self-test','bash skills/stack-guide-generator/scripts/guide-gate.sh --regress   # when bumping the version'],
+      why:'The prebuilt unit is the axis (4 frontend · 8 backend), not the combination (32). Fix one axis and every combination using it is fixed with it. Thirty-two copies would have meant thirty-two edits.'
+    },
+    { id:'rename', tab:'You renamed or deleted',
+      title:'Look at the side where the name disappeared',
+      trig:'Whenever an asset is renamed, moved or removed',
+      steps:[
+        '<b>Fix the list of disappearing names first.</b> Not from memory — <code>git diff --diff-filter=RD --name-only</code> and the filenames in <code>.claude/deprecated/</code> are the source',
+        '<b>Sweep the whole repository.</b> Not <code>.claude/</code>, not <code>skills/</code> — everything. <code>README.md</code> · <code>docs/</code> · <code>guides/</code> · <code>dev/docs/</code> · <code>workflow.graph.json</code> are where it gets missed',
+        '<b>Confirm zero with a command.</b> Writing "checked everywhere" on a checklist is not evidence',
+        'If you moved an asset in from another repository, <b>read its body again</b> — preset markers, the old project name and consumer-layout paths become false in transit'
+      ],
+      cmds:['git diff --diff-filter=RD --name-only','grep -rn "<old name>" . --exclude-dir=node_modules --exclude-dir=.git'],
+      why:'Verifying the path of reach asks "does the new name arrive?" This asks "where did the things pointing at the old name go?" A renamed asset sits neatly under its new name and <b>always passes the reach check</b> — the residue is on the vanished side, and with no check looking there it is never found. Measured: the exit criterion said "zero across the whole repository", the command that ran looked at two directories, and the old name was sitting in the <code>dev/</code> that got left out.'
+    },
+    { id:'deprecate', tab:'Retire an asset',
+      title:'Clearing out what is no longer needed',
+      trig:'A re-check returned "replace with native", or you found a dead asset',
+      steps:[
+        '<b>Never delete a consumer project\'s <code>.claude/</code> customisation outright</b> — move it to <code>.claude/deprecated/</code> with an expiry date in the filename (14 days by default)',
+        'No problems by the expiry → confirm the deletion. A problem appears → restore it',
+        '<code>doctor --lessons</code> reports what has expired',
+        '<b>Retiring anything always goes through the user</b>',
+        '<b>Assets of this repository</b> are deleted without a shadow — git guarantees the rollback. The shadow exists for consumer customisations, which have no such reminder'
+      ],
+      why:'Telemetry is what justifies calling an asset dead. <code>doctor --usage</code> answers "has it ever been used", and <b>this repository\'s rule is that nothing is culled without that measurement.</b>'
+    },
+    { id:'version', tab:'Bump the version',
+      title:'Five steps, not four places',
+      trig:'When it is ready to ship',
+      steps:[
+        '<b>Bump four places at once</b> — <code>plugin.json</code> · <code>package.json</code> · the <code>README.md</code> badge · <code>marketplace.json</code> (two entries). doctor compares them',
+        'Commit — with the two lines of justification in the body if you touched an intervention',
+        '<code>claude plugin validate .</code>',
+        '<code>git push origin main</code>',
+        '<code>claude plugin tag --push</code> — <b>consumers receive versions through tags</b>',
+        '<code>orangekit-marketing</code> and <code>orangekit-harness</code> are <b>versioned independently and are not bumped along with these</b>'
+      ],
+      cmds:['npm test','bash skills/stack-guide-generator/scripts/guide-gate.sh --regress','claude plugin validate .','claude plugin tag --push'],
+      why:'Stop at step ① and consumers receive nothing. All four places are local files; consumers get the version from the release tag. If the push is refused it may be GitHub push protection — check that no credential shape sits in a fixture file.'
+    },
+    { id:'defect', tab:'A defect or false positive',
+      title:'You were corrected, or the evaluation found something',
+      trig:'The moment a user corrects the code, the approach or the workflow',
+      steps:[
+        'Record it in <code>docs/lessons.md</code> <b>immediately, whatever the path</b> (the format lives in <code>rules/lessons.md</code>)',
+        'For a false positive, <b>always write the <code>device:</code> line</b> — it is what lets <code>doctor --lessons</code> count <b>per device</b>. A category total cannot tell you what to narrow',
+        'Name the category specifically — broad ones like <code>misc</code> or <code>general</code> are <b>forbidden</b> (they make the tally meaningless)',
+        '<b>Three or more in one category</b> → build the answering asset and <b>physically move</b> the entries to <code>lessons-archive.md</code>',
+        '<b>Two or more false positives on one device</b> → <b>narrow that device\'s condition rather than adding a rule</b>',
+        'Treat an earlier diagnosis or review report as <b>a hint about where to look</b> — when it says "N criticals", <b>adopt only what you re-verified one by one against the current source</b>'
+      ],
+      cmds:['bash scripts/doctor.sh --lessons'],
+      why:'A harness redesign was once stacked on measurements taken with a tool that was not on the execution path. The plan was wrong from its premise. Measure on the execution path.'
+    }
+  ];
+
+  var tabs = document.querySelector('#rb .rb-tabs');
+  var body = document.getElementById('rb-body');
+  if(!tabs || !body) return;
+
+  function paint(i){
+    var d = RB[i];
+    var html = '<h4>'+d.title+'</h4>'+
+      '<p class="trigger"><b>When</b>'+d.trig+'</p>'+
+      '<ol><li>'+d.steps.join('</li><li>')+'</li></ol>';
+    if(d.cmds) html += '<div class="cmds">'+d.cmds.map(function(c){return '<div>$ '+c+'</div>';}).join('')+'</div>';
+    if(d.why) html += '<div class="why"><b>Why it has this shape — measured</b>'+d.why+'</div>';
+    body.innerHTML = html;
+    Array.prototype.forEach.call(tabs.children, function(b, k){
+      b.setAttribute('aria-selected', k===i ? 'true' : 'false');
+    });
+  }
+
+  RB.forEach(function(d, i){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role','tab');
+    b.textContent = d.tab;
+    b.addEventListener('click', function(){ paint(i); });
+    tabs.appendChild(b);
+  });
+  paint(0);
+})();
+</script>
+
+</body>
+</html>

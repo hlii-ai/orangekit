@@ -1,0 +1,20 @@
+{
+  "axis": "backend",
+  "name": "supabase",
+  "displayName": "Supabase (BaaS)",
+  "description": "Supabase BaaS — PostgreSQL + RLS + Auth + Storage + Realtime. No separately operated server.",
+  "techStack": {
+    "backend": {
+      "backendType": "baas",
+      "cloudProvider": null,
+      "database": "PostgreSQL",
+      "dataAccess": "Supabase SDK",
+      "auth": "Supabase Auth"
+    },
+    "additionalStack": ["Supabase (PostgreSQL + RLS + Auth)"]
+  },
+  "notes": {
+    "securityBoundary": "RLS is the last line of defense. Paired with a frontend that has a server runtime (Next.js, etc.) the application-layer authorization check is applied as a second layer; paired with an SPA, RLS becomes effectively the only boundary — the point where guide content varies most by combination",
+    "serverCodeLocation": "In the frontend axis's server runtime if it provides one (Route Handlers · Server Actions), otherwise in Edge Functions"
+  }
+}

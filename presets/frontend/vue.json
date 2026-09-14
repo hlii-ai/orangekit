@@ -1,0 +1,32 @@
+{
+  "axis": "frontend",
+  "name": "vue",
+  "displayName": "Vue 3 + Vite (SPA)",
+  "description": "Vue 3 Composition API + Vite SPA (no SSR) + TypeScript + Tailwind CSS + Vue Router + Pinia",
+  "techStack": {
+    "framework": "Vue 3 + Vite",
+    "language": "TypeScript",
+    "packageManager": "npm",
+    "commands": {
+      "build": "npm run build",
+      "test": "npm test",
+      "lint": "npm run lint"
+    },
+    "additionalStack": [
+      "Tailwind CSS",
+      "Vue Router",
+      "Pinia",
+      "TanStack Query (Vue)"
+    ]
+  },
+  "domains": {
+    "sourceDir": "src",
+    "importAlias": "@/"
+  },
+  "notes": {
+    "serverCode": "An SPA has no server runtime — the backend axis owns server logic entirely. If the backend is a BaaS, the browser calls the SDK directly, so data-layer security (row-level policy) is the only boundary",
+    "language": "The default is TypeScript. Pick JavaScript and the type-standard slot is replaced by JSDoc conventions, and `<script setup lang=\"ts\">` becomes `<script setup>`",
+    "reactivity": "Reactivity differs from React — ref/reactive are proxy-based, so destructuring breaks reactivity and a missing `.value` becomes a silent failure. This is the point where an axis-specific misuse list is needed",
+    "guideShape": "Same shape as react-vite in having no server runtime — it shares the seam slot set (data fetching · auth/session · full examples) and the 'the data layer is the only boundary' wording. Nuxt is a separate axis (server runtime built in)"
+  }
+}

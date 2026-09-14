@@ -1,0 +1,31 @@
+{
+  "axis": "backend",
+  "name": "node-nest",
+  "displayName": "NestJS API server (NestJS + TypeORM)",
+  "description": "A self-operated NestJS API server — NestJS 11 + PostgreSQL + TypeORM 1 + class-validator. Modules, DI, and decorators set the structure.",
+  "techStack": {
+    "backend": {
+      "backendType": "cloud-server",
+      "cloudProvider": null,
+      "database": "PostgreSQL",
+      "dataAccess": "TypeORM",
+      "auth": "",
+      "framework": "NestJS",
+      "language": "TypeScript",
+      "packageManager": "npm",
+      "commands": {
+        "build": "npm run build",
+        "test": "npm test",
+        "lint": "npm run lint"
+      },
+      "sourceDir": "src"
+    },
+    "additionalStack": ["NestJS 11", "TypeORM 1", "class-validator", "Jest"]
+  },
+  "notes": {
+    "securityBoundary": "The application layer is the only boundary — the DB is reached over a trusted connection, so nothing leans on row-level policy. A missing ownership check is a data leak, and this axis's own trap is that TypeORM's `where` **means OR when it is an array**: in a query with two branches, such as cursor pagination, dropping the ownership filter on one branch lets that branch through to other people's rows. The authentication method (self-issued JWT · session · external IdP) is undecided, so it is a question to confirm",
+    "serverCodeLocation": "The API server in this repository. Even when the frontend axis has a server runtime (Next.js, etc.), API ownership sits here — the guide pins the boundary of which of the two holds the logic first",
+    "toolchain": "The language and package manager are often the same as the frontend's, so monorepos are common. Nest finds injection targets through decorator metadata, so `experimentalDecorators` and `emitDecoratorMetadata` must be on; turn them off and **it compiles but dies at boot**",
+    "variants": "The framework (NestJS) and ORM (TypeORM) are pinned into the pack. Pick Express and backend/node-api owns that shape; pick Drizzle and backend/aws-container does — a different combination gives you not nothing but **the wrong thing**"
+  }
+}

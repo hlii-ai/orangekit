@@ -1,0 +1,42 @@
+{
+  "axis": "backend",
+  "name": "aws-container",
+  "displayName": "AWS container API + PostgreSQL (portable)",
+  "description": "An API backend running a standard HTTP server in containers — ECS/Fargate + ALB + RDS PostgreSQL + Drizzle + Cognito (OIDC). Designed so AWS dependence stays in the infrastructure layer only and the system can move on-premises.",
+  "techStack": {
+    "backend": {
+      "backendType": "cloud-server",
+      "cloudProvider": "AWS",
+      "database": "PostgreSQL (RDS)",
+      "dataAccess": "Drizzle",
+      "auth": "Amazon Cognito (OIDC/JWKS)",
+      "framework": "Hono",
+      "language": "TypeScript",
+      "packageManager": "npm",
+      "commands": {
+        "build": "npm run build",
+        "test": "npm test",
+        "lint": "npm run lint"
+      },
+      "sourceDir": "src"
+    },
+    "additionalStack": [
+      "Docker (ECS/Fargate)",
+      "ALB",
+      "RDS PostgreSQL",
+      "Drizzle ORM + drizzle-kit",
+      "Amazon Cognito (OIDC)",
+      "Zod",
+      "Vitest",
+      "AWS CDK"
+    ]
+  },
+  "notes": {
+    "securityBoundary": "**There is no row-level policy engine.** The DB is reached over a trusted connection, so there is no data-layer enforcement like RLS and the application-layer ownership check is the only boundary. Carrying the BaaS combination's 'the data layer backs you up' wording over verbatim produces **exactly the opposite guidance** — every read and mutation query must carry an ownership filter, and a 0-row mutation must not be answered as a success",
+    "serverCodeLocation": "The container API server in this repository. The frontend is an SPA with no server runtime, so this backend owns all server logic",
+    "portability": "**Design on the premise of an on-premises move.** Keep AWS dependence in the infrastructure layer only and keep application code vendor-neutral: a standard HTTP server (the same image runs on K8s and on-premises Docker) · RDS PostgreSQL (avoid Aurora-only features) · authentication by standard OIDC/JWKS verification (no direct dependence on the Cognito SDK — swap issuer and JWKS URL to move to Keycloak) · file storage against the S3 API with a configurable endpoint (MinIO-compatible) · logs as structured JSON on stdout (no CloudWatch SDK) · configuration through env as the single entry point (Secrets Manager is only an injection mechanism). **The guide explicitly separates which AWS services touch app code and which stay in the infrastructure layer**",
+    "dataModeling": "Relational PostgreSQL, so the T1 data-modeling card is **active** (`paths:` includes `drizzle/**` · `db/**` · `**/migrations/**`). Do not copy the card; reference it by naming the real paths",
+    "localParity": "`docker compose` brings up PostgreSQL locally in exactly the same shape — being able to actually run and verify migrations and integration tests is the core advantage of this combination, so the test slot is written on that premise",
+    "variants": "For serverless (Lambda + API Gateway + DynamoDB) there is a separate `aws-serverless` preset — there, on top of the missing row-level policy engine, connection pooling and cold starts become the central topics"
+  }
+}

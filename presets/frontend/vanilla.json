@@ -1,0 +1,26 @@
+{
+  "axis": "frontend",
+  "name": "vanilla",
+  "displayName": "Vanilla JS/TS (no framework)",
+  "description": "A framework-free browser frontend — standard DOM API + ES modules. For landing pages, widgets, and lightweight sites. The bundler defaults to Vite.",
+  "techStack": {
+    "framework": "None (Vanilla)",
+    "language": "JavaScript",
+    "packageManager": "npm",
+    "commands": {
+      "build": "npm run build",
+      "test": "npm test",
+      "lint": "npm run lint"
+    },
+    "additionalStack": ["Vite (bundler)"]
+  },
+  "domains": {
+    "sourceDir": "src",
+    "importAlias": ""
+  },
+  "notes": {
+    "serverCode": "No server runtime — the backend axis owns server logic entirely. If the backend is a BaaS, the browser calls the SDK directly, so the data-layer policy is the only boundary",
+    "language": "The default is JavaScript. Pick TypeScript and the type-standard slot becomes active; with JavaScript that slot is replaced by JSDoc comment conventions",
+    "guideShape": "Fill the component and state-management slots with DOM manipulation boundaries, module patterns, and event delegation rather than framework idioms. Routing is the History API or multiple HTML entry points"
+  }
+}

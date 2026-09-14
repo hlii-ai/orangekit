@@ -1,0 +1,1 @@
+{"session_id": "orangekit-doctor-test", "cwd": "__ROOT__", "tool_name": "Bash", "hook_event_name": "PreToolUse", "tool_input": {"command": "python3 - <<'PY'\nopen('docs/x.md','w').write('What gets blocked: DROP TABLE legacy_users, force push to a shared branch')\nPY"}}

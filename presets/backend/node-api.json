@@ -1,0 +1,31 @@
+{
+  "axis": "backend",
+  "name": "node-api",
+  "displayName": "Node API server (Express / NestJS)",
+  "description": "A self-operated Node.js API server — Express or NestJS + PostgreSQL + Prisma/Drizzle. Shares a language with the frontend.",
+  "techStack": {
+    "backend": {
+      "backendType": "cloud-server",
+      "cloudProvider": null,
+      "database": "PostgreSQL",
+      "dataAccess": "Prisma",
+      "auth": "",
+      "framework": "Express",
+      "language": "TypeScript",
+      "packageManager": "npm",
+      "commands": {
+        "build": "npm run build",
+        "test": "npm test",
+        "lint": "npm run lint"
+      },
+      "sourceDir": "src"
+    },
+    "additionalStack": ["Express or NestJS", "Prisma or Drizzle", "Zod", "Vitest or Jest"]
+  },
+  "notes": {
+    "securityBoundary": "The application layer is the only boundary — the DB is reached over a trusted connection, so nothing leans on row-level policy. A missing ownership check is a data leak. The authentication method (self-issued JWT · session · external IdP) is undecided, so it is a question to confirm",
+    "serverCodeLocation": "The API server in this repository. Even when the frontend axis has a server runtime (Next.js, etc.), API ownership sits here — the guide pins the boundary of which of the two holds the logic first",
+    "toolchain": "The language and package manager are often the same as the frontend's, so monorepos are common — the guide covers whether to add shared type and schema packages",
+    "variants": "The choice of framework (Express/NestJS) and ORM (Prisma/Drizzle) heavily splits the guide content — it is fixed at Step 4.5"
+  }
+}

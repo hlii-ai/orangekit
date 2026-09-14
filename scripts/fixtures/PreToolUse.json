@@ -1,0 +1,1 @@
+{"session_id":"orangekit-doctor-test","cwd":"__ROOT__","tool_name":"Write","hook_event_name":"PreToolUse","tool_input":{"file_path":"src/components/demo/Widget.tsx","content":"export const Widget = () => null\n"}}

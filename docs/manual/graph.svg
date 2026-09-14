@@ -1,0 +1,165 @@
+<svg viewBox="0 0 1820 1150" role="img" aria-label="The core paths of workflow.graph.json. Work runs left to right and the column is the order. From session start through explore and plan, preparation outputs converge on build, then verify and cross-check. Four hooks hang from a bus below build; the two that block are drawn in the warning colour. Return edges never cross the body — they drop into a dedicated channel under the band and merge back into build. The lower band is the feedback loop, feeding from the lessons log on the right back to the human report on the left.">
+<defs>
+<marker id="ga" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-edge)"/></marker>
+<marker id="gas" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="var(--g-edge)"/></marker>
+<marker id="gi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-inst)"/></marker>
+<marker id="gis" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="var(--g-inst)"/></marker>
+<marker id="gb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-back)"/></marker>
+<marker id="gbs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="var(--g-back)"/></marker>
+</defs>
+<marker id="gbas" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="var(--g-block)"/></marker>
+<marker id="gba" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-block)"/></marker>
+<marker id="gha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-hook)"/></marker>
+<rect x="40" y="88" width="1740" height="596" rx="10" fill="var(--g-band)" stroke="var(--g-line)" stroke-width="1"/>
+<text class="gb" x="58" y="112" fill="var(--g-faint)">WORK FLOW — left to right</text>
+<rect x="40" y="736" width="1740" height="372" rx="10" fill="var(--g-band)" stroke="var(--g-line)" stroke-width="1"/>
+<text class="gb" x="58" y="760" fill="var(--g-faint)">FEEDBACK LOOP — feeds back right to left</text>
+<line x1="40" y1="72" x2="1780" y2="72" stroke="var(--g-line)" stroke-width="1"/>
+<text class="gr" x="160" y="62" text-anchor="middle" fill="var(--g-faint)">Enter</text>
+<line x1="160" y1="66" x2="160" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="410" y="62" text-anchor="middle" fill="var(--g-faint)">Explore · Plan</text>
+<line x1="410" y1="66" x2="410" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="660" y="62" text-anchor="middle" fill="var(--g-faint)">Prep output</text>
+<line x1="660" y1="66" x2="660" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="910" y="62" text-anchor="middle" fill="var(--g-faint)">Build</text>
+<line x1="910" y1="66" x2="910" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="1160" y="62" text-anchor="middle" fill="var(--g-faint)">Verify</text>
+<line x1="1160" y1="66" x2="1160" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="1410" y="62" text-anchor="middle" fill="var(--g-faint)">Cross-check</text>
+<line x1="1410" y1="66" x2="1410" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="1660" y="62" text-anchor="middle" fill="var(--g-faint)">Take back</text>
+<line x1="1660" y1="66" x2="1660" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="48" y="62" fill="var(--g-faint)">order →</text>
+<rect x="546" y="296" width="228" height="96" rx="8" fill="none" stroke="var(--g-agent)" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.65"/>
+<text class="gg" x="550" y="290" fill="var(--g-faint)">subagent · separate context</text>
+<rect x="1296" y="92" width="228" height="96" rx="8" fill="none" stroke="var(--g-agent)" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.65"/>
+<text class="gg" x="1300" y="86" fill="var(--g-faint)">subagent · separate context</text>
+<rect x="1296" y="190" width="228" height="100" rx="8" fill="none" stroke="var(--g-agent)" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.65"/>
+<text class="gg" x="1300" y="184" fill="var(--g-faint)">Irreversible only</text>
+<path d="M260,260 H266 Q276,260 276,250 V158 Q276,148 286,148 H310" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M410,176 V210" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,148 H516 Q526,148 526,158 V228 Q526,238 536,238 H810" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,238 H516 Q526,238 526,248 V334 Q526,344 536,344 H560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M760,344 H766 Q776,344 776,334 V256 Q776,246 786,246 H810" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,238 H529 Q539,238 539,248 V252 Q539,262 549,262 H810" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1010,238 H1060" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,238 H1266 Q1276,238 1276,228 V150 Q1276,140 1286,140 H1310" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,238 H1310" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1560,812 H1260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1060,812 H510" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M310,812 H295 Q285,812 285,822 V918 Q285,928 275,928 H260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,238 H1266 Q1276,238 1276,248 V334 Q1276,344 1286,344 H1560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1510,238 H1516 Q1526,238 1526,248 V342 Q1526,352 1536,352 H1560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1160,840 V908" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,936 H1265 Q1274,936 1274,945 V1051 Q1274,1060 1265,1060 H283 Q274,1060 274,1051 V951 Q274,942 265,942 H260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1510,238 H1560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1660,266 V316" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1060,936 H760" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M560,936 H545 Q535,936 535,926 V822 Q535,812 525,812 H510" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M560,936 H510" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M310,936 H295 Q285,936 285,926 V938 Q285,928 275,928 H260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,238 H542 Q552,238 552,248 V514 Q552,524 562,524 H560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M760,524 H779 Q789,524 789,514 V288 Q789,278 799,278 H810" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1010,238 H1016 Q1026,238 1026,228 V150 Q1026,140 1036,140 H1060" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,238 H525 Q535,238 535,248 V424 Q535,434 545,434 H560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)" marker-start="url(#gas)"/>
+<path d="M1510,140 H1515 Q1524,140 1524,149 V631 Q1524,640 1515,640 H805 Q796,640 796,631 V261 Q796,252 805,252 H810" fill="none" stroke="var(--g-back)" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#gb)"/>
+<path d="M1510,238 H1531 Q1540,238 1540,247 V631 Q1540,640 1531,640 H789 Q780,640 780,631 V261 Q780,252 789,252 H810" fill="none" stroke="var(--g-back)" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#gb)"/>
+<path d="M1760,344 H1765 Q1774,344 1774,353 V631 Q1774,640 1765,640 H773 Q764,640 764,631 V261 Q764,252 773,252 H810" fill="none" stroke="var(--g-back)" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#gb)"/>
+<path d="M760,936 H765 Q774,936 774,945 V1051 Q774,1060 783,1060 H1765 Q1774,1060 1774,1051 V835 Q1774,826 1765,826 H1760" fill="none" stroke="var(--g-back)" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#gb)"/>
+<path d="M260,260 H265 Q274,260 274,269 V663 Q274,672 283,672 H1265 Q1274,672 1274,663 V835 Q1274,826 1265,826 H1260" fill="none" stroke="var(--g-inst)" stroke-width="1.9" marker-end="url(#gi)"/>
+<path d="M260,260 H281 Q290,260 290,269 V677 Q290,686 299,686 H1281 Q1290,686 1290,677 V959 Q1290,950 1281,950 H1260" fill="none" stroke="var(--g-inst)" stroke-width="1.9" marker-end="url(#gi)"/>
+<path d="M1260,238 H1297 Q1306,238 1306,247 V705 Q1306,714 1315,714 H1765 Q1774,714 1774,705 V835 Q1774,826 1765,826 H1760" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1510,238 H1547 Q1556,238 1556,247 V677 Q1556,686 1565,686 H1781 Q1790,686 1790,677 V835 Q1790,826 1781,826 H1760" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,140 H1265 Q1274,140 1274,149 V663 Q1274,672 1265,672 H283 Q274,672 274,663 V951 Q274,942 265,942 H260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M160,232 V113 Q160,104 169,104 H901 Q910,104 910,113 V210" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<text class="gg" x="535" y="96" text-anchor="middle" fill="var(--g-soft)">all four entry states met → prep phases are skipped</text>
+<rect x="802" y="310" width="276" height="302" rx="8" fill="none" stroke="var(--g-hook)" stroke-width="1.1" stroke-dasharray="5 5" opacity="0.55"/>
+<text class="gg" x="802" y="302" fill="var(--g-hook)">throughout the build · run by the machine</text>
+<path d="M910,266 V310" fill="none" stroke="var(--g-hook)" stroke-width="1.6"/>
+<path d="M910,310 H818 V582" fill="none" stroke="var(--g-hook)" stroke-width="1.6"/>
+<path d="M818,360 H846" fill="none" stroke="var(--g-block)" stroke-width="1.6" marker-end="url(#gba)" marker-start="url(#gbas)"/>
+<path d="M818,434 H846" fill="none" stroke="var(--g-block)" stroke-width="1.6" marker-end="url(#gba)" marker-start="url(#gbas)"/>
+<path d="M818,508 H846" fill="none" stroke="var(--g-hook)" stroke-width="1.6" marker-end="url(#gha)"/>
+<path d="M818,582 H846" fill="none" stroke="var(--g-hook)" stroke-width="1.6" marker-end="url(#gha)"/>
+<path d="M60,232 h184 l16,28 l-16,28 h-184 z" fill="var(--g-surface)" stroke="var(--g-hook)" stroke-width="1.6"/>
+<text class="gn" x="160" y="256" text-anchor="middle" fill="var(--g-hook)">session-start</text>
+<text class="gk" x="160" y="274" text-anchor="middle" fill="var(--g-soft)">session briefing</text>
+<rect x="310" y="120" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="410" y="144" text-anchor="middle" fill="var(--g-ink)">understand</text>
+<text class="gk" x="410" y="162" text-anchor="middle" fill="var(--g-soft)">explore</text>
+<rect x="310" y="210" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="410" y="234" text-anchor="middle" fill="var(--g-ink)">plan</text>
+<text class="gk" x="410" y="252" text-anchor="middle" fill="var(--g-soft)">plan</text>
+<rect x="560" y="316" width="200" height="56" rx="8" fill="var(--g-surface)" stroke="var(--g-agent)" stroke-width="1.8"/>
+<text class="gn" x="660" y="340" text-anchor="middle" fill="var(--g-agent)">orangekit-planner</text>
+<text class="gk" x="660" y="358" text-anchor="middle" fill="var(--g-soft)">delegated design</text>
+<rect x="560" y="406" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="569" y="417" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="660" y="430" text-anchor="middle" fill="var(--g-skill)">prd-generator</text>
+<text class="gk" x="660" y="448" text-anchor="middle" fill="var(--g-soft)">writes the PRD</text>
+<rect x="560" y="496" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="569" y="507" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="660" y="520" text-anchor="middle" fill="var(--g-skill)">dev-docs-generator</text>
+<text class="gk" x="660" y="538" text-anchor="middle" fill="var(--g-soft)">dev documents</text>
+<rect x="810" y="210" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="910" y="234" text-anchor="middle" fill="var(--g-ink)">build</text>
+<text class="gk" x="910" y="252" text-anchor="middle" fill="var(--g-soft)">implement</text>
+<rect x="1060" y="112" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="1069" y="123" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="1160" y="136" text-anchor="middle" fill="var(--g-skill)">completion-review</text>
+<text class="gk" x="1160" y="154" text-anchor="middle" fill="var(--g-soft)">closing docs</text>
+<rect x="1060" y="210" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="1160" y="234" text-anchor="middle" fill="var(--g-ink)">verify</text>
+<text class="gk" x="1160" y="252" text-anchor="middle" fill="var(--g-soft)">hand to review</text>
+<rect x="1310" y="112" width="200" height="56" rx="8" fill="var(--g-surface)" stroke="var(--g-agent)" stroke-width="1.8"/>
+<text class="gn" x="1410" y="136" text-anchor="middle" fill="var(--g-agent)">orangekit-reviewer</text>
+<text class="gk" x="1410" y="154" text-anchor="middle" fill="var(--g-soft)">independent review</text>
+<rect x="1310" y="210" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="1410" y="234" text-anchor="middle" fill="var(--g-ink)">cross-check</text>
+<text class="gk" x="1410" y="252" text-anchor="middle" fill="var(--g-soft)">reviewer's extra pass</text>
+<rect x="1560" y="210" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="1569" y="221" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="1660" y="234" text-anchor="middle" fill="var(--g-skill)">codex-claude-loop</text>
+<text class="gk" x="1660" y="252" text-anchor="middle" fill="var(--g-soft)">external model check</text>
+<rect x="1560" y="316" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="1569" y="327" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="1660" y="340" text-anchor="middle" fill="var(--g-skill)">receiving-code-review</text>
+<text class="gk" x="1660" y="358" text-anchor="middle" fill="var(--g-soft)">vets incoming feedback</text>
+<rect x="1560" y="784" width="200" height="56" rx="28" fill="var(--g-surface)" stroke="var(--g-store)" stroke-width="1.6"/>
+<text class="gn" x="1660" y="808" text-anchor="middle" fill="var(--g-store)">lessons</text>
+<text class="gk" x="1660" y="826" text-anchor="middle" fill="var(--g-soft)">lessons log</text>
+<path d="M1078,784 h164 l18,28 l-18,28 h-164 l-18,-28 z" fill="var(--g-surface)" stroke="var(--g-tool)" stroke-width="1.8"/>
+<text class="gn" x="1160" y="808" text-anchor="middle" fill="var(--g-tool)">doctor</text>
+<text class="gk" x="1160" y="826" text-anchor="middle" fill="var(--g-soft)">self-verification</text>
+<rect x="310" y="784" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="410" y="808" text-anchor="middle" fill="var(--g-ink)">rule-promotion</text>
+<text class="gk" x="410" y="826" text-anchor="middle" fill="var(--g-soft)">asset promotion</text>
+<rect x="60" y="900" width="200" height="56" rx="28" fill="var(--g-termbg)" stroke="var(--g-term)" stroke-width="1.6"/>
+<text class="gn" x="160" y="924" text-anchor="middle" fill="var(--g-term)">user-report</text>
+<text class="gk" x="160" y="942" text-anchor="middle" fill="var(--g-soft)">report to a human</text>
+<rect x="1060" y="908" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="1069" y="919" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="1160" y="932" text-anchor="middle" fill="var(--g-skill)">harness-evaluation</text>
+<text class="gk" x="1160" y="950" text-anchor="middle" fill="var(--g-soft)">harness evaluation</text>
+<rect x="560" y="908" width="200" height="56" rx="28" fill="var(--g-surface)" stroke="var(--g-store)" stroke-width="1.6"/>
+<text class="gn" x="660" y="932" text-anchor="middle" fill="var(--g-store)">eval-report</text>
+<text class="gk" x="660" y="950" text-anchor="middle" fill="var(--g-soft)">evaluation report</text>
+<rect x="310" y="908" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="319" y="919" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="410" y="932" text-anchor="middle" fill="var(--g-skill)">skill-enhancer</text>
+<text class="gk" x="410" y="950" text-anchor="middle" fill="var(--g-soft)">skill redesign</text>
+<path d="M846,332 h184 l16,28 l-16,28 h-184 z" fill="var(--g-hookbg)" stroke="var(--g-block)" stroke-width="2.2"/>
+<text class="gn" x="946" y="356" text-anchor="middle" fill="var(--g-block)">security-check</text>
+<text class="gk" x="946" y="374" text-anchor="middle" fill="var(--g-soft)">blocks secrets · destructive cmds</text>
+<path d="M846,406 h184 l16,28 l-16,28 h-184 z" fill="var(--g-hookbg)" stroke="var(--g-block)" stroke-width="2.2"/>
+<text class="gn" x="946" y="430" text-anchor="middle" fill="var(--g-block)">build-gate</text>
+<text class="gk" x="946" y="448" text-anchor="middle" fill="var(--g-soft)">verification gate</text>
+<path d="M846,480 h184 l16,28 l-16,28 h-184 z" fill="var(--g-surface)" stroke="var(--g-hook)" stroke-width="1.6"/>
+<text class="gn" x="946" y="504" text-anchor="middle" fill="var(--g-hook)">track-skill</text>
+<text class="gk" x="946" y="522" text-anchor="middle" fill="var(--g-soft)">records skill use</text>
+<path d="M846,554 h184 l16,28 l-16,28 h-184 z" fill="var(--g-surface)" stroke="var(--g-hook)" stroke-width="1.6"/>
+<text class="gn" x="946" y="578" text-anchor="middle" fill="var(--g-hook)">handoff</text>
+<text class="gk" x="946" y="596" text-anchor="middle" fill="var(--g-soft)">handoff note</text>
+<text class="gg" x="840" y="658" fill="var(--g-back)">← defects send the work back to build</text>
+<text class="gg" x="810" y="1078" fill="var(--g-back)">← evaluation results become lessons</text>
+</svg>

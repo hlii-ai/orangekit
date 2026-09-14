@@ -1,0 +1,19 @@
+{
+  "name": "orangekit-harness",
+  "version": "1.1.0",
+  "displayName": "OrangeKit Harness Dev Kit",
+  "description": "Harness authoring only — a full 8-axis evaluation of the graph engine. Installed only by the people who build this plugin",
+  "author": {
+    "name": "gyeong"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/hlii-ai/orangekit",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "harness",
+    "evaluation",
+    "meta"
+  ],
+  "skills": "./skills/"
+}

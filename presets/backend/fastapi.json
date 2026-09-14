@@ -1,0 +1,29 @@
+{
+  "axis": "backend",
+  "name": "fastapi",
+  "displayName": "FastAPI · Python (self-hosted)",
+  "description": "FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic + pytest. A self-operated Python API server.",
+  "techStack": {
+    "backend": {
+      "backendType": "cloud-server",
+      "cloudProvider": null,
+      "database": "PostgreSQL",
+      "dataAccess": "SQLAlchemy 2.0",
+      "auth": "",
+      "framework": "FastAPI",
+      "language": "Python 3.11+",
+      "packageManager": "uv",
+      "commands": {
+        "build": "",
+        "test": "pytest",
+        "lint": "ruff check ."
+      },
+      "sourceDir": "app"
+    },
+    "additionalStack": ["SQLAlchemy 2.0", "Pydantic v2", "Alembic", "pytest + httpx"]
+  },
+  "notes": {
+    "securityBoundary": "The application layer is the only authorization boundary — the DB is reached over a trusted connection, so nothing leans on row-level policy. The authentication method is undecided, so it is a question to confirm",
+    "toolchain": "The language and package manager differ from the frontend axis — a combination with two command sets"
+  }
+}

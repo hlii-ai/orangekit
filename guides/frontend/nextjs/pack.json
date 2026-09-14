@@ -1,0 +1,61 @@
+{
+  "axis": "frontend",
+  "name": "nextjs",
+  "displayName": "Next.js 15 App Router + React 19",
+  "packVersion": "3.12.0",
+  "verified": "2026-08-21",
+  "extractedFrom": "skills/nextjs-frontend-guide (v3.11.0)",
+
+  "serverRuntime": true,
+  "serverRuntimeNote": "Next.js has a server runtime built in. Even when the backend axis is a BaaS, server code lives in Route Handlers·Server Actions — this is a value that must be passed to the backend side when a seam is created, because where the handlers live is the premise of the entire backend guide.",
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/tasks",
+    "displayLabel": "Task"
+  },
+
+  "fixesVariants": {
+    "store": "zustand",
+    "forms": "react-hook-form"
+  },
+  "fixesVariantsNote": "Next.js decides fetching·routing·the server runtime on its own, so the only things this axis pins down separately are client state and forms. For a project that has settled on Redux·Jotai, this pack's state-management section becomes wrong guidance",
+
+  "pkgs": [
+    "next@15", "react@19", "typescript@5", "tailwindcss@4", "zod@4",
+    "zustand@5", "react-hook-form@7", "@hookform/resolvers@5",
+    "class-variance-authority@0.7", "clsx@2", "tailwind-merge@3", "lucide-react@1"
+  ],
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "component-patterns.md",   "nav": "Building components · extracting repeated UI into shared ones · the server/client boundary" },
+    { "file": "styling.md",              "nav": "Writing Tailwind v4 classes · defining variants · `cn()` merging · forbidden patterns" },
+    { "file": "state-management.md",     "nav": "Choosing the state layer · Zustand stores · URL state · forms" },
+    { "file": "routing.md",              "nav": "Defining routes · dynamic segments · route groups · nested layouts · navigation · metadata" },
+    { "file": "performance.md",          "nav": "Image·bundle optimization · debouncing · suppressing re-renders · cleaning up subscriptions" },
+    { "file": "file-organization.md",    "nav": "Directory placement conventions · where a component lives · shared types" },
+    { "file": "typescript-standards.md", "nav": "Writing strict types · no any · type guards · utility types · null handling · naming" }
+  ],
+
+  "seamSlots": ["data-fetching", "auth-and-session", "complete-example"],
+
+  "extractionNotes": [
+    "Detached §6 protected routes (L133-213) from routing.md, moved it to the seam auth-and-session.md, and renumbered §7 Metadata to §6",
+    "Detached §7 generated types (L115-134) from typescript-standards.md, moved it to the **backend axis pack** (backend/supabase), and renumbered §8·§9 to §7·§8 — generating types from a schema is not frontend knowledge",
+    "Replaced 4 direct backend client calls with delegation to getCurrentUser·getTasks and declared them in the ledger's requires"
+  ],
+
+  "knownGaps": [
+    {
+      "symbol": "Task",
+      "where": "resources/file-organization.md",
+      "detail": "The seam's data-fetching.md·complete-example.md carry the same definition (three copies). The fields are completely identical and only the form differs, so it is not a signature conflict",
+      "carriedFrom": "v3.11.0"
+    }
+  ]
+}

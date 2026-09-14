@@ -1,0 +1,30 @@
+{
+  "axis": "frontend",
+  "name": "react-vite",
+  "displayName": "React + Vite (SPA)",
+  "description": "React 18 + Vite SPA (no SSR) + TypeScript + Tailwind CSS + React Router + Zustand",
+  "techStack": {
+    "framework": "React + Vite",
+    "language": "TypeScript",
+    "packageManager": "npm",
+    "commands": {
+      "build": "npm run build",
+      "test": "npm test",
+      "lint": "npm run lint"
+    },
+    "additionalStack": [
+      "Tailwind CSS",
+      "React Router",
+      "TanStack Query v5",
+      "Zustand"
+    ]
+  },
+  "domains": {
+    "sourceDir": "src",
+    "importAlias": "@/"
+  },
+  "notes": {
+    "serverCode": "An SPA has no server runtime — the backend axis owns server logic entirely. If the backend is a BaaS, the browser calls the SDK directly, so data-layer security (row-level policy) is the only boundary",
+    "language": "The default is TypeScript. Pick JavaScript and the type-standard slot is replaced by JSDoc conventions"
+  }
+}

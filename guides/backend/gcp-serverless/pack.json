@@ -1,0 +1,86 @@
+{
+  "axis": "backend",
+  "name": "gcp-serverless",
+  "displayName": "GCP serverless (Cloud Run · Hono + Firestore + Identity Platform)",
+  "packVersion": "3.14.0",
+  "verified": "2026-08-24",
+  "extractedFrom": "Newly created — no empirical source. No other pack was opened, not even as a format reference (only assets/pack-resource-template.md was used)",
+
+  "backendType": "serverless",
+  "registry": "npm",
+  "dataLayerPolicyEngine": false,
+  "policyEngineNote": "**Firestore Security Rules exist, but on this axis they are not a defense.** What the rules block is direct access from the client SDK and nothing else, and every access on this axis is server access made by Cloud Run with a service account (ADC), so it **bypasses the rules entirely.** That is why this pack leaves the rules at `allow read, write: if false` (a blanket deny) and makes **the application layer the only boundary** — a missing ownership filter is a data leak. Move the BaaS axes' (firebase·supabase) wording that 'the policy engine backs us up, so the application check is defense in depth' over here and it becomes exactly the opposite instruction. A value that must be passed on when the seam is generated",
+
+  "symbolSurface": true,
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task",
+    "note": "Every pack and seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from these values and the gate blocks any divergence — measured, the frontend used /tasks while the backend used /notes and the complete examples could not run against each other"
+  },
+
+  "fixesVariants": { "runtime": "cloud-run", "framework": "hono", "database": "firestore" },
+  "fixesVariantsNote": "**It nails down the Cloud Run container (a resident process)** — the entire body of the pack stands on the premise that the process is alive between requests (Firestore client reuse · the JWKS cache · SIGTERM drain · concurrency settings). A project that picks Cloud Functions resolves all of these differently, so it is not a variant but a different system — and **the function-unit + Firestore combination is owned by the `firebase` axis pack.** The framework is Hono (it stands on the web-standard Request/Response and attaches to Node through `@hono/node-server`). Pick Express and the middleware signature and error propagation differ, which makes every handler example wrong",
+
+  "pkgs": [
+    "hono@4", "@hono/node-server@2", "@google-cloud/firestore@9",
+    "jose@6", "zod@4",
+    "typescript@7", "vitest@4", "@types/node@26"
+  ],
+  "pkgsNote": "Not one of them is 0.x, so only the major is written for all of them. `jose` is in because **the Identity Platform ID token is verified without firebase-admin** — use firebase-admin and the code overlaps the `firebase` axis pack, and this axis's boundary (verification at the front of the server) mixes with that axis's boundary (rules + admin bypass). `typescript` is in pkgs because `pack-smoke.sh --online` installs pkgs and nothing else — without it the type check stays skipped, and that skip is not a pass but **unchecked**",
+
+  "runtime": {
+    "nodejs": "22",
+    "cloud-run": "2nd-generation execution environment",
+    "firestore-emulator": "required for the tests (`gcloud emulators firestore start` — attach through `FIRESTORE_EMULATOR_HOST`)"
+  },
+  "runtimeNote": "These are execution environment versions, not npm dependencies. Put them in pkgs and the installer pulls down the wrong package — in node-api·aws-container, `postgres@16` was exactly that mistake",
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "project-structure.md",  "nav": "layer boundaries (routes → services → repo) · createApp assembly · Cloud Run container lifetime (SIGTERM drain · concurrency · cold start) · structured logging" },
+    { "file": "data-modeling.md",      "nav": "document design and the ownership field · root collection vs subcollection · composite index declaration · document size and write contention · the blanket-deny Security Rules posture" },
+    { "file": "data-access.md",        "nav": "Firestore client lifetime · the ownership filter · converter · transactions and batches · cursor pagination · confirming the result of a mutation · attaching to the emulator" },
+    { "file": "input-validation.md",   "nav": "zod schemas · partial update and unknown keys · environment validation and boot-time failure · re-validation at the converter boundary" },
+    { "file": "error-handling.md",     "nav": "domain error → status code mapping · Firestore gRPC code detection (5·6·9·10) · zod error normalization · no leaking existence" },
+    { "file": "identity-tokens.md",    "nav": "Identity Platform ID token verification (JWKS · iss/aud/exp) · the key cache and clock skew · classes of verification failure · telling it apart from the IAM ID token of service-to-service calls" },
+    { "file": "testing-and-deploy.md", "nav": "emulator integration tests and isolation · calling the Hono app directly · dependency overrides · **block proof (asserting the positive·negative pair)** · container build and deploy · service account least privilege" }
+  ],
+
+  "seamSlots": ["api-endpoints", "auth-boundaries", "complete-example"],
+
+  "seamSlotNotes": {
+    "api-endpoints": "The Hono router shape + request/response envelope + emitting the error envelope. The envelope is a function of the wire contract, so the combination decides it, not the axis. **Two things the axis does nail down**: ⓐ the list query is parsed with a zod schema and unknown parameters are rejected ⓑ a successful create is **201** (the pack's test guard asserts this value. For the seam to pick 200, the pack's tests have to be fixed along with it)",
+    "auth-boundaries": "**It separates what the axis decides from what the combination decides.** What the axis decides: what a valid credential is (an Identity Platform ID token · RS256 · `iss=https://securetoken.google.com/<projectId>` · `aud=<projectId>`) and how it is verified (`verifyIdToken` — the pack provides it). What the combination decides: **how that token arrives** (`Authorization: Bearer` for an SPA, exchanged for a session cookie when there is a server runtime) · the login/logout flow · wiring the `currentUser` middleware · roles/scopes",
+    "complete-example": "index declaration → schema → converter → repository → service → router → test, end to end"
+  },
+
+  "clusters": [
+    { "id": "C1", "pilot": true, "files": ["identity-tokens.md", "error-handling.md"],
+      "why": "A token verification failure is itself `AppError('UNAUTHENTICATED')`, and Firestore gRPC codes and zod errors come out of the same status mapping table. It is the spot where the `AppError` shape in requires gets tangled the most, and **the spot where this axis's core decision — verifying with jose and no firebase-admin — is demonstrated** — so it is the pilot" },
+    { "id": "C2", "files": ["data-modeling.md", "data-access.md"],
+      "why": "Document shape · the ownership field · composite indexes decide the query shape directly. A composite query with no index dies at runtime with FAILED_PRECONDITION, so the two files share the same decision between them" },
+    { "id": "C3", "files": ["project-structure.md", "input-validation.md"],
+      "why": "The boot-time validation of `settings` and the wiring of `createApp` are the same decision. The layering discipline that 'the data layer knows nothing about HTTP' also spans both files" },
+    { "id": "C4", "files": ["testing-and-deploy.md"],
+      "why": "A single-file cluster. Emulator isolation · dependency overrides · container deploy · service account permissions share one lifetime (deploy time), and it waits on the contents of no other cluster" }
+  ],
+
+  "knownGaps": [
+    {
+      "what": "a round trip against a real GCP project is unverified",
+      "where": "resources/identity-tokens.md · resources/testing-and-deploy.md",
+      "detail": "The authoring·verification environment has no GCP project and no Identity Platform tenant. **The JWKS verification logic is verified by proxy with a self-generated key pair** (the same RS256, the same claim shape), and the real `securetoken.google.com` response, the key rotation period, and the Cloud Run deploy could not be run against the real thing. Each tag states the scope of the proxy"
+    },
+    {
+      "what": "machine policies aimed at the seam are only decided after assembly",
+      "where": "the scope=seam entries of policies.md",
+      "detail": "The target files come into existence only once the seam does. `--pack` reports them explicitly as 'deferred until after assembly', and after `install-guide.sh` assembles, `--guide --assembly` decides them"
+    }
+  ]
+}

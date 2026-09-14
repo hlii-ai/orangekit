@@ -1,0 +1,19 @@
+{
+  "axis": "backend",
+  "name": "none",
+  "displayName": "None / external API",
+  "description": "This repository has no backend. A static site, or a frontend consuming an external REST API — backend-guide is not generated, and API client patterns are held by frontend-guide.",
+  "techStack": {
+    "backend": {
+      "backendType": "",
+      "cloudProvider": null,
+      "database": "",
+      "dataAccess": "REST API client",
+      "auth": ""
+    },
+    "additionalStack": []
+  },
+  "notes": {
+    "securityBoundary": "How the external API's auth token is held in the browser is the danger point — covered in frontend-guide's data-fetching slot"
+  }
+}

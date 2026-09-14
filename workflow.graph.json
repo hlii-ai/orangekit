@@ -1,0 +1,896 @@
+{
+  "$comment": "Declares the harness as a machine-readable graph. In v2 this graph was scattered across markdown tables and prose, making it impossible to verify or instrument, and as a result 'a declared but unreachable asset' (rules/, 697 lines) went undiscovered by anyone for 4 months. doctor --graph uses this file to check for dangling edges, unreachable nodes, and missing error edges. instrumented:true on an edge means a hook actually emits it. Edges between stages are model behavior and cannot be emitted by code, so they are excluded from the 'dead edge' decision. A node's phase links this graph to the Phase vocabulary in rules/workflow-routing.md (P0-A~E, P1~P6) — if the two vocabularies diverge, routing becomes machine-uncheckable. A node's produces is attached only to 'artifacts the harness reads again later' — an artifact that is delivered to the user and ends there (a marketing site, a favicon) is not a store. A store node must have both inbound (write) and outbound (read) edges: a store with no reader is pure cost and a source of drift.",
+  "nodes": [
+    {
+      "id": "session-start",
+      "kind": "hook",
+      "path": "scripts/session-brief.sh",
+      "event": "SessionStart",
+      "entry": true,
+      "emits": "T0 operating rules + session briefing + hook liveness status",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "understand",
+      "kind": "stage",
+      "phase": [
+        "P0"
+      ],
+      "when": "when the impact radius is unclear",
+      "produces": "exploration results (file list, call relationships)",
+      "entry": true,
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "plan",
+      "kind": "stage",
+      "phase": [
+        "P3"
+      ],
+      "when": "2 or more of the 4 entry conditions unmet",
+      "produces": "implementation plan (written to a file only when it spans sessions)",
+      "entry": true,
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "orangekit-planner",
+      "kind": "agent",
+      "path": "agents/orangekit-planner.md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "WebSearch",
+        "WebFetch"
+      ],
+      "note": "no Write — mass-producing unnecessary documents is structurally impossible",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "build",
+      "kind": "stage",
+      "phase": [
+        "P4"
+      ],
+      "when": "always",
+      "produces": "code",
+      "entry": true,
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "security-check",
+      "kind": "hook",
+      "path": "scripts/security-check.sh",
+      "event": "PreToolUse",
+      "emits": "summons the ui-design card when a new UI file is created (not a block)",
+      "blocks": true,
+      "note": "blocks hardcoded secrets with exit 2. The project root is not needed for the decision",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "build-gate",
+      "kind": "hook",
+      "path": "scripts/build-gate.sh",
+      "event": "Stop",
+      "blocks": true,
+      "note": "continue:false + systemMessage. Stop does not support decision/reason",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "verify",
+      "kind": "stage",
+      "phase": [
+        "P5"
+      ],
+      "when": "Costly or above",
+      "produces": "review results",
+      "on_error": [
+        "build"
+      ]
+    },
+    {
+      "id": "orangekit-reviewer",
+      "kind": "agent",
+      "phase": [
+        "P5",
+        "P6"
+      ],
+      "path": "agents/orangekit-reviewer.md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
+      "note": "read-only — an unauthorized move into dev/archive is physically impossible",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "cross-check",
+      "kind": "stage",
+      "phase": [
+        "P6"
+      ],
+      "when": "Irreversible only",
+      "produces": "multi-perspective independent verification results (a majority across correctness / security / reversibility)",
+      "on_error": [
+        "build"
+      ]
+    },
+    {
+      "id": "handoff",
+      "kind": "hook",
+      "path": "scripts/handoff.sh",
+      "event": "PreCompact|SessionEnd",
+      "note": "additionalContext JSON. Plain stdout does not become context on this event",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "lessons",
+      "kind": "store",
+      "path": "rules/lessons.md",
+      "note": "the lesson record format. Aggregation is performed by doctor --lessons"
+    },
+    {
+      "id": "doctor",
+      "kind": "tool",
+      "path": "scripts/doctor.sh",
+      "entry": true,
+      "note": "self-test entry point. There is no CI, so it lives inside package.json scripts"
+    },
+    {
+      "id": "rule-promotion",
+      "kind": "stage",
+      "when": "3 or more lessons in the same category",
+      "produces": "a matching asset diff + a physical move into lessons-archive.md",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "user-report",
+      "kind": "terminal",
+      "note": "the terminus of every error edge. A failure does not vanish silently"
+    },
+    {
+      "id": "track-skill",
+      "kind": "hook",
+      "path": "scripts/track-skill.sh",
+      "event": "PostToolUse",
+      "note": "skill invocation instrumentation. Nothing is culled without measurement (anti-goal 8)",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "security-review",
+      "kind": "skill",
+      "path": "skills/security-review/SKILL.md",
+      "note": "full codebase audit — dependency CVEs, secrets, payments. The built-in /security-review is diff-only and does not cover this area",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "receiving-code-review",
+      "kind": "skill",
+      "path": "skills/receiving-code-review/SKILL.md",
+      "note": "critical verification of received feedback. No native counterpart",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "shortcut-ledger",
+      "kind": "skill",
+      "path": "skills/shortcut-ledger/SKILL.md",
+      "note": "re-evaluates the ceiling on deliberate shortcuts (ORANGEKIT-SHORTCUT markers). No native counterpart — /simplify is after-the-fact cleanup of code already written, /code-review generates findings",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "harness-evaluation",
+      "kind": "skill",
+      "path": "harness/skills/harness-evaluation/SKILL.md",
+      "note": "harness-authoring-only plugin (orangekit-harness) — not shipped to consumers",
+      "manual": true,
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "council-review",
+      "kind": "skill",
+      "phase": [
+        "P0-E"
+      ],
+      "path": "skills/council-review/SKILL.md",
+      "note": "3-perspective fan-out consensus on Irreversible planning decisions (technical/business/UX). At most 1 re-query; anything unresolved goes to a user tie-break",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "eval-report",
+      "kind": "store",
+      "path": "harness/skills/harness-evaluation/assets/report-template.md",
+      "note": "store for evaluation defect lists (dev/docs/harness-evaluation/vN.md — the filename is the ledger). The defect list becomes the input to rule-promotion"
+    },
+    {
+      "id": "stack-guide-generator",
+      "kind": "skill",
+      "path": "skills/stack-guide-generator/SKILL.md",
+      "note": "generates frontend/backend-guide from the stack combination (backend type, cloud, DB, data access, auth). Not installed if self-verification fails — a false placeholder contract is structurally impossible",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "skill-creator",
+      "kind": "tool",
+      "entry": true,
+      "note": "a native skill — it has no file in this repo, so it has no path. It handles skill creation, the A/B evaluation loop, and the description optimizer. Hardening is taken over by skill-enhancer (see rules/harness-change.md on how skills are built)"
+    },
+    {
+      "id": "skill-enhancer",
+      "kind": "skill",
+      "path": "skills/skill-enhancer/SKILL.md",
+      "note": "hardens a skill to harness grade — diagnoses 6 patterns (boundary, behavioral contract, failure path, machine verification, wiring, token discipline) and injects only what applies. Creation and A/B belong to skill-creator; this skill covers the dimensions that evaluation loop cannot score",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "install-guide",
+      "kind": "skill",
+      "path": "skills/stack-guide-generator/SKILL.md",
+      "note": "assembles axis packs + a seam into project guide skills. With a pre-built seam it finishes without generation",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "brainstorming",
+      "kind": "skill",
+      "phase": [
+        "P0-A"
+      ],
+      "path": "skills/brainstorming/SKILL.md",
+      "when": "P0-A — idea stage; the requirement does not come out as one sentence"
+    },
+    {
+      "id": "research",
+      "kind": "skill",
+      "phase": [
+        "P0-B"
+      ],
+      "path": "skills/research/SKILL.md",
+      "when": "P0-B — external fact-checking is needed"
+    },
+    {
+      "id": "business-planner",
+      "kind": "skill",
+      "phase": [
+        "P0-C"
+      ],
+      "path": "skills/business-planner/SKILL.md",
+      "when": "P0-C — a revenue model or market-entry judgement is needed"
+    },
+    {
+      "id": "service-planner",
+      "kind": "skill",
+      "phase": [
+        "P0-D"
+      ],
+      "path": "skills/service-planner/SKILL.md",
+      "when": "P0-D — screens and user flows are unsettled"
+    },
+    {
+      "id": "prompt-enhancer",
+      "kind": "skill",
+      "phase": [
+        "P1"
+      ],
+      "path": "skills/prompt-enhancer/SKILL.md",
+      "when": "P1 — the request is one sentence and the intent is ambiguous"
+    },
+    {
+      "id": "prd-generator",
+      "kind": "skill",
+      "phase": [
+        "P2"
+      ],
+      "path": "skills/prd-generator/SKILL.md",
+      "when": "P2 — no matching PRD in dev/docs/prd/"
+    },
+    {
+      "id": "dev-docs-generator",
+      "kind": "skill",
+      "phase": [
+        "P3"
+      ],
+      "path": "skills/dev-docs-generator/SKILL.md",
+      "when": "P3 — the work spans sessions (multiple tasks)"
+    },
+    {
+      "id": "completion-review",
+      "kind": "skill",
+      "phase": [
+        "P5"
+      ],
+      "path": "skills/completion-review/SKILL.md",
+      "when": "P5 — right after finishing a Reversible change (Costly or above goes to orangekit-reviewer)"
+    },
+    {
+      "id": "prd-reviewer",
+      "kind": "skill",
+      "path": "skills/prd-reviewer/SKILL.md",
+      "when": "after modifying dev/docs/prd/** — triggered by rules/doc-dependency.md"
+    },
+    {
+      "id": "test-driven-development",
+      "kind": "skill",
+      "path": "skills/test-driven-development/SKILL.md",
+      "when": "P4 implementation — write the test before implementing a feature or bug fix",
+      "phase": [
+        "P4"
+      ]
+    },
+    {
+      "id": "codex-claude-loop",
+      "kind": "skill",
+      "phase": [
+        "P6"
+      ],
+      "path": "skills/codex-claude-loop/SKILL.md",
+      "when": "Irreversible cross-verification — adds an external model (Codex) lens"
+    },
+    {
+      "id": "orangekit-init",
+      "kind": "skill",
+      "path": "skills/orangekit-init/SKILL.md",
+      "when": "first-time project setup — the session briefing nudges when orangekit.config.json is absent",
+      "manual": true
+    },
+    {
+      "id": "orangekit-migrate",
+      "kind": "skill",
+      "path": "skills/orangekit-migrate/SKILL.md",
+      "when": "manual invocation only, by the user",
+      "manual": true
+    },
+    {
+      "id": "execution-dashboard",
+      "kind": "skill",
+      "path": "skills/execution-dashboard/SKILL.md",
+      "when": "manual invocation only, by the user",
+      "manual": true
+    },
+    {
+      "id": "fix-issue",
+      "kind": "skill",
+      "path": "skills/fix-issue/SKILL.md",
+      "when": "manual invocation only, by the user",
+      "manual": true
+    },
+    {
+      "id": "health-check",
+      "kind": "skill",
+      "path": "skills/health-check/SKILL.md",
+      "when": "manual invocation only, by the user",
+      "manual": true,
+      "note": "build, lint, test, dependencies + Step 5.5 SonarQube static analysis (asks the user and runs it when detected). No native counterpart"
+    },
+    {
+      "id": "ui-ux-design",
+      "kind": "skill",
+      "path": "skills/ui-ux-design/SKILL.md",
+      "when": "entered from build as render proof (Step 6) after a UI file change, or fired by description on a design-system or screen-design request",
+      "produces": "design system (dev/docs/design/<project>/MASTER.md)"
+    },
+    {
+      "id": "image-generator",
+      "kind": "skill",
+      "path": "skills/image-generator/SKILL.md",
+      "when": "fired by description on requests for raster assets — images, icons, illustrations, mockups, OG images. Diagrams, charts, and design systems are outside the boundary",
+      "produces": "image files, or a handoff prompt spec when there is no key (dev/docs/assets/<slug>.prompt.md)"
+    },
+    {
+      "id": "design-canvas",
+      "kind": "tool",
+      "note": "the native /design — it has no file in this repo, so it has no path. It moves a token plan that passed Step 2.5 onto artboards so the direction is fixed before code. The canvas is canonical for per-screen composition (layout, hierarchy, copy, 3 states), so build reads it again. Skipped when absent — undecidable is not a block"
+    },
+    {
+      "id": "design-system",
+      "kind": "store",
+      "path": "rules/ui-design.md",
+      "note": "reviews design tokens, signature, and direction. The real file is the consumer's dev/docs/design/<project>/MASTER.md, and the canonical source for the review norms is rules/ui-design.md §3 and §5. Jurisdiction splits with the canvas, and design-sync.sh detects mismatches in the three overlapping items (color, font, signature)"
+    },
+    {
+      "id": "codebase-survey",
+      "kind": "skill",
+      "path": "skills/codebase-survey/SKILL.md",
+      "when": "when the harness was installed into an existing repo later, or the project-owned cards have gone stale",
+      "produces": "updates to .claude/rules/project-structure.md and code-conventions.md + a drift diff",
+      "note": "measurement and description only — it does not prescribe structure. orangekit-init 'picks' the stack; this skill 'measures' the current facts. The only update path for the two project-owned cards",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "pr-prep",
+      "kind": "skill",
+      "path": "skills/pr-prep/SKILL.md",
+      "when": "when raising a change as a PR",
+      "note": "generates the PR body. /code-review covers diff defects, orangekit-reviewer covers contracts, completion-review covers documents — this is the only asset that writes the body. The reversibility class sets the mandatory sections",
+      "on_error": [
+        "user-report"
+      ]
+    },
+    {
+      "id": "decisions",
+      "kind": "store",
+      "path": "rules/reversibility.md",
+      "note": "the outcome the user chose at a decision point. The real file is the consumer's docs/decisions.md, and the canonical source for the format is 'Decision Records' in rules/reversibility.md. A different axis from lessons (mistakes) — mixing them makes both unusable"
+    }
+  ],
+  "edges": [
+    {
+      "from": "session-start",
+      "to": "understand",
+      "cond": "impact radius unclear"
+    },
+    {
+      "from": "session-start",
+      "to": "build",
+      "cond": "all 4 entry conditions met — 0 preparation work"
+    },
+    {
+      "from": "session-start",
+      "to": "doctor",
+      "cond": "reports hook liveness below N/M",
+      "instrumented": true
+    },
+    {
+      "from": "session-start",
+      "to": "harness-evaluation",
+      "cond": "notice that 30+ days have passed since the last evaluation",
+      "instrumented": true,
+      "conditionalEmit": "a 30-day cycle condition — not emitted for 30 days right after an evaluation"
+    },
+    {
+      "from": "understand",
+      "to": "plan",
+      "cond": "2 or more unmet items"
+    },
+    {
+      "from": "understand",
+      "to": "build",
+      "cond": "impact radius fixed"
+    },
+    {
+      "from": "plan",
+      "to": "orangekit-planner",
+      "cond": "design delegated"
+    },
+    {
+      "from": "orangekit-planner",
+      "to": "build",
+      "cond": "plan returned (the main session records it)"
+    },
+    {
+      "from": "plan",
+      "to": "build"
+    },
+    {
+      "from": "build",
+      "to": "security-check",
+      "cond": "automatic on Edit|Write",
+      "instrumented": true
+    },
+    {
+      "from": "security-check",
+      "to": "build",
+      "cond": "passed"
+    },
+    {
+      "from": "build",
+      "to": "build-gate",
+      "cond": "automatic on Stop",
+      "instrumented": true
+    },
+    {
+      "from": "build-gate",
+      "to": "build",
+      "cond": "build not run → blocked",
+      "instrumented": true,
+      "conditionalEmit": "emitted only when the gate actually blocks — if the harness is working properly it is never emitted"
+    },
+    {
+      "from": "build",
+      "to": "verify",
+      "cond": "Costly or above"
+    },
+    {
+      "from": "verify",
+      "to": "orangekit-reviewer",
+      "cond": "review delegated"
+    },
+    {
+      "from": "orangekit-reviewer",
+      "to": "build",
+      "cond": "Critical found"
+    },
+    {
+      "from": "verify",
+      "to": "cross-check",
+      "cond": "Irreversible"
+    },
+    {
+      "from": "cross-check",
+      "to": "build",
+      "cond": "no majority"
+    },
+    {
+      "from": "build",
+      "to": "handoff",
+      "cond": "PreCompact | SessionEnd",
+      "instrumented": true
+    },
+    {
+      "from": "verify",
+      "to": "lessons",
+      "cond": "a user objection arises"
+    },
+    {
+      "from": "cross-check",
+      "to": "lessons",
+      "cond": "a user objection arises"
+    },
+    {
+      "from": "lessons",
+      "to": "doctor",
+      "cond": "aggregation requested"
+    },
+    {
+      "from": "doctor",
+      "to": "rule-promotion",
+      "cond": "3 or more in a category"
+    },
+    {
+      "from": "rule-promotion",
+      "to": "user-report",
+      "cond": "one approval request"
+    },
+    {
+      "from": "build",
+      "to": "track-skill",
+      "cond": "automatic on a Skill call",
+      "instrumented": true
+    },
+    {
+      "from": "track-skill",
+      "to": "doctor",
+      "cond": "--usage aggregation"
+    },
+    {
+      "from": "build",
+      "to": "security-review",
+      "cond": "pre-deploy or full security audit requested"
+    },
+    {
+      "from": "security-review",
+      "to": "build",
+      "cond": "Critical vulnerability found"
+    },
+    {
+      "from": "verify",
+      "to": "receiving-code-review",
+      "cond": "review feedback received"
+    },
+    {
+      "from": "cross-check",
+      "to": "receiving-code-review",
+      "cond": "external AI cross-verification results received"
+    },
+    {
+      "from": "receiving-code-review",
+      "to": "build",
+      "cond": "Critical/Important adopted after verification"
+    },
+    {
+      "from": "doctor",
+      "to": "harness-evaluation",
+      "cond": "measurement complete → qualitative judgement"
+    },
+    {
+      "from": "harness-evaluation",
+      "to": "user-report",
+      "cond": "improvement proposed"
+    },
+    {
+      "from": "plan",
+      "to": "council-review",
+      "cond": "Irreversible planning decision"
+    },
+    {
+      "from": "council-review",
+      "to": "plan",
+      "cond": "consolidated recommendation returned (after user confirmation)"
+    },
+    {
+      "from": "cross-check",
+      "to": "codex-claude-loop",
+      "cond": "when external model verification is chosen"
+    },
+    {
+      "from": "codex-claude-loop",
+      "to": "receiving-code-review",
+      "cond": "external review verdict returned"
+    },
+    {
+      "from": "harness-evaluation",
+      "to": "eval-report",
+      "cond": "defect list produced"
+    },
+    {
+      "from": "eval-report",
+      "to": "rule-promotion",
+      "cond": "asset promotion when a defect is a repeating pattern"
+    },
+    {
+      "from": "session-start",
+      "to": "stack-guide-generator",
+      "cond": "orangekit-init Step 9.5 or on a stack change (via the unconfigured-config nudge)"
+    },
+    {
+      "from": "skill-creator",
+      "to": "skill-enhancer",
+      "cond": "right after creation or improvement — 6-pattern hardening after the keep/drop decision"
+    },
+    {
+      "from": "eval-report",
+      "to": "skill-enhancer",
+      "cond": "when an evaluation detects a skill defect"
+    },
+    {
+      "from": "skill-enhancer",
+      "to": "skill-creator",
+      "cond": "when before/after A/B measurement is needed after P2 and P3 hardening"
+    },
+    {
+      "from": "skill-enhancer",
+      "to": "user-report",
+      "cond": "reports diagnosis and application results per pattern"
+    },
+    {
+      "from": "orangekit-init",
+      "to": "install-guide",
+      "cond": "Step 9.5 — assembly when axis packs exist (with a pre-built seam it completes here)"
+    },
+    {
+      "from": "install-guide",
+      "to": "stack-guide-generator",
+      "cond": "when a seam or axis remains that assembly could not fill"
+    },
+    {
+      "from": "plan",
+      "to": "brainstorming"
+    },
+    {
+      "from": "brainstorming",
+      "to": "plan"
+    },
+    {
+      "from": "plan",
+      "to": "research"
+    },
+    {
+      "from": "research",
+      "to": "plan"
+    },
+    {
+      "from": "plan",
+      "to": "business-planner"
+    },
+    {
+      "from": "business-planner",
+      "to": "plan"
+    },
+    {
+      "from": "plan",
+      "to": "service-planner"
+    },
+    {
+      "from": "service-planner",
+      "to": "plan"
+    },
+    {
+      "from": "understand",
+      "to": "prompt-enhancer"
+    },
+    {
+      "from": "prompt-enhancer",
+      "to": "plan"
+    },
+    {
+      "from": "plan",
+      "to": "prd-generator"
+    },
+    {
+      "from": "prd-generator",
+      "to": "plan"
+    },
+    {
+      "from": "plan",
+      "to": "dev-docs-generator"
+    },
+    {
+      "from": "dev-docs-generator",
+      "to": "build"
+    },
+    {
+      "from": "build",
+      "to": "completion-review"
+    },
+    {
+      "from": "completion-review",
+      "to": "user-report"
+    },
+    {
+      "from": "build",
+      "to": "prd-reviewer"
+    },
+    {
+      "from": "prd-reviewer",
+      "to": "build"
+    },
+    {
+      "from": "build",
+      "to": "test-driven-development"
+    },
+    {
+      "from": "test-driven-development",
+      "to": "build"
+    },
+    {
+      "from": "session-start",
+      "to": "orangekit-init"
+    },
+    {
+      "from": "build",
+      "to": "shortcut-ledger",
+      "cond": "before a release or on a change of scale, check shortcut markers for reclaim"
+    },
+    {
+      "from": "shortcut-ledger",
+      "to": "build",
+      "cond": "items judged for reclaim or expiry"
+    },
+    {
+      "from": "understand",
+      "to": "codebase-survey",
+      "cond": "the repo's stack, structure, and architecture are unmapped"
+    },
+    {
+      "from": "codebase-survey",
+      "to": "understand",
+      "cond": "survey results + card drift returned"
+    },
+    {
+      "from": "build",
+      "to": "pr-prep",
+      "cond": "when raising a change as a PR"
+    },
+    {
+      "from": "build",
+      "to": "decisions",
+      "cond": "the decision-point outcome is Costly or above"
+    },
+    {
+      "from": "council-review",
+      "to": "decisions",
+      "cond": "a user-confirmed consolidated recommendation decision"
+    },
+    {
+      "from": "decisions",
+      "to": "orangekit-planner",
+      "cond": "checking a prior decision (after re-verifying reference freshness)"
+    },
+    {
+      "from": "decisions",
+      "to": "pr-prep",
+      "cond": "the Decisions line in the PR body"
+    },
+    {
+      "from": "build",
+      "to": "ui-ux-design",
+      "cond": "render proof after a UI file change — bring it up with /run, then ui-probe"
+    },
+    {
+      "from": "ui-ux-design",
+      "to": "build",
+      "cond": "detects console errors, uncaught exceptions, and failed requests — termination predicate: 0 runtime defects",
+      "conditionalEmit": true
+    },
+    {
+      "from": "eval-report",
+      "to": "lessons",
+      "cond": "when an evaluation retracts a false positive or finds an error in its own verdict — the defect list and the lessons are separate stores, so without this edge it rests on the model's memory alone"
+    },
+    {
+      "from": "service-planner",
+      "to": "ui-ux-design",
+      "cond": "generate the design system once screens and flows are settled"
+    },
+    {
+      "from": "ui-ux-design",
+      "to": "design-system",
+      "cond": "Step 2 --persist output + recording the Step 2.5 review result"
+    },
+    {
+      "from": "ui-ux-design",
+      "to": "design-canvas",
+      "cond": "Step 2.5 passed + 1 or more new or redesigned screens — termination predicate: the user confirms the canvas"
+    },
+    {
+      "from": "build",
+      "to": "image-generator",
+      "cond": "a raster asset is needed during implementation — limited to what cannot be made with code or SVG"
+    },
+    {
+      "from": "ui-ux-design",
+      "to": "image-generator",
+      "cond": "injects MASTER.md's color and typography tokens into the prompt so the asset does not clash with the screen"
+    },
+    {
+      "from": "image-generator",
+      "to": "build",
+      "cond": "applies spec-verified assets to the code — with no key, the handoff prompt is delivered and a human puts them in"
+    },
+    {
+      "from": "design-canvas",
+      "to": "design-system",
+      "cond": "write-back (Step 2.7) — termination predicate: design-sync.sh exit 0"
+    },
+    {
+      "from": "design-system",
+      "to": "build",
+      "cond": "implementation reads the tokens and signature (entry point)"
+    },
+    {
+      "from": "design-canvas",
+      "to": "build",
+      "cond": "implementation reads the per-screen composition (layout, hierarchy, copy, 3 states)"
+    },
+    {
+      "from": "health-check",
+      "to": "receiving-code-review",
+      "cond": "Sonar issues received — the user approves 'analyze + auto-fix' (Step 5.6)"
+    },
+    {
+      "from": "receiving-code-review",
+      "to": "health-check",
+      "cond": "Sonar re-analysis after the fix — termination predicate: 0 new issues OR the single re-analysis is used up"
+    }
+  ]
+}

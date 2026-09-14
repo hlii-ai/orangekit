@@ -1,0 +1,9 @@
+{
+  "session_id": "orangekit-doctor-test",
+  "cwd": ".",
+  "tool_name": "Bash",
+  "hook_event_name": "PreToolUse",
+  "tool_input": {
+    "command": "git commit -m \"fix: drop table legacy_users migration\""
+  }
+}

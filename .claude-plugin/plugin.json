@@ -1,0 +1,20 @@
+{
+  "name": "orangekit-product",
+  "version": "1.0.1",
+  "displayName": "OrangeKit Claude Code Devkit",
+  "description": "AI Native Dev Harness — reversibility-axis workflow + self-testing hooks + graph instrumentation",
+  "author": {
+    "name": "gyeong"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/hlii-ai/orangekit",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "ai-native",
+    "dev-harness",
+    "code-review",
+    "planning"
+  ],
+  "skills": "./skills/"
+}

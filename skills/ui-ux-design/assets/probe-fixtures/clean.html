@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- The **baseline** fixture for ui-probe --self-test.
+     If even one defect comes out of this file it is a false positive, and a false positive makes the mechanism useless.
+     That is why the self-test looks at this file **before** broken.html. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ui-probe clean fixture</title>
+  <style>
+    body { background: #ffffff; color: #1a1a1a; font-family: system-ui, sans-serif; font-size: 17px; margin: 0; padding: 24px; }
+    p { font-size: 17px; line-height: 1.6; }
+    button, a.cta { cursor: pointer; min-width: 48px; min-height: 48px; display: inline-block; }
+    button { background: #1f3a5f; color: #ffffff; border: 0; border-radius: 6px; padding: 12px 20px; font-size: 16px; }
+    a.cta { background: #ffffff; color: #1f3a5f; border: 1px solid #1f3a5f; border-radius: 6px; padding: 12px 20px; text-decoration: none; line-height: 24px; }
+    input { min-height: 48px; font-size: 16px; padding: 8px; border: 1px solid #6b6b6b; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>A screen with no defects</h1>
+  <p>This paragraph is the sample for measuring the median body text size. It is built to satisfy the contrast, touch target and cursor rules.</p>
+  <p>There are no errors in the console, no uncaught exceptions, and no failing requests.</p>
+  <button id="save" type="button">Save changes</button>
+  <a class="cta" id="docs" href="#docs">Open the docs</a>
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" placeholder="name@example.com">
+  <script>
+    // log is not a defect — the ruling looks only at console.error.
+    console.log('clean fixture ready');
+    document.getElementById('save').addEventListener('click', function () {
+      document.title = 'saved';
+    });
+  </script>
+</body>
+</html>

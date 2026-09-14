@@ -1,0 +1,147 @@
+{
+  "axis": "backend",
+  "name": "node-nest",
+  "displayName": "NestJS API server (NestJS 11 + TypeORM 1 + PostgreSQL)",
+  "packVersion": "3.16.0",
+  "verified": "2026-08-24",
+  "extractedFrom": "Newly written — no demonstrated original. Only the format follows assets/pack-resource-template.md; the content came from standing up a NestJS 11 + TypeORM 1.1 project from scratch and attaching it to a real PostgreSQL 18.4",
+  "backendType": "cloud-server",
+  "dataLayerPolicyEngine": false,
+  "policyEngineNote": "There is no row-level policy engine. The application attaches to the DB over a trusted connection, so **a missing ownership filter is a data leak**. The risk unique to this axis is that an **array `where` is an OR** — in a query with two or more branches, such as cursor pagination, dropping `ownerId` from one branch lets that branch pass another user's rows through wholesale (confirmed by measurement). Moving the BaaS axis (supabase) statement that 'RLS is the backstop, so application checks are defense in depth' onto this axis turns it into exactly the opposite guidance — a value that must be passed on when generating the seam",
+  "symbolSurface": true,
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task",
+    "note": "Every pack and seam uses the same example domain. From this value L0 issues the vocabulary policy (`vocab-task`) so the gate blocks divergence — measured: the frontend used /tasks and the backend /notes, leaving the complete examples unable to run against each other"
+  },
+  "fixesVariants": {
+    "framework": "nestjs",
+    "orm": "typeorm",
+    "validation": "class-validator",
+    "test": "jest"
+  },
+  "fixesVariantsNote": "**The first value is the reason this pack exists** — NestJS's DI, decorators and modules are not a variant of Express but a different system, so they cannot be carried as a variant of backend/node-api (Express + Prisma). The ORM is nailed down too: a TypeORM Repository is **carried in the DI container** and injected (`@InjectRepository`), and that wiring is the premise of module boundaries, test doubles and transaction boundaries alike. A project that chooses Prisma is owned by backend/node-api, one that chooses Drizzle by backend/aws-container. Validation is nailed down as well — with class-validator the DTO **class** is the schema, and the file layout differs from Zod, which keeps a separate schema object",
+  "pkgs": [
+    "@nestjs/common@11",
+    "@nestjs/core@11",
+    "@nestjs/platform-express@11",
+    "@nestjs/config@4",
+    "@nestjs/typeorm@11",
+    "@nestjs/mapped-types@2",
+    "typeorm@1",
+    "pg@8",
+    "class-validator@0.15",
+    "class-transformer@0.5",
+    "reflect-metadata@0.2",
+    "rxjs@7",
+    "typescript@5",
+    "@nestjs/testing@11",
+    "jest@30",
+    "ts-jest@29",
+    "supertest@7",
+    "@types/jest@30",
+    "@types/supertest@6",
+    "@types/node@22"
+  ],
+  "pkgsNote": "`@nestjs/platform-express` is on the list not because Express was chosen but because it is **Nest's default HTTP adapter** — the pack body uses none of Express's API (`app.use`, `Router`). The logger adds no dependency: Nest 11's `ConsoleLogger({ json: true })` emits structured JSON (verified by running it)",
+  "runtime": {
+    "postgresql": "16",
+    "node": "22.13+ or 24.11+"
+  },
+  "runtimeNote": "These are server and runtime requirements, not npm dependencies. The Node floor is not a guess but the value `typeorm@1.1.0` declares in `engines`: `^20.19.0 || ^22.13.0 || >=24.11.0` — on a version in between (24.7, say) npm emits an EBADENGINE warning. PostgreSQL is assumed to be 16 or newer, and the measurements ran on 18.4 (`gen_random_uuid()` has been in the core without pgcrypto since 13)",
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+  "resources": [
+    {
+      "file": "project-structure.md",
+      "nav": "Module boundaries and DI direction · bootstrap (main.ts) · global pipe registration order · feature module assembly · circular dependencies and barrels"
+    },
+    {
+      "file": "data-modeling.md",
+      "nav": "Entity definition · time column precision · TaskView and the select constant · assembling DataSource options · writing and running migrations · no synchronize"
+    },
+    {
+      "file": "data-access.md",
+      "nav": "Repository only through DI · ownership in the where · an array where is an OR · affected row count · cursor pagination · the gap between select and the type · transaction boundaries"
+    },
+    {
+      "file": "input-validation.md",
+      "nav": "DTO classes and class-validator · global ValidationPipe options · query string conversion (@Type) · PartialType partial updates · environment validation and boot-time failure"
+    },
+    {
+      "file": "error-handling.md",
+      "nav": "Domain error → status code table · detecting QueryFailedError driver codes (23505, 23503) · ValidationError → field errors · no existence leaks · the boundary with HttpException"
+    },
+    {
+      "file": "testing.md",
+      "nav": "Jest + ts-jest setup · Test.createTestingModule and injecting doubles · per-worker schema isolation · supertest e2e · seeding and cleanup · block proof"
+    },
+    {
+      "file": "operations.md",
+      "nav": "Shutdown drain (readiness → grace → close → force) · the trap where keep-alive blocks close · health checks · connection pool sizing · JSON logging · slow query observability · migration deploy order"
+    }
+  ],
+  "seamSlots": [
+    "api-endpoints",
+    "auth-boundaries",
+    "complete-example"
+  ],
+  "seamSlotNotes": {
+    "api-endpoints": "Controller shape + request/response envelope + error envelope emission (exception filter). The envelope is a function of the wire contract, so the combination decides it, not the axis. **In Nest a controller is the routing declaration**, so the seam owns the decorator paths too",
+    "auth-boundaries": "The guard (`AuthGuard`) and principal injection (`CurrentUser`) · how the token is verified (self-issued JWT · session · external IdP) · roles and scopes · login and logout flows. **The auth method is not a function of the axis** — whether the frontend axis has a server runtime decides between a session cookie and a bearer token",
+    "complete-example": "Migration → entity → DTO → service → controller → e2e test, end to end"
+  },
+  "clusters": [
+    {
+      "id": "C1",
+      "pilot": true,
+      "files": [
+        "input-validation.md",
+        "error-handling.md"
+      ],
+      "why": "The DTO class is both the validation schema and the source of errors. `ValidationError[]` → field error envelope and driver code 23505 → 409 come out of one table. It is the pilot because it is where the shape of the required `AppError` gets entangled most"
+    },
+    {
+      "id": "C2",
+      "files": [
+        "data-modeling.md",
+        "data-access.md",
+        "project-structure.md"
+      ],
+      "why": "An entity is a table, and `TypeOrmModule.forRootAsync` (root module) and `forFeature` (feature module) are two ends of one decision. Let `TaskView`'s column list and the `select` constant diverge and compilation passes while only the runtime comes up empty — two files sharing one decision"
+    },
+    {
+      "id": "C3",
+      "files": [
+        "testing.md",
+        "operations.md"
+      ],
+      "why": "They share the process and connection lifetime (boot, shutdown, pool, health check). Per-worker schema isolation and connection pool sizing handle the same resource, and the moment the shutdown hook fires is observed in the tests through `app.close()`"
+    }
+  ],
+  "knownGaps": [
+    {
+      "what": "There is no request correlation id",
+      "where": "resources/operations.md §5 (JSON logging)",
+      "detail": "`ConsoleLogger({ json: true })` emits structured output but **knows nothing about request scope** — there is no field tying one request's logs together. What was confirmed by measurement is only the output shape; carrying a request id via `AsyncLocalStorage` was not verified in this pack. Rather than assert a shape, it was left empty — 'an empty slot beats wrong content'. It gets filled once a later pack or seam measures it"
+    },
+    {
+      "what": "The output of automatic migration generation (`migration:generate`) was not verified",
+      "where": "resources/data-modeling.md §5 (migrations)",
+      "detail": "This pack carries only the **hand-written** migration shape and confirmed it by running it (`migration:run` created the tables on a real PostgreSQL 18.4). `migration:generate` has the tool produce the diff between entities and the DB, but what SQL that yields from this pack's entities was never run — particularly the diff for a time column declaring `precision: 3`. What was not verified is not asserted as a shape"
+    },
+    {
+      "what": "Migration contention across multiple instances was not measured",
+      "where": "resources/operations.md §7 (migration deploy order)",
+      "detail": "The basis for the guidance 'do not turn on `migrationsRun` at boot' is that TypeORM wraps migrations in a transaction, plus general principle — not an observation from bringing two instances up at once. The guidance stands, but the reach of its evidence is recorded here"
+    },
+    {
+      "what": "On TypeScript 7 this pack's tsconfig does not work as-is",
+      "where": "resources/project-structure.md §5 (tsconfig.json)",
+      "detail": "The pack nails down `typescript@5` and confirmed a clean type check on it (pack-smoke --online). **Running it again on TypeScript 7.0.2, `moduleResolution: \"node\"` was removed as TS5108** — `node10` no longer exists. On TS7 you have to raise `module` and `moduleResolution` together to the `node16`/`nodenext` family, and that combination pulls in other constraints on TS5, so **one tsconfig cannot satisfy both majors at once**. Hence the verified side (TS5) ships and this fact is recorded here. `guide-freshness.sh` reports `typescript 5→7` as partial decay and that signal is **correct** — this one file is what has to change when it is raised"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "combo": "nextjs+supabase",
+  "frontendPack": "frontend/nextjs",
+  "backendPack": "backend/supabase",
+  "seamVersion": "3.12.0",
+  "verified": "2026-08-21",
+  "extractedFrom": "skills/nextjs-frontend-guide + skills/nextjs-backend-guide (v3.11.0)",
+  "prebuilt": true,
+
+  "contract": "contract.md",
+  "hubs": { "frontend": "frontend/HUB.md", "backend": "backend/HUB.md" },
+
+  "note": "A prebuilt seam carries the full hub text verbatim. The assembler does not compose the pack's PACK.md fragments; it copies this HUB.md — only then is the assembled result identical to the v3.11.0 prebuilt guide (apart from the unified domain vocabulary and the moved sections).",
+
+  "shape": "The seam is thick in this combination. 3 frontend files / 7 backend files — because the supabase pack is pattern-knowledge shaped, the seam absorbed every host-runtime concern (validation wiring · error envelope · middleware · edge · handler testing · client creation).",
+
+  "frontend": {
+    "resources": [
+      { "file": "data-fetching.md",    "nav": "Fetching data on the server · caching and revalidation · query-layer conventions" },
+      { "file": "auth-and-session.md", "nav": "Protected routes · middleware session refresh · reading the current user on the server" },
+      { "file": "complete-example.md", "nav": "One feature end to end, from list query to create (Server Action)" }
+    ],
+    "provides": ["ActionState", "AuthUser", "NewTaskForm", "Task", "TaskList", "TaskListOptimistic", "TaskPage", "TasksRealtime", "createClient", "createTask", "deleteTask", "getCurrentUser", "getProfile", "getTasks", "searchTasks", "toggleTask", "updateSession"]
+  },
+
+  "backend": {
+    "resources": [
+      { "file": "api-endpoints.md",          "nav": "Adding a Route Handler · request/response envelope · pagination contract" },
+      { "file": "auth-boundaries.md",        "nav": "The getUser boundary · division of labor between RLS and app checks · service role isolation" },
+      { "file": "validation-and-errors.md",  "nav": "Zod schema wiring · error envelope and helpers · env validation · error code table · logging" },
+      { "file": "server-client.md",          "nav": "Creating a per-request Supabase client (cookie binding)" },
+      { "file": "handler-testing.md",        "nav": "Testing at the Route Handler · Server Action layer" },
+      { "file": "edge-and-operations.md",    "nav": "Middleware and the Edge runtime · rate limiting · security headers · CORS · observability" },
+      { "file": "complete-example.md",       "nav": "Migration → RLS → query → handler → test, all the way through" }
+    ],
+    "provides": ["ActionResult", "CreateTaskInput", "createAdminClient", "createClient", "createTask", "createTaskSchema", "fail", "fromSupabaseError", "logger", "ok", "publicEnv", "queryResult", "safeInternalPath", "serverEnv", "signIn", "taskListQuerySchema", "updateProfileSchema", "updateSession", "updateTaskSchema", "uploadAvatar"]
+  },
+
+  "packRequiresSatisfied": {
+    "frontend/nextjs": ["getCurrentUser", "AuthUser", "getTasks", "TaskList", "ActionState"],
+    "backend/supabase": ["createClient", "fromSupabaseError", "Database"]
+  },
+
+  "crossAxisRequires": {
+    "frontend/nextjs": ["Database"]
+  },
+
+  "knownGaps": [
+    { "symbol": "Task", "detail": "Defined three times with identical fields in the pack's file-organization.md and the seam's data-fetching.md · complete-example.md. Inherited from v3.11.0" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "orangekit-marketing",
+  "version": "1.1.1",
+  "displayName": "OrangeKit Marketing Kit",
+  "description": "A product marketing content pipeline — AI prompt generation · scroll-driven site building · 3-mode SEO analysis · web asset generation",
+  "author": {
+    "name": "gyeong"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/hlii-ai/orangekit",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "marketing",
+    "seo",
+    "scroll-animation"
+  ],
+  "skills": "./skills/"
+}

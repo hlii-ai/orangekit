@@ -1,0 +1,53 @@
+{
+  "axis": "frontend",
+  "name": "react-vite",
+  "displayName": "React 18 + Vite 5 SPA",
+  "packVersion": "3.12.0",
+  "verified": "2026-08-22",
+  "extractedFrom": "skills/react-aws-frontend-guide (v3.11.0)",
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/tasks",
+    "note": "Every pack and seam uses the same example domain. The L0 contract passes this value to the seam and the gate's --pair checks it — this repairs the measured defect where the frontend called /tasks while the backend served /notes"
+  },
+
+  "fixesVariants": {
+    "router": "react-router",
+    "store": "zustand",
+    "query": "@tanstack/react-query"
+  },
+  "fixesVariantsNote": "The SPA axis picks the router·global state·server cache all by itself — all three are premises of the pack body. Do not assemble it for a project that chose TanStack Router·Redux·SWR",
+
+  "pkgs": [
+    "react@18", "vite@5", "typescript@5", "react-router@7",
+    "@tanstack/react-query@5", "zustand@5", "tailwindcss@3.4",
+    "react-error-boundary@6", "sonner@2", "msw@2", "vitest@3",
+    "clsx@2", "tailwind-merge@2", "eslint-plugin-import@2"
+  ],
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "component-patterns.md",   "nav": "Building components · extracting repeated UI into shared ones · who owns design tokens" },
+    { "file": "styling.md",              "nav": "Writing Tailwind classes · defining variants · forbidden patterns" },
+    { "file": "state-management.md",     "nav": "Deciding whether to add global state · writing a Zustand store · optimizing subscriptions" },
+    { "file": "routing.md",              "nav": "Adding a route · nested layouts · protected routes · route errors · the URL as state · deep links (history fallback)" },
+    { "file": "loading-error-states.md", "nav": "Loading skeletons · empty states · error boundaries · classifying errors" },
+    { "file": "types-and-testing.md",    "nav": "TypeScript config · narrowing API types · environment variable types · component/hook tests · HTTP mocking" }
+  ],
+
+  "seamSlots": ["data-fetching", "auth-and-session", "complete-example"],
+
+  "knownGaps": [
+    {
+      "symbol": "FullPageSpinner",
+      "where": "resources/routing.md",
+      "detail": "Consumed 3 times but never defined. It is a pre-existing defect that the original react-aws-frontend-guide also lacked, and this relocation merely exposed it. check_known_gaps in guide-gate.sh reports it as REVIEW",
+      "carriedFrom": "v3.11.0"
+    }
+  ]
+}

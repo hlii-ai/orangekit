@@ -1,0 +1,29 @@
+{
+  "axis": "backend",
+  "name": "gcp-serverless",
+  "displayName": "GCP serverless (Cloud Run / Functions)",
+  "description": "A serverless backend assembled on GCP — Cloud Run or Cloud Functions + Firestore + Identity Platform.",
+  "techStack": {
+    "backend": {
+      "backendType": "serverless",
+      "cloudProvider": "GCP",
+      "database": "Firestore",
+      "dataAccess": "Google Cloud client libraries",
+      "auth": "Identity Platform (Firebase Auth compatible)",
+      "language": "TypeScript",
+      "packageManager": "npm",
+      "commands": {
+        "build": "npm run build",
+        "test": "npm test",
+        "lint": "npm run lint"
+      },
+      "sourceDir": "src"
+    },
+    "additionalStack": ["Cloud Run", "Cloud Functions", "Firestore", "Identity Platform"]
+  },
+  "notes": {
+    "securityBoundary": "Two layers coexist — in front of server code it is IAM/Identity Platform token verification, and if there is a path where clients read Firestore directly, Security Rules are that boundary. The guide first settles which of the two paths is used (if both, the central topic is keeping the rules and the server checks from contradicting each other)",
+    "serverCodeLocation": "Cloud Run (containers, can stay resident) or Cloud Functions (per function) — their connection and cold-start characteristics differ, so the guide picks one as the default",
+    "dataModeling": "Firestore is a NoSQL document store, so the T1 card (relational) lies dormant. Switching to Cloud SQL returns you to the relational path"
+  }
+}

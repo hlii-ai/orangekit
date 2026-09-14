@@ -1,0 +1,68 @@
+{
+  "axis": "backend",
+  "name": "firebase",
+  "displayName": "Firebase (BaaS · Firestore + Auth + Cloud Functions 2nd gen)",
+  "packVersion": "3.14.0",
+  "verified": "2026-08-24",
+  "extractedFrom": "Newly written — no demonstrated original. No other pack was even opened as a format reference (assets/pack-resource-template.md only)",
+
+  "backendType": "baas",
+  "registry": "npm",
+  "dataLayerPolicyEngine": true,
+  "policyEngineNote": "Firestore Security Rules are the row-level (document-level) policy engine — but **what they block is direct access from the client SDK, and nothing else.** The `firebase-admin` that Cloud Functions uses **bypasses the rules entirely** (administrator credentials). So defense in depth does hold on this axis, but **the two boundaries block different code paths**: the rules block the browser, the application checks block the functions. Use only one of them and write 'there is a policy engine, so we are safe' and the function path is left wide open — a value that must be passed on when generating the seam",
+
+  "symbolSurface": true,
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task",
+    "note": "Every pack and seam uses the same example domain. From this value L0 issues the vocabulary policy (`vocab-task`) so the gate blocks divergence"
+  },
+
+  "fixesVariants": { "database": "firestore", "runtime": "cloud-functions-v2" },
+  "fixesVariantsNote": "The document model (collections, subcollections, composite indexes) and the function shape (2nd gen `onCall`/`onRequest`, `defineSecret`/`defineString` parameters) are the premise of the entire pack body. For a project that chooses the Realtime Database the query model is not a variant of Firestore but a different system, and 1st gen functions have a different configuration, region and concurrency model",
+
+  "pkgs": [
+    "firebase-admin@14", "firebase-functions@7", "firebase@12",
+    "firebase-tools@15", "zod@4", "typescript@7", "vitest@4",
+    "@types/node@26", "@firebase/rules-unit-testing@5"
+  ],
+  "pkgsNote": "**Pinned to today's latest majors** — so the pack is not born already carrying decay. `typescript@7` is the first use of that major in this repository, so the authoring agent **has to prove it actually passes** through the `pack-smoke.sh --online` type check (running it, not declaring it). `@firebase/rules-unit-testing` is the only path to unit-testing the rules against the emulator, and because **it requires the client SDK (`firebase`)** that is pinned alongside it — without it the rules tests become TS2307 (measured in the pilot). `firebase-functions-test` was **left out deliberately**: 3.5.0's peer is `firebase-admin@^8…^13`, which collides with admin 14 as ERESOLVE and fails the whole toolchain install of `pack-smoke --online` (measured in the pilot). Function tests use the emulator plus direct handler calls",
+
+  "runtime": { "nodejs": "22", "firestore-emulator": "required (tests and rules verification)" },
+  "runtimeNote": "The function runtime and the emulator are not npm dependencies. `firebase-tools` downloads and starts the emulator, but the emulator's own version is recorded here",
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "data-modeling.md",     "nav": "Collection design · owner field · subcollection vs top level · composite indexes and firestore.indexes.json · the price of denormalization · document size and write limits" },
+    { "file": "security-rules.md",    "nav": "Rules syntax and ownership · field validation · **the rules do not block the admin SDK** · rules unit tests (emulator) · the coupling between rules and queries" },
+    { "file": "data-access.md",       "nav": "admin Firestore client · ownership queries · transactions and retries · batch limits · startAfter pagination · server timestamps" },
+    { "file": "functions-patterns.md","nav": "2nd gen onCall and onRequest · auth context · global initialization and cold start · region, concurrency and minimum instances · retry semantics" },
+    { "file": "input-validation.md",  "nav": "Zod schemas · validating onCall data · defineString/defineSecret parameters · boot-time failure · rejecting unknown fields" },
+    { "file": "testing-and-deploy.md","nav": "Emulator suite · rules unit tests · function tests · index deploy order · irreversible changes" }
+  ],
+
+  "seamSlots": ["api-endpoints", "auth-boundaries", "complete-example"],
+
+  "seamSlotNotes": {
+    "api-endpoints": "The function exposure shape (onCall vs onRequest) + request/response envelope + error envelope. The envelope is a function of the wire contract, so the combination decides it, not the axis. **In a combination where the frontend reads Firestore directly through the SDK, the endpoints themselves shrink** — that call is the seam's share",
+    "auth-boundaries": "The path a Firebase Auth token takes into the function context · custom claims · roles · **the decision whether to allow direct client access**. That decision changes which of the rules and the functions is the primary boundary",
+    "complete-example": "Rules → indexes → document write → query → function → test, end to end"
+  },
+
+  "clusters": [
+    { "id": "C1", "pilot": true, "files": ["data-modeling.md", "security-rules.md"],
+      "why": "The rules **reference the document's field names directly.** Let the document shape wobble and the rules are wrong wholesale; conversely the invariants the rules demand push back on the document design. It is the pilot because it is where the contract is heaviest" },
+    { "id": "C2", "files": ["data-access.md", "functions-patterns.md"],
+      "why": "Ownership of the admin client (global initialization) and the function cold start are one decision. It is also where transaction retries and function retry semantics overlap" },
+    { "id": "C3", "files": ["input-validation.md", "testing-and-deploy.md"],
+      "why": "The boot-time failure of a parameter (`defineSecret`) and starting the emulator use the same configuration surface. Proving the schema validation is the test" }
+  ],
+
+  "knownGaps": []
+}

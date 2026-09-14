@@ -1,0 +1,9 @@
+{
+  "name": "base",
+  "description": "Defaults applied to every combination. Axis presets (frontend/*, backend/*) are merged on top of this.",
+  "domains": {
+    "sourceDir": "src",
+    "sharedPackage": "",
+    "importAlias": ""
+  }
+}

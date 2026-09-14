@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ORANGEKIT Harness Guide</title>
+<meta name="description" content="The ORANGEKIT Devkit harness explained in pictures — a work map for people who use it, and an admin map for people who maintain it.">
+<meta property="og:title" content="ORANGEKIT Harness Guide">
+<meta property="og:description" content="A work map for people who use it, and an admin map for people who maintain it.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🪢</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    color-scheme:light dark;
+    --ground:#E8EBEA; --surface:#F7F9F8; --sunk:#DDE2E1;
+    --ink:#14191A; --soft:#4C5A58; --faint:#7B8886;
+    --line:#C4CCCA; --line-hard:#9EAAA8;
+    --anod:#0B7B85; --anod-soft:#D2E6E7;
+    --webbing:#B87E05; --webbing-soft:#F6E7BE;
+    --display:"Archivo Black","IBM Plex Sans",sans-serif;
+    --body:"IBM Plex Sans",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1413; --surface:#171E1D; --sunk:#1F2827;
+      --ink:#E7EEEC; --soft:#A0B0AD; --faint:#7A8886;
+      --line:#2B3634; --line-hard:#43524F;
+      --anod:#3FC8D2; --anod-soft:#12363A;
+      --webbing:#F0BE45; --webbing-soft:#3A2E10;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .strap{background:var(--webbing);color:#1A1405;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:9px 24px;display:flex;gap:18px;flex-wrap:wrap;border-bottom:3px solid var(--ink)}
+  .strap span:last-child{margin-left:auto;opacity:.72}
+  .strap a{color:inherit;text-decoration:none;border-bottom:1.5px solid currentColor;padding-bottom:1px}
+  .strap a:hover{opacity:.7}
+  .strap a:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+  .wrap{max-width:900px;margin:0 auto;padding:0 24px 80px}
+  header{padding:72px 0 44px;border-bottom:2px solid var(--ink)}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--anod);margin:0 0 20px;font-weight:600}
+  h1{font-family:var(--display);font-weight:400;font-size:clamp(38px,7vw,68px);line-height:1.06;margin:0 0 18px;letter-spacing:-.01em}
+  .lede{font-size:clamp(17px,2.2vw,20px);color:var(--soft);max-width:50ch;margin:0}
+  .lede strong{color:var(--ink);font-weight:600}
+
+  .pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px;background:var(--line);margin:44px 0 0}
+  .card{background:var(--surface);padding:34px 30px 30px;text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:12px;transition:background .15s}
+  .card:hover{background:var(--anod-soft)}
+  .card:focus-visible{outline:3px solid var(--anod);outline-offset:-3px}
+  .card .who{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--anod)}
+  .card h2{font-family:var(--display);font-weight:400;font-size:clamp(28px,4.4vw,40px);line-height:1.1;margin:0}
+  .card p{margin:0;font-size:14.5px;color:var(--soft)}
+  .card ul{margin:8px 0 0;padding-left:18px;font-size:13.5px;color:var(--soft);line-height:1.75}
+  .card .go{margin-top:auto;padding-top:16px;font-size:14px;font-weight:600;color:var(--anod)}
+
+  .after{margin:56px 0 0;padding-top:36px;border-top:1px solid var(--line)}
+  .after h3{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 16px;font-weight:600}
+  .after p{margin:0 0 12px;font-size:14.5px;color:var(--soft);max-width:66ch}
+  .after a{color:var(--anod)}
+  code{font-family:var(--mono);font-size:13.5px;background:var(--sunk);padding:2px 6px}
+</style>
+</head>
+<body>
+
+<div class="strap"><span>ORANGEKIT Devkit</span><span>Illustrated guide</span><span>v1.0.0</span></div>
+
+<div class="wrap">
+  <header>
+    <p class="kicker">a harness is a safety line</p>
+    <h1>ORANGEKIT Harness<br>Guide</h1>
+    <p class="lede">A development harness for Claude Code. <strong>It picks the route, thickens the rope where the ground is dangerous, and catches you when you slip.</strong> Choose where you are standing.</p>
+  </header>
+
+  <div class="pick">
+    <a class="card" href="user.html">
+      <span class="who">You clip into this gear</span>
+      <h2>Harness Map</h2>
+      <p>What fires when, and why.</p>
+      <ul>
+        <li>Each task type walks a different length</li>
+        <li>Reversibility class — three rope gauges</li>
+        <li>Five gates on the session timeline</li>
+        <li>Pick a case and see its exact path</li>
+        <li>When you get blocked · anti-patterns</li>
+      </ul>
+      <span class="go">Open →</span>
+    </a>
+
+    <a class="card" href="ops.html">
+      <span class="who">You maintain this gear</span>
+      <h2>Admin Map</h2>
+      <p>What to know before you change it.</p>
+      <ul>
+        <li>Six kinds of part, and what each costs to load</li>
+        <li>12 runbooks — pick what you are touching</li>
+        <li>A blocking device has three states</li>
+        <li>Releasing is five steps, not four places</li>
+        <li>Eight invariants that never break</li>
+      </ul>
+      <span class="go">Open →</span>
+    </a>
+  </div>
+
+  <div class="after">
+    <h3>These pages are a picture summary</h3>
+    <p><strong>The judgement rules live in the repository files.</strong> Where these pages and the repository disagree, the repository is right — set that way so a copy never poses as the original.</p>
+    <p>The full prose documents: <code>docs/user-manual.md</code> · <code>docs/operations-manual.md</code> · <code>docs/harness-anatomy.md</code>.
+       The repository lives at <a href="https://github.com/hlii-ai/orangekit">github.com/hlii-ai/orangekit</a>.</p>
+  </div>
+</div>
+
+</body>
+</html>

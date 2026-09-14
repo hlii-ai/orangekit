@@ -1,0 +1,82 @@
+{
+  "axis": "backend",
+  "name": "node-api",
+  "displayName": "Node API server (Express 5 + Prisma + PostgreSQL)",
+  "packVersion": "3.13.0",
+  "verified": "2026-08-23",
+  "extractedFrom": "Newly created — no empirical source. No other pack was opened, not even as a format reference (only assets/pack-resource-template.md was used)",
+
+  "backendType": "cloud-server",
+  "dataLayerPolicyEngine": false,
+  "policyEngineNote": "There is no row-level policy engine. The application connects to the DB over a trusted connection, so **a missing ownership filter is a data leak outright**. Carrying the BaaS axis's (supabase) 'RLS is the backup, so the application check is defense in depth' narrative over to this axis produces exactly the opposite instruction — a value that must be passed on when generating the seam",
+
+  "symbolSurface": true,
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task",
+    "note": "Every pack and seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from these values and the gate blocks any divergence — measured, the frontend used /tasks while the backend used /notes and the complete examples could not run against each other"
+  },
+
+  "fixesVariants": { "framework": "express", "orm": "prisma" },
+  "fixesVariantsNote": "The handler shape (Express 5 routers and error middleware) and the query shape (Prisma Client + migrate) are the premise of the entire pack body. For a project that picked NestJS, DI, decorators, and modules are a different system rather than a variant of Express, so a separate axis pack (node-nest) is needed. For a project that picked Drizzle, backend/aws-container owns that shape",
+
+  "pkgs": [
+    "express@5", "@prisma/client@6", "prisma@6", "zod@4", "typescript@5",
+    "pino@9", "pino-http@10", "vitest@2", "supertest@7", "tsx@4",
+    "@types/express@5", "@types/node@22"
+  ],
+
+  "runtime": { "postgresql": "16" },
+  "runtimeNote": "This is a server runtime version, not an npm dependency. Put it in pkgs and `npm i` fetches the wrong package — `postgres` is Porsager's driver and has no version 16 (measured by C2)",
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "project-structure.md", "nav": "layer boundaries (routes → services → db) · Express 5 app assembly · router mounting · 404/error middleware order · async handlers" },
+    { "file": "data-access.md",       "nav": "Prisma Client singleton · ownership filter · checking the affected row count · transactions · pagination · N+1 and select · running migrations" },
+    { "file": "input-validation.md",  "nav": "writing Zod schemas · request parsing helpers · doubling up with DB constraints · environment variable schema · boot-time failure" },
+    { "file": "error-handling.md",    "nav": "domain error → status code mapping · detecting Prisma error codes (P2002·P2025) · normalizing ZodError · no existence leaks" },
+    { "file": "testing.md",           "nav": "Vitest setup · supertest router tests · integration tests against a real DB · test DB isolation · seeding and cleanup" },
+    { "file": "operations.md",        "nav": "graceful shutdown · health checks (live/ready) · connection pool sizing · structured logging · migration deploy order · observing slow queries" }
+  ],
+
+  "seamSlots": ["api-endpoints", "auth-boundaries", "complete-example"],
+
+  "seamSlotNotes": {
+    "api-endpoints": "Router shape + request/response envelope + emitting the error envelope. The envelope is a function of the wire contract, so the combination decides it, not the axis",
+    "auth-boundaries": "how the token is verified (self-issued JWT · session · external IdP) · requireAuth wiring · roles/scopes · login and logout flow. **The authentication method is not a function of the axis** — whether the frontend axis has a server runtime is what decides between a session cookie and a bearer token",
+    "complete-example": "a pass through migration → schema → query → service → router → test"
+  },
+
+  "clusters": [
+    { "id": "C1", "pilot": true, "files": ["input-validation.md", "error-handling.md"],
+      "why": "EnvSchema and the request schemas are a function of the error code table and vice versa. ZodError → the field-error envelope and Prisma P2002 → 409 come out of one table. It is the pilot because it is where the `AppError` shape from requires is most entangled" },
+    { "id": "C2", "files": ["data-access.md", "project-structure.md"],
+      "why": "Ownership of the prisma singleton and the wiring in makeApp are the same decision. The layering discipline 'the data layer knows nothing about HTTP' also spans both files" },
+    { "id": "C3", "files": ["testing.md", "operations.md"],
+      "why": "They share the process lifetime (boot · shutdown · pool · health checks). Test DB isolation and connection pool sizing handle the same resource" }
+  ],
+
+  "knownGaps": [
+    {
+      "what": "the type check does not pass — there is no generated Prisma client",
+      "where": "resources/data-access.md (every fence that imports `@prisma/client`)",
+      "detail": "`pack-smoke.sh --pack --online` reports **FAIL 1**: `Module '@prisma/client' has no exported member 'Task'`·`'TaskStatus'`·`Namespace 'Prisma' has no exported member 'TaskSelect'` (TS2305·TS2694). These names are **what `prisma generate` produces from the schema**, so they do not exist from an install alone with no schema — the pack's code is not wrong; the verification environment does not run code generation. **`--regress` does not run pack-smoke, so this failure had been invisible until now** (first observed on 2026-08-24). There are two possible repairs: have pack-smoke restore the schema fence from the prisma pack and run `prisma generate`, or declare this pack's type check explicitly unchecked. The former adds a check, so we decide when this class becomes a problem in a second pack"
+    },
+    {
+      "what": "observing slow queries",
+      "where": "resources/operations.md (promised by the nav in pack.json)",
+      "detail": "Without a real Prisma we could not state the shape of `$on('query')` or the `log` option with confidence, so it was left empty. We followed 'an empty slot beats wrong content' (reported by C3). The nav wording is left as something to fill in later"
+    },
+    {
+      "what": "the example domain has no relation",
+      "where": "resources/data-access.md §5 (N+1 and select)",
+      "detail": "N+1 cannot be shown with the single `Task` model, so the `Comment` relation was introduced as an example (the measurement used that schema too). **If the seam's complete-example uses only a Task with no relation, the §5 code floats free in the assembly** — a value to pass on when generating the seam (reported by C2)"
+    }
+  ]
+}

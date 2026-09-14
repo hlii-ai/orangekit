@@ -1,0 +1,9 @@
+{
+  "session_id": "orangekit-doctor-test",
+  "cwd": ".",
+  "tool_name": "Bash",
+  "hook_event_name": "PreToolUse",
+  "tool_input": {
+    "command": "gh pr create --title \"chore: drop table legacy\" --body \"removes the legacy table\""
+  }
+}

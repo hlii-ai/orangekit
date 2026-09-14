@@ -1,0 +1,1651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="The ORANGEKIT harness map — a work-flow graph generated from the graph file, a phase-ladder path explorer, three plugins and two roots, and how guide axes assemble.">
+<meta property="og:title" content="ORANGEKIT Harness Map">
+<meta property="og:description" content="The ORANGEKIT harness map — a work-flow graph generated from the graph file, a phase-ladder path explorer, three plugins and two roots, and how guide axes assemble.">
+<meta property="og:type" content="article">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>">
+<style>:root{color-scheme:light dark}body{margin:0;padding:0}img{max-width:100%}</style>
+<title>ORANGEKIT Harness Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --ground:#E8EBEA; --surface:#F7F9F8; --sunk:#DDE2E1;
+    --ink:#14191A; --soft:#4C5A58; --faint:#7B8886;
+    --line:#C4CCCA; --line-hard:#9EAAA8;
+    /* one hue per asset kind — same colour always means same kind */
+    --skill:#0B7B85;  --skill-soft:#D2E6E7;
+    --rule:#2F4BA8;   --rule-soft:#DCE2F5;
+    --hook:#A8461B;   --hook-soft:#F6E0D5;
+    --agent:#6E3596;  --agent-soft:#EADCF3;
+    --store:#5A6472;  --store-soft:#DFE3E6;
+    --webbing:#B87E05; --webbing-soft:#F6E7BE;
+    --alert:#A81F23;  --alert-soft:#F3D8D8;
+    --display:"Archivo Black","IBM Plex Sans",sans-serif;
+    --body:"IBM Plex Sans",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1413; --surface:#171E1D; --sunk:#1F2827;
+      --ink:#E7EEEC; --soft:#A0B0AD; --faint:#7A8886;
+      --line:#2B3634; --line-hard:#43524F;
+      --skill:#3FC8D2; --skill-soft:#12363A;
+      --rule:#8CA2F0;  --rule-soft:#1A2140;
+      --hook:#E8975E;  --hook-soft:#3A2115;
+      --agent:#C08BE0; --agent-soft:#2C1B38;
+      --store:#9BA6B3; --store-soft:#232A2E;
+      --webbing:#F0BE45; --webbing-soft:#3A2E10;
+      --alert:#EF6A6D; --alert-soft:#3A1B1C;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1413; --surface:#171E1D; --sunk:#1F2827;
+    --ink:#E7EEEC; --soft:#A0B0AD; --faint:#7A8886;
+    --line:#2B3634; --line-hard:#43524F;
+    --skill:#3FC8D2; --skill-soft:#12363A;
+    --rule:#8CA2F0;  --rule-soft:#1A2140;
+    --hook:#E8975E;  --hook-soft:#3A2115;
+    --agent:#C08BE0; --agent-soft:#2C1B38;
+    --store:#9BA6B3; --store-soft:#232A2E;
+    --webbing:#F0BE45; --webbing-soft:#3A2E10;
+    --alert:#EF6A6D; --alert-soft:#3A1B1C;
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.72;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px 96px}
+
+  .strap{background:var(--webbing);color:#1A1405;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;padding:9px 24px;display:flex;gap:18px;flex-wrap:wrap;border-bottom:3px solid var(--ink)}
+  .strap span:last-child{margin-left:auto;opacity:.72}
+  .strap a{color:inherit;text-decoration:none;border-bottom:1.5px solid currentColor;padding-bottom:1px}
+  .strap a:hover{opacity:.7}
+  .strap a:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+
+  header{padding:58px 0 34px;border-bottom:2px solid var(--ink)}
+  h1{font-family:var(--display);font-weight:400;font-size:clamp(36px,6.6vw,66px);line-height:1.05;margin:0 0 18px;text-wrap:balance;letter-spacing:-.01em}
+  .lede{font-size:clamp(16.5px,2.1vw,20px);color:var(--soft);max-width:60ch;margin:0}
+  .lede strong{color:var(--ink);font-weight:600}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--skill);margin:0 0 20px;font-weight:600}
+
+  .legend{display:flex;flex-wrap:wrap;gap:0 20px;margin:24px 0 0;font-family:var(--mono);font-size:12px;color:var(--soft)}
+  .legend b{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+  .legend i{width:11px;height:11px;display:inline-block}
+
+  nav.toc{display:flex;flex-wrap:wrap;gap:2px;background:var(--line);margin:26px 0 0}
+  nav.toc a{background:var(--surface);padding:11px 14px;font-size:13px;text-decoration:none;color:var(--soft);flex:1 1 auto;text-align:center}
+  nav.toc a:hover{background:var(--skill-soft);color:var(--ink)}
+  nav.toc a:focus-visible{outline:2px solid var(--skill);outline-offset:-2px}
+
+  section{padding:56px 0;border-bottom:1px solid var(--line);scroll-margin-top:12px}
+  section:last-of-type{border-bottom:0}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+  h2{font-family:var(--display);font-weight:400;font-size:clamp(25px,4vw,38px);line-height:1.14;margin:0 0 16px;text-wrap:balance}
+  h3{font-size:17px;font-weight:700;margin:36px 0 10px}
+  .say{font-size:clamp(15.5px,1.9vw,17.5px);color:var(--soft);max-width:70ch;margin:0}
+  .say strong{color:var(--ink);font-weight:600}
+  .m{font-family:var(--mono)}
+
+  figure{margin:30px 0 0}
+  figure svg{display:block;width:100%;max-width:100%;height:auto}
+  .scroller{overflow-x:auto}
+  figcaption{margin-top:14px;font-size:14px;color:var(--soft);max-width:74ch;border-left:3px solid var(--skill);padding-left:14px}
+
+  .tbl-wrap{overflow-x:auto;margin-top:22px}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11.5px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600;border-bottom:2px solid var(--line-hard)}
+  tr.grouphead td{background:var(--sunk);font-weight:700;font-size:13px;padding-top:14px}
+  tr.grouphead .cnt{font-family:var(--mono);color:var(--skill);font-weight:600}
+  tr.grouphead .why{font-weight:400;color:var(--soft);font-size:12.5px}
+  .nowrap{white-space:nowrap}
+  .paths{font-family:var(--mono);font-size:12px;color:var(--soft);line-height:1.65}
+
+  .pill{display:inline-block;font-family:var(--mono);font-size:12.5px;font-weight:600;padding:2px 8px;border:1.5px solid currentColor;white-space:nowrap}
+  .p-skill{color:var(--skill)} .p-rule{color:var(--rule)} .p-hook{color:var(--hook)} .p-agent{color:var(--agent)}
+  .badge{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.06em;padding:2px 6px;border:1.5px solid currentColor}
+  .b-auto{color:var(--skill)} .b-cmd{color:var(--webbing)} .b-always{color:var(--alert)}
+
+  .matrix td{font-family:var(--mono);font-size:12.5px}
+  .matrix td.who{font-family:var(--body);font-size:14px;font-weight:600}
+  .matrix td small{display:block;font-family:var(--body);font-size:11.5px;color:var(--soft);margin-top:3px;font-weight:400}
+  .matrix th small{display:block;font-family:var(--body);font-size:11px;text-transform:none;letter-spacing:0;color:var(--faint);font-weight:400;margin-top:2px}
+  .c-rev{background:var(--skill-soft)} .c-cos{background:var(--webbing-soft)} .c-irr{background:var(--alert-soft)}
+
+  .cases{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:2px;margin-top:26px;background:var(--line)}
+  .case{background:var(--surface);padding:24px 24px 22px}
+  .case h4{margin:0 0 4px;font-size:16px;font-weight:700}
+  .case .path{font-family:var(--mono);font-size:12px;color:var(--soft);margin:0 0 14px}
+  .case ol{margin:0;padding-left:20px;font-size:13.5px;color:var(--soft);line-height:1.8}
+  .case ol b{color:var(--ink)}
+  .case .verdict{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13px;font-weight:600}
+
+  .stack{display:grid;gap:2px;margin-top:28px;background:var(--line)}
+  .row{background:var(--surface);display:grid;grid-template-columns:130px 1fr;gap:20px;padding:17px 22px;align-items:start}
+  .row .tag{font-family:var(--mono);font-size:12.5px;font-weight:600}
+  .row p{margin:0;font-size:14px;color:var(--soft)}
+  .row b{color:var(--ink)}
+  @media (max-width:640px){.row{grid-template-columns:1fr;gap:6px}}
+
+  .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2px;margin-top:22px;background:var(--line)}
+  .blocks > div{background:var(--surface);padding:18px 20px}
+  .blocks h4{margin:0 0 11px;font-size:13.5px;font-weight:700}
+  .blocks ul{margin:0;padding-left:16px;font-size:13px;color:var(--soft);line-height:1.85}
+  .blocks .m{font-size:12px}
+
+  .pull{margin:30px 0 0;padding:22px 26px;background:var(--alert-soft);border-left:5px solid var(--alert);font-size:clamp(16.5px,2.2vw,20px);font-weight:600;line-height:1.5}
+  .note{margin:22px 0 0;padding:16px 22px;background:var(--sunk);font-size:14px;color:var(--soft)}
+  .note b{color:var(--ink)}
+
+  .filterbar{margin:24px 0 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .filterbar input{flex:1 1 320px;font-family:var(--body);font-size:15px;padding:11px 14px;background:var(--surface);color:var(--ink);border:2px solid var(--line-hard);outline:none}
+  .filterbar input:focus{border-color:var(--skill)}
+  .filterbar .count{font-family:var(--mono);font-size:12.5px;color:var(--faint)}
+
+  footer{padding:44px 0 0;border-top:2px solid var(--ink);margin-top:20px}
+  footer p{margin:0 0 10px;font-size:14px;color:var(--soft)}
+  footer code{font-family:var(--mono);font-size:13px;background:var(--sunk);padding:2px 6px}
+
+
+
+  /* ── work-flow graph ── */
+  :root{
+    --g-band:rgba(0,0,0,.03); --g-surface:var(--surface); --g-stagebg:var(--sunk);
+    --g-line:var(--line); --g-edge:var(--line-hard); --g-inst:var(--skill);
+    --g-ink:var(--ink); --g-soft:var(--soft); --g-faint:var(--faint);
+    --g-stage:var(--ink); --g-skill:var(--skill); --g-rule:var(--rule);
+    --g-hook:var(--hook); --g-hookbg:var(--hook-soft); --g-block:var(--alert);
+    --g-agent:var(--agent); --g-store:var(--store); --g-tool:var(--ink);
+    --g-term:var(--webbing); --g-termbg:var(--webbing-soft);
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){ --g-band:rgba(255,255,255,.025) } }
+  :root[data-theme="dark"]{ --g-band:rgba(255,255,255,.025) }
+  .graph svg text.gn{font-family:var(--mono);font-size:14px;font-weight:600}
+  .graph svg text.gk{font-family:var(--body);font-size:11.5px}
+  .graph svg text.gb{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em}
+  .graph svg text.gg{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em}
+  .shapekey{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:2px;margin-top:20px;background:var(--line)}
+  .shapekey > div{background:var(--surface);padding:12px 14px;display:flex;gap:10px;align-items:center;font-size:12.5px}
+  .shapekey svg{width:46px;height:22px;flex:0 0 auto}
+  .shapekey b{font-family:var(--mono);font-size:11.5px;font-weight:600}
+  .shapekey span{color:var(--soft);font-size:11.5px}
+
+  /* ── phase ladder — vertical, no arrows ── */
+  .ladder{margin:0 0 22px;background:var(--line);display:grid;gap:1px}
+  .lrow{background:var(--surface);display:grid;grid-template-columns:52px 88px 132px 1fr;gap:14px;padding:9px 14px;align-items:baseline;font-size:13.5px}
+  .lrow .lp{font-family:var(--mono);font-size:13px;font-weight:600}
+  .lrow .ln{font-weight:600}
+  .lrow .la{font-family:var(--mono);font-size:11.5px;color:var(--soft)}
+  .lrow .ld{color:var(--soft);font-size:13px}
+  .lrow.on{background:var(--surface)}
+  .lrow.on .lp{color:var(--ink)}
+  .lrow.hot{background:var(--ink)}
+  .lrow.hot .lp,.lrow.hot .ln{color:var(--surface)}
+  .lrow.hot .la,.lrow.hot .ld{color:var(--surface);opacity:.78}
+  .lrow.irr{background:var(--alert-soft)}
+  .lrow.irr .lp,.lrow.irr .ln{color:var(--alert)}
+  .lrow.off{background:var(--sunk)}
+  .lrow.off .lp,.lrow.off .ln{color:var(--faint)}
+  .lrow.off .la{display:none}
+  .lrow.off .ld{color:var(--faint);font-size:12.5px;grid-column:3 / -1}
+  .lgate{background:var(--webbing-soft);padding:9px 14px;font-size:12.5px;color:var(--ink);border-left:4px solid var(--webbing)}
+  .lgate b{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--webbing);margin-right:8px}
+  @media (max-width:720px){.lrow{grid-template-columns:44px 1fr}.lrow .la,.lrow .ld{grid-column:1 / -1}}
+
+  /* ── per-type usage dot matrix ── */
+  .use{font-family:var(--mono);font-size:13px;text-align:center;padding:10px 4px !important;white-space:nowrap}
+  .use.y{color:var(--ink);font-weight:600}
+  .use.c{color:var(--webbing)}
+  .use.n{color:var(--faint);opacity:.45}
+  th.usehead{text-align:center;padding:10px 4px !important;font-size:10.5px;letter-spacing:.06em}
+  tr.gate td{background:var(--webbing-soft);font-size:12.5px;color:var(--ink);padding:10px 13px}
+  tr.gate b{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--webbing);margin-right:8px}
+  .matrix td{color:var(--soft)}
+  .matrix td.who{color:var(--ink)}
+
+  /* ── path explorer ── */
+  .explorer{margin-top:28px;background:var(--line);display:grid;gap:2px}
+  .ctrls{background:var(--surface);padding:22px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:24px}
+  .ctrls fieldset{border:0;margin:0;padding:0}
+  .ctrls legend{font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-bottom:9px;padding:0}
+  .ctrls label{display:block;font-size:14px;padding:5px 0;cursor:pointer;color:var(--soft)}
+  .ctrls label:hover{color:var(--ink)}
+  .ctrls input{margin-right:8px;accent-color:var(--skill)}
+  .ctrls input:checked + span{color:var(--ink);font-weight:600}
+  .ctrls label small{display:block;margin-left:24px;font-size:11.5px;color:var(--faint)}
+  .res{background:var(--surface);padding:24px}
+  .res .verdict{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 20px;padding-bottom:18px;border-bottom:2px solid var(--line)}
+  .res .cls{font-family:var(--mono);font-size:12.5px;font-weight:600;padding:4px 10px;border:2px solid currentColor}
+  .res .meta{font-size:13.5px;color:var(--soft)}
+  .res .meta b{color:var(--ink)}
+  .lane{display:grid;grid-template-columns:96px 1fr;gap:16px;padding:11px 0;border-top:1px solid var(--line);align-items:start}
+  .lane .lname{font-family:var(--mono);font-size:11.5px;color:var(--faint);padding-top:4px}
+  .lane .items{display:flex;flex-wrap:wrap;gap:7px}
+  .lane .none{font-size:13px;color:var(--faint);font-style:normal;padding-top:3px}
+  .chip{font-family:var(--mono);font-size:12px;font-weight:600;padding:3px 9px;border:1.5px solid currentColor;white-space:nowrap}
+  .chip.dash{border-style:dashed}
+  .chip em{font-style:normal;font-weight:400;opacity:.75}
+  .human{margin:20px 0 0;padding:15px 18px;background:var(--webbing-soft);border-left:4px solid var(--webbing);font-size:13.5px}
+  .human b{display:block;font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--webbing);margin-bottom:6px}
+  .human ol{margin:0;padding-left:19px}
+  .gates{margin:14px 0 0;padding:15px 18px;background:var(--sunk);font-size:13.5px}
+  .gates b{display:block;font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+  .gates ul{margin:0;padding-left:19px}
+
+  svg text{font-family:var(--body)}
+  svg .mm{font-family:var(--mono)}
+</style>
+
+<div class="strap"><span>ORANGEKIT Devkit</span><span>For users</span><a href="ops.html">For maintainers →</a><span>v1.0.0</span></div>
+
+<div class="wrap">
+
+<header>
+  <p class="kicker">27 skills · 9 rule cards · 5 hooks · 49 graph nodes</p>
+  <h1>ORANGEKIT<br>Harness Map</h1>
+  <p class="lede">Everything that fires between a request arriving and code shipping — <strong>where it fires, and why it is there.</strong> 27 skills · 9 rule cards · 5 hooks · 24 things that get blocked.</p>
+  <div class="legend">
+    <b><i style="background:var(--skill)"></i>skill</b>
+    <b><i style="background:var(--rule)"></i>rule card</b>
+    <b><i style="background:var(--hook)"></i>hook</b>
+    <b><i style="background:var(--agent)"></i>subagent</b>
+    <b><i style="background:var(--store)"></i>store</b>
+  </div>
+  <nav class="toc">
+    <a href="#canvas">One canvas</a>
+    <a href="#graph">Work-flow graph</a>
+    <a href="#ships">What ships</a>
+    <a href="#phases">Type picks phases</a>
+    <a href="#depth">Class sets depth</a>
+    <a href="#matrix">Every case</a>
+    <a href="#cases">Path explorer</a>
+    <a href="#agents">Two subagents</a>
+    <a href="#runtime">Runtime</a>
+    <a href="#skills">27 skills</a>
+    <a href="#guides">Guide axes</a>
+    <a href="#outputs">Outputs</a>
+  </nav>
+</header>
+
+<!-- ══════════ 1. canvas ══════════ -->
+<section id="canvas">
+  <p class="eyebrow">One canvas</p>
+  <h2>Four cadences</h2>
+  <p class="say">Grouped by <strong>how often each thing happens.</strong> You install once per project. Two strands of rules and six hook registrations load every session. Each task runs <strong>some subset</strong> of seven phases. And underneath, a loop keeps measuring whether any of this is actually alive.</p>
+
+  <figure class="scroller">
+    <svg viewBox="0 0 1180 910" role="img" aria-label="The whole harness in four bands ordered by cadence. Installing once writes rule cards and assembled guides into the project. Every session loads the operating contract and the routing card and wires five hook scripts. Each task runs some of seven phases, chosen by task type and deepened by reversibility class. Continuously, telemetry feeds doctor, doctor feeds the evaluation skill, and defects return to the work.">
+      <defs>
+        <marker id="ca" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--line-hard)"/>
+        </marker>
+      </defs>
+
+      <rect x="24" y="42" width="1132" height="170" rx="8" fill="var(--sunk)" stroke="var(--line)"/>
+      <rect x="48" y="34" width="270" height="16" fill="var(--ground)"/>
+      <text class="mm" x="56" y="46" font-size="10" letter-spacing="0.13em" fill="var(--faint)">ONCE PER PROJECT — INSTALL</text>
+      <g>
+        <rect x="48" y="82" width="212" height="94" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
+        <text x="64" y="112" font-size="15" font-weight="700" fill="currentColor">orangekit-product plugin</text>
+        <text class="mm" x="64" y="134" font-size="11" fill="var(--soft)">from the marketplace</text>
+        <text class="mm" x="64" y="151" font-size="11" fill="var(--soft)">or a local directory</text>
+
+        <rect x="304" y="82" width="196" height="94" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.5"/>
+        <text class="mm" x="320" y="112" font-size="14" font-weight="600" fill="var(--skill)">/orangekit-init</text>
+        <text class="mm" x="320" y="134" font-size="11" fill="var(--soft)">picks the stack through</text>
+        <text class="mm" x="320" y="151" font-size="11" fill="var(--soft)">structured questions</text>
+
+        <rect x="544" y="82" width="212" height="94" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
+        <text x="560" y="112" font-size="15" font-weight="700" fill="currentColor">assembles axes</text>
+        <text class="mm" x="560" y="134" font-size="11" fill="var(--soft)">4 frontend · 8 backend</text>
+        <text class="mm" x="560" y="151" font-size="11" fill="var(--soft)">32 combinations are never prebuilt</text>
+
+        <rect x="800" y="82" width="332" height="94" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
+        <text x="816" y="110" font-size="15" font-weight="700" fill="currentColor">what lands in your project</text>
+        <text class="mm" x="816" y="131" font-size="11" fill="var(--rule)">.claude/rules/ — 9 rule cards, as real files</text>
+        <text class="mm" x="816" y="148" font-size="11" fill="var(--skill)">frontend-guide · backend-guide skills</text>
+        <text class="mm" x="816" y="165" font-size="11" fill="var(--soft)">orangekit.config.json · the dev/ tree</text>
+      </g>
+      <g stroke="var(--line-hard)" stroke-width="1.6" marker-end="url(#ca)">
+        <line x1="264" y1="129" x2="298" y2="129"/>
+        <line x1="504" y1="129" x2="538" y2="129"/>
+        <line x1="760" y1="129" x2="794" y2="129"/>
+      </g>
+
+      <rect x="24" y="246" width="1132" height="150" rx="8" fill="var(--sunk)" stroke="var(--line)"/>
+      <rect x="48" y="238" width="320" height="16" fill="var(--ground)"/>
+      <text class="mm" x="56" y="250" font-size="10" letter-spacing="0.13em" fill="var(--faint)">EVERY SESSION — WHAT LOADS AND WIRES</text>
+      <g>
+        <rect x="48" y="278" width="330" height="98" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.8"/>
+        <text class="mm" x="64" y="302" font-size="11" font-weight="600" fill="var(--rule)">ALWAYS — PAID EVERY SESSION</text>
+        <text x="64" y="326" font-size="14" font-weight="700" fill="currentColor">T0 operating contract, 42-line budget</text>
+        <text x="64" y="348" font-size="14" font-weight="700" fill="currentColor">+ the workflow-routing card</text>
+        <text class="mm" x="64" y="367" font-size="10.5" fill="var(--soft)">needed before any file is opened, so it cannot be conditional</text>
+
+        <rect x="394" y="278" width="290" height="98" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text class="mm" x="410" y="302" font-size="11" font-weight="600" fill="var(--rule)">CONDITIONAL — ON A PATH MATCH</text>
+        <text x="410" y="326" font-size="14" font-weight="700" fill="currentColor">8 rule cards</text>
+        <text class="mm" x="410" y="348" font-size="10.5" fill="var(--soft)">code-change · security · reversibility</text>
+        <text class="mm" x="410" y="364" font-size="10.5" fill="var(--soft)">data-modeling · ui-design · doc-dependency …</text>
+
+        <rect x="700" y="278" width="432" height="98" fill="var(--hook-soft)" stroke="var(--hook)" stroke-width="1.8"/>
+        <text class="mm" x="716" y="302" font-size="11" font-weight="600" fill="var(--hook)">THE ONLY LAYER THE MACHINE ENFORCES</text>
+        <text x="716" y="326" font-size="14" font-weight="700" fill="currentColor">5 hook scripts · 6 event registrations</text>
+        <text class="mm" x="716" y="348" font-size="10.5" fill="var(--soft)">they run whether or not the model remembers · they cost no tokens</text>
+        <text class="mm" x="716" y="364" font-size="10.5" fill="var(--alert)">two of them can refuse outright — security-check · build-gate</text>
+      </g>
+
+      <rect x="24" y="430" width="1132" height="196" rx="8" fill="var(--sunk)" stroke="var(--line)"/>
+      <rect x="48" y="422" width="290" height="16" fill="var(--ground)"/>
+      <text class="mm" x="56" y="434" font-size="10" letter-spacing="0.13em" fill="var(--faint)">PER TASK — WHAT YOU ACTUALLY RUN</text>
+      <g>
+        <rect x="48" y="470" width="140" height="50" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="118" y="492" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">P0</text>
+        <text x="118" y="509" font-size="10.5" fill="var(--soft)" text-anchor="middle">frame · 5 skills</text>
+        <rect x="204" y="470" width="140" height="50" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="274" y="492" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">P1</text>
+        <text x="274" y="509" font-size="10.5" fill="var(--soft)" text-anchor="middle">sharpen</text>
+        <rect x="360" y="470" width="140" height="50" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="430" y="492" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">P2</text>
+        <text x="430" y="509" font-size="10.5" fill="var(--soft)" text-anchor="middle">PRD</text>
+        <rect x="516" y="470" width="140" height="50" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="586" y="492" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">P3</text>
+        <text x="586" y="509" font-size="10.5" fill="var(--soft)" text-anchor="middle">dev docs</text>
+        <rect x="672" y="470" width="140" height="50" fill="var(--ink)"/>
+        <text class="mm" x="742" y="492" font-size="13" font-weight="600" fill="var(--surface)" text-anchor="middle">P4</text>
+        <text x="742" y="509" font-size="10.5" fill="var(--surface)" opacity="0.8" text-anchor="middle">build — always</text>
+        <rect x="828" y="470" width="140" height="50" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="898" y="492" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">P5</text>
+        <text x="898" y="509" font-size="10.5" fill="var(--soft)" text-anchor="middle">verify</text>
+        <rect x="984" y="470" width="148" height="50" fill="var(--alert-soft)" stroke="var(--alert)" stroke-width="1.5"/>
+        <text class="mm" x="1058" y="492" font-size="13" font-weight="600" fill="var(--alert)" text-anchor="middle">P6</text>
+        <text x="1058" y="509" font-size="10.5" fill="var(--soft)" text-anchor="middle">Irreversible only</text>
+      </g>
+      <g stroke="var(--line-hard)" stroke-width="1.4" marker-end="url(#ca)">
+        <line x1="190" y1="495" x2="199" y2="495"/><line x1="346" y1="495" x2="355" y2="495"/>
+        <line x1="502" y1="495" x2="511" y2="495"/><line x1="658" y1="495" x2="667" y2="495"/>
+        <line x1="814" y1="495" x2="823" y2="495"/><line x1="970" y1="495" x2="979" y2="495"/>
+      </g>
+      <rect x="48" y="546" width="536" height="58" fill="var(--surface)" stroke="var(--skill)" stroke-width="1.5"/>
+      <text class="mm" x="64" y="570" font-size="11" font-weight="600" fill="var(--skill)">WHICH ONES YOU RUN</text>
+      <text x="64" y="591" font-size="13.5" fill="currentColor"><tspan font-weight="700">Task type</tspan> selects them — a bug fix uses two of the seven</text>
+      <rect x="600" y="546" width="532" height="58" fill="var(--surface)" stroke="var(--alert)" stroke-width="1.5"/>
+      <text class="mm" x="616" y="570" font-size="11" font-weight="600" fill="var(--alert)">HOW DEEP THEY GO</text>
+      <text x="616" y="591" font-size="13.5" fill="currentColor"><tspan font-weight="700">Reversibility class</tspan> decides — it never adds phases at the front</text>
+
+      <rect x="24" y="660" width="1132" height="216" rx="8" fill="var(--sunk)" stroke="var(--line)"/>
+      <rect x="48" y="652" width="306" height="16" fill="var(--ground)"/>
+      <text class="mm" x="56" y="664" font-size="10" letter-spacing="0.13em" fill="var(--faint)">CONTINUOUS — HOW IT PROVES ITSELF</text>
+      <g>
+        <rect x="48" y="694" width="238" height="86" fill="var(--store-soft)" stroke="var(--store)" stroke-width="1.5"/>
+        <text x="64" y="720" font-size="14" font-weight="700" fill="currentColor">telemetry</text>
+        <text class="mm" x="64" y="741" font-size="10.5" fill="var(--soft)">track-skill hook · graph.log</text>
+        <text class="mm" x="64" y="758" font-size="10.5" fill="var(--soft)">who actually got called</text>
+
+        <rect x="330" y="694" width="238" height="86" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
+        <text class="mm" x="346" y="720" font-size="14" font-weight="600" fill="currentColor">doctor.sh</text>
+        <text class="mm" x="346" y="741" font-size="10.5" fill="var(--soft)">8 modes — facts only</text>
+        <text class="mm" x="346" y="758" font-size="10.5" fill="var(--soft)">checks hand-written numbers</text>
+
+        <rect x="612" y="694" width="238" height="86" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.5"/>
+        <text class="mm" x="628" y="720" font-size="13" font-weight="600" fill="var(--skill)">/harness-evaluation</text>
+        <text class="mm" x="628" y="741" font-size="10.5" fill="var(--soft)">8 axes · judgement only</text>
+        <text class="mm" x="628" y="758" font-size="10.5" fill="var(--soft)">facts come from doctor</text>
+
+        <rect x="894" y="694" width="238" height="86" fill="var(--store-soft)" stroke="var(--store)" stroke-width="1.5"/>
+        <text x="910" y="720" font-size="14" font-weight="700" fill="currentColor">defects · lessons</text>
+        <text class="mm" x="910" y="741" font-size="10.5" fill="var(--soft)">docs/lessons.md</text>
+        <text class="mm" x="910" y="758" font-size="10.5" fill="var(--soft)">3 in a category → promote an asset</text>
+      </g>
+      <g stroke="var(--line-hard)" stroke-width="1.6" marker-end="url(#ca)">
+        <line x1="290" y1="737" x2="324" y2="737"/>
+        <line x1="572" y1="737" x2="606" y2="737"/>
+        <line x1="854" y1="737" x2="888" y2="737"/>
+      </g>
+      <path d="M1013 780 V 826 Q1013 838 1001 838 H 179 Q167 838 167 826 V 786" fill="none" stroke="var(--line-hard)" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#ca)"/>
+      <rect x="474" y="830" width="232" height="16" fill="var(--sunk)"/>
+      <text class="mm" x="590" y="842" font-size="10" letter-spacing="0.08em" fill="var(--soft)" text-anchor="middle">defects return to the work</text>
+    </svg>
+    <figcaption>Every section below is one of these four bands in detail. <strong>Band ③ is what you meet every day</strong>; band ② sits quietly under it the whole time.</figcaption>
+  </figure>
+</section>
+
+<!-- ══════════ 1-a. graph ══════════ -->
+<section id="graph">
+  <p class="eyebrow">Work flow — 25 nodes · 46 edges (core paths)</p>
+  <h2>The harness is a declaration, and this is it</h2>
+  <p class="say">This picture is <strong>generated directly from</strong> <span class="m">workflow.graph.json</span> — no label, kind or edge was copied by hand. <strong>Shape encodes the kind of asset</strong>, and only the teal edges are <strong>emitted by code</strong> (the rest are model behaviour, which code cannot emit).</p>
+
+  <div class="shapekey">
+    <div><svg viewBox="0 0 46 22"><rect x="1" y="1" width="44" height="20" rx="6" fill="var(--sunk)" stroke="var(--ink)" stroke-width="2"/></svg><div><b>stage</b><br><span>model behaviour</span></div></div>
+    <div><svg viewBox="0 0 46 22"><rect x="1" y="1" width="44" height="20" rx="4" fill="var(--surface)" stroke="var(--line-hard)"/><rect x="6" y="5" width="2.5" height="12" fill="var(--skill)"/></svg><div><b>skill</b><br><span>loads only when invoked</span></div></div>
+    <div><svg viewBox="0 0 46 22"><path d="M1,1 h38 l6,10 l-6,10 h-38 z" fill="var(--surface)" stroke="var(--hook)" stroke-width="1.6"/></svg><div><b>hook</b><br><span>run by the machine</span></div></div>
+    <div><svg viewBox="0 0 46 22"><path d="M1,1 h38 l6,10 l-6,10 h-38 z" fill="var(--hook-soft)" stroke="var(--alert)" stroke-width="2.2"/></svg><div><b>blocking hook</b><br><span>can refuse outright</span></div></div>
+    <div><svg viewBox="0 0 46 22"><rect x="1" y="1" width="44" height="20" rx="6" fill="var(--surface)" stroke="var(--agent)" stroke-width="1.8"/></svg><div><b>subagent</b><br><span>separate context</span></div></div>
+    <div><svg viewBox="0 0 46 22"><rect x="1" y="1" width="44" height="20" rx="10" fill="var(--surface)" stroke="var(--store)" stroke-width="1.6"/></svg><div><b>store</b><br><span>written, then read back</span></div></div>
+    <div><svg viewBox="0 0 46 22"><path d="M8,1 h30 l7,10 l-7,10 h-30 l-7,-10 z" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.8"/></svg><div><b>tool</b><br><span>measures facts</span></div></div>
+    <div><svg viewBox="0 0 46 22"><rect x="1" y="1" width="44" height="20" rx="10" fill="var(--webbing-soft)" stroke="var(--webbing)" stroke-width="1.6"/></svg><div><b>terminal</b><br><span>ends at a human</span></div></div>
+  </div>
+
+  <figure class="scroller graph">
+<svg viewBox="0 0 1820 1150" role="img" aria-label="The core paths of workflow.graph.json. Work runs left to right and the column is the order. From session start through explore and plan, preparation outputs converge on build, then verify and cross-check. Four hooks hang from a bus below build; the two that block are drawn in the warning colour. Return edges never cross the body — they drop into a dedicated channel under the band and merge back into build. The lower band is the feedback loop, feeding from the lessons log on the right back to the human report on the left.">
+<defs>
+<marker id="ga" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-edge)"/></marker>
+<marker id="gas" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="var(--g-edge)"/></marker>
+<marker id="gi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-inst)"/></marker>
+<marker id="gis" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="var(--g-inst)"/></marker>
+<marker id="gb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-back)"/></marker>
+<marker id="gbs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="var(--g-back)"/></marker>
+</defs>
+<marker id="gbas" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="var(--g-block)"/></marker>
+<marker id="gba" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-block)"/></marker>
+<marker id="gha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--g-hook)"/></marker>
+<rect x="40" y="88" width="1740" height="596" rx="10" fill="var(--g-band)" stroke="var(--g-line)" stroke-width="1"/>
+<text class="gb" x="58" y="112" fill="var(--g-faint)">WORK FLOW — left to right</text>
+<rect x="40" y="736" width="1740" height="372" rx="10" fill="var(--g-band)" stroke="var(--g-line)" stroke-width="1"/>
+<text class="gb" x="58" y="760" fill="var(--g-faint)">FEEDBACK LOOP — feeds back right to left</text>
+<line x1="40" y1="72" x2="1780" y2="72" stroke="var(--g-line)" stroke-width="1"/>
+<text class="gr" x="160" y="62" text-anchor="middle" fill="var(--g-faint)">Enter</text>
+<line x1="160" y1="66" x2="160" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="410" y="62" text-anchor="middle" fill="var(--g-faint)">Explore · Plan</text>
+<line x1="410" y1="66" x2="410" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="660" y="62" text-anchor="middle" fill="var(--g-faint)">Prep output</text>
+<line x1="660" y1="66" x2="660" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="910" y="62" text-anchor="middle" fill="var(--g-faint)">Build</text>
+<line x1="910" y1="66" x2="910" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="1160" y="62" text-anchor="middle" fill="var(--g-faint)">Verify</text>
+<line x1="1160" y1="66" x2="1160" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="1410" y="62" text-anchor="middle" fill="var(--g-faint)">Cross-check</text>
+<line x1="1410" y1="66" x2="1410" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="1660" y="62" text-anchor="middle" fill="var(--g-faint)">Take back</text>
+<line x1="1660" y1="66" x2="1660" y2="78" stroke="var(--g-line)" stroke-width="1.5"/>
+<text class="gr" x="48" y="62" fill="var(--g-faint)">order →</text>
+<rect x="546" y="296" width="228" height="96" rx="8" fill="none" stroke="var(--g-agent)" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.65"/>
+<text class="gg" x="550" y="290" fill="var(--g-faint)">subagent · separate context</text>
+<rect x="1296" y="92" width="228" height="96" rx="8" fill="none" stroke="var(--g-agent)" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.65"/>
+<text class="gg" x="1300" y="86" fill="var(--g-faint)">subagent · separate context</text>
+<rect x="1296" y="190" width="228" height="100" rx="8" fill="none" stroke="var(--g-agent)" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.65"/>
+<text class="gg" x="1300" y="184" fill="var(--g-faint)">Irreversible only</text>
+<path d="M260,260 H266 Q276,260 276,250 V158 Q276,148 286,148 H310" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M410,176 V210" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,148 H516 Q526,148 526,158 V228 Q526,238 536,238 H810" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,238 H516 Q526,238 526,248 V334 Q526,344 536,344 H560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M760,344 H766 Q776,344 776,334 V256 Q776,246 786,246 H810" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,238 H529 Q539,238 539,248 V252 Q539,262 549,262 H810" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1010,238 H1060" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,238 H1266 Q1276,238 1276,228 V150 Q1276,140 1286,140 H1310" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,238 H1310" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1560,812 H1260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1060,812 H510" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M310,812 H295 Q285,812 285,822 V918 Q285,928 275,928 H260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,238 H1266 Q1276,238 1276,248 V334 Q1276,344 1286,344 H1560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1510,238 H1516 Q1526,238 1526,248 V342 Q1526,352 1536,352 H1560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1160,840 V908" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,936 H1265 Q1274,936 1274,945 V1051 Q1274,1060 1265,1060 H283 Q274,1060 274,1051 V951 Q274,942 265,942 H260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1510,238 H1560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1660,266 V316" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1060,936 H760" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M560,936 H545 Q535,936 535,926 V822 Q535,812 525,812 H510" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M560,936 H510" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M310,936 H295 Q285,936 285,926 V938 Q285,928 275,928 H260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,238 H542 Q552,238 552,248 V514 Q552,524 562,524 H560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M760,524 H779 Q789,524 789,514 V288 Q789,278 799,278 H810" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1010,238 H1016 Q1026,238 1026,228 V150 Q1026,140 1036,140 H1060" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M510,238 H525 Q535,238 535,248 V424 Q535,434 545,434 H560" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)" marker-start="url(#gas)"/>
+<path d="M1510,140 H1515 Q1524,140 1524,149 V631 Q1524,640 1515,640 H805 Q796,640 796,631 V261 Q796,252 805,252 H810" fill="none" stroke="var(--g-back)" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#gb)"/>
+<path d="M1510,238 H1531 Q1540,238 1540,247 V631 Q1540,640 1531,640 H789 Q780,640 780,631 V261 Q780,252 789,252 H810" fill="none" stroke="var(--g-back)" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#gb)"/>
+<path d="M1760,344 H1765 Q1774,344 1774,353 V631 Q1774,640 1765,640 H773 Q764,640 764,631 V261 Q764,252 773,252 H810" fill="none" stroke="var(--g-back)" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#gb)"/>
+<path d="M760,936 H765 Q774,936 774,945 V1051 Q774,1060 783,1060 H1765 Q1774,1060 1774,1051 V835 Q1774,826 1765,826 H1760" fill="none" stroke="var(--g-back)" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#gb)"/>
+<path d="M260,260 H265 Q274,260 274,269 V663 Q274,672 283,672 H1265 Q1274,672 1274,663 V835 Q1274,826 1265,826 H1260" fill="none" stroke="var(--g-inst)" stroke-width="1.9" marker-end="url(#gi)"/>
+<path d="M260,260 H281 Q290,260 290,269 V677 Q290,686 299,686 H1281 Q1290,686 1290,677 V959 Q1290,950 1281,950 H1260" fill="none" stroke="var(--g-inst)" stroke-width="1.9" marker-end="url(#gi)"/>
+<path d="M1260,238 H1297 Q1306,238 1306,247 V705 Q1306,714 1315,714 H1765 Q1774,714 1774,705 V835 Q1774,826 1765,826 H1760" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1510,238 H1547 Q1556,238 1556,247 V677 Q1556,686 1565,686 H1781 Q1790,686 1790,677 V835 Q1790,826 1781,826 H1760" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M1260,140 H1265 Q1274,140 1274,149 V663 Q1274,672 1265,672 H283 Q274,672 274,663 V951 Q274,942 265,942 H260" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<path d="M160,232 V113 Q160,104 169,104 H901 Q910,104 910,113 V210" fill="none" stroke="var(--g-edge)" stroke-width="1.5" marker-end="url(#ga)"/>
+<text class="gg" x="535" y="96" text-anchor="middle" fill="var(--g-soft)">all four entry states met → prep phases are skipped</text>
+<rect x="802" y="310" width="276" height="302" rx="8" fill="none" stroke="var(--g-hook)" stroke-width="1.1" stroke-dasharray="5 5" opacity="0.55"/>
+<text class="gg" x="802" y="302" fill="var(--g-hook)">throughout the build · run by the machine</text>
+<path d="M910,266 V310" fill="none" stroke="var(--g-hook)" stroke-width="1.6"/>
+<path d="M910,310 H818 V582" fill="none" stroke="var(--g-hook)" stroke-width="1.6"/>
+<path d="M818,360 H846" fill="none" stroke="var(--g-block)" stroke-width="1.6" marker-end="url(#gba)" marker-start="url(#gbas)"/>
+<path d="M818,434 H846" fill="none" stroke="var(--g-block)" stroke-width="1.6" marker-end="url(#gba)" marker-start="url(#gbas)"/>
+<path d="M818,508 H846" fill="none" stroke="var(--g-hook)" stroke-width="1.6" marker-end="url(#gha)"/>
+<path d="M818,582 H846" fill="none" stroke="var(--g-hook)" stroke-width="1.6" marker-end="url(#gha)"/>
+<path d="M60,232 h184 l16,28 l-16,28 h-184 z" fill="var(--g-surface)" stroke="var(--g-hook)" stroke-width="1.6"/>
+<text class="gn" x="160" y="256" text-anchor="middle" fill="var(--g-hook)">session-start</text>
+<text class="gk" x="160" y="274" text-anchor="middle" fill="var(--g-soft)">session briefing</text>
+<rect x="310" y="120" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="410" y="144" text-anchor="middle" fill="var(--g-ink)">understand</text>
+<text class="gk" x="410" y="162" text-anchor="middle" fill="var(--g-soft)">explore</text>
+<rect x="310" y="210" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="410" y="234" text-anchor="middle" fill="var(--g-ink)">plan</text>
+<text class="gk" x="410" y="252" text-anchor="middle" fill="var(--g-soft)">plan</text>
+<rect x="560" y="316" width="200" height="56" rx="8" fill="var(--g-surface)" stroke="var(--g-agent)" stroke-width="1.8"/>
+<text class="gn" x="660" y="340" text-anchor="middle" fill="var(--g-agent)">orangekit-planner</text>
+<text class="gk" x="660" y="358" text-anchor="middle" fill="var(--g-soft)">delegated design</text>
+<rect x="560" y="406" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="569" y="417" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="660" y="430" text-anchor="middle" fill="var(--g-skill)">prd-generator</text>
+<text class="gk" x="660" y="448" text-anchor="middle" fill="var(--g-soft)">writes the PRD</text>
+<rect x="560" y="496" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="569" y="507" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="660" y="520" text-anchor="middle" fill="var(--g-skill)">dev-docs-generator</text>
+<text class="gk" x="660" y="538" text-anchor="middle" fill="var(--g-soft)">dev documents</text>
+<rect x="810" y="210" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="910" y="234" text-anchor="middle" fill="var(--g-ink)">build</text>
+<text class="gk" x="910" y="252" text-anchor="middle" fill="var(--g-soft)">implement</text>
+<rect x="1060" y="112" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="1069" y="123" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="1160" y="136" text-anchor="middle" fill="var(--g-skill)">completion-review</text>
+<text class="gk" x="1160" y="154" text-anchor="middle" fill="var(--g-soft)">closing docs</text>
+<rect x="1060" y="210" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="1160" y="234" text-anchor="middle" fill="var(--g-ink)">verify</text>
+<text class="gk" x="1160" y="252" text-anchor="middle" fill="var(--g-soft)">hand to review</text>
+<rect x="1310" y="112" width="200" height="56" rx="8" fill="var(--g-surface)" stroke="var(--g-agent)" stroke-width="1.8"/>
+<text class="gn" x="1410" y="136" text-anchor="middle" fill="var(--g-agent)">orangekit-reviewer</text>
+<text class="gk" x="1410" y="154" text-anchor="middle" fill="var(--g-soft)">independent review</text>
+<rect x="1310" y="210" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="1410" y="234" text-anchor="middle" fill="var(--g-ink)">cross-check</text>
+<text class="gk" x="1410" y="252" text-anchor="middle" fill="var(--g-soft)">reviewer's extra pass</text>
+<rect x="1560" y="210" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="1569" y="221" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="1660" y="234" text-anchor="middle" fill="var(--g-skill)">codex-claude-loop</text>
+<text class="gk" x="1660" y="252" text-anchor="middle" fill="var(--g-soft)">external model check</text>
+<rect x="1560" y="316" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="1569" y="327" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="1660" y="340" text-anchor="middle" fill="var(--g-skill)">receiving-code-review</text>
+<text class="gk" x="1660" y="358" text-anchor="middle" fill="var(--g-soft)">vets incoming feedback</text>
+<rect x="1560" y="784" width="200" height="56" rx="28" fill="var(--g-surface)" stroke="var(--g-store)" stroke-width="1.6"/>
+<text class="gn" x="1660" y="808" text-anchor="middle" fill="var(--g-store)">lessons</text>
+<text class="gk" x="1660" y="826" text-anchor="middle" fill="var(--g-soft)">lessons log</text>
+<path d="M1078,784 h164 l18,28 l-18,28 h-164 l-18,-28 z" fill="var(--g-surface)" stroke="var(--g-tool)" stroke-width="1.8"/>
+<text class="gn" x="1160" y="808" text-anchor="middle" fill="var(--g-tool)">doctor</text>
+<text class="gk" x="1160" y="826" text-anchor="middle" fill="var(--g-soft)">self-verification</text>
+<rect x="310" y="784" width="200" height="56" rx="10" fill="var(--g-stagebg)" stroke="var(--g-stage)" stroke-width="2"/>
+<text class="gn" x="410" y="808" text-anchor="middle" fill="var(--g-ink)">rule-promotion</text>
+<text class="gk" x="410" y="826" text-anchor="middle" fill="var(--g-soft)">asset promotion</text>
+<rect x="60" y="900" width="200" height="56" rx="28" fill="var(--g-termbg)" stroke="var(--g-term)" stroke-width="1.6"/>
+<text class="gn" x="160" y="924" text-anchor="middle" fill="var(--g-term)">user-report</text>
+<text class="gk" x="160" y="942" text-anchor="middle" fill="var(--g-soft)">report to a human</text>
+<rect x="1060" y="908" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="1069" y="919" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="1160" y="932" text-anchor="middle" fill="var(--g-skill)">harness-evaluation</text>
+<text class="gk" x="1160" y="950" text-anchor="middle" fill="var(--g-soft)">harness evaluation</text>
+<rect x="560" y="908" width="200" height="56" rx="28" fill="var(--g-surface)" stroke="var(--g-store)" stroke-width="1.6"/>
+<text class="gn" x="660" y="932" text-anchor="middle" fill="var(--g-store)">eval-report</text>
+<text class="gk" x="660" y="950" text-anchor="middle" fill="var(--g-soft)">evaluation report</text>
+<rect x="310" y="908" width="200" height="56" rx="6" fill="var(--g-surface)" stroke="var(--g-line)" stroke-width="1.4"/>
+<rect x="319" y="919" width="3" height="34" fill="var(--g-skill)"/>
+<text class="gn" x="410" y="932" text-anchor="middle" fill="var(--g-skill)">skill-enhancer</text>
+<text class="gk" x="410" y="950" text-anchor="middle" fill="var(--g-soft)">skill redesign</text>
+<path d="M846,332 h184 l16,28 l-16,28 h-184 z" fill="var(--g-hookbg)" stroke="var(--g-block)" stroke-width="2.2"/>
+<text class="gn" x="946" y="356" text-anchor="middle" fill="var(--g-block)">security-check</text>
+<text class="gk" x="946" y="374" text-anchor="middle" fill="var(--g-soft)">blocks secrets · destructive cmds</text>
+<path d="M846,406 h184 l16,28 l-16,28 h-184 z" fill="var(--g-hookbg)" stroke="var(--g-block)" stroke-width="2.2"/>
+<text class="gn" x="946" y="430" text-anchor="middle" fill="var(--g-block)">build-gate</text>
+<text class="gk" x="946" y="448" text-anchor="middle" fill="var(--g-soft)">verification gate</text>
+<path d="M846,480 h184 l16,28 l-16,28 h-184 z" fill="var(--g-surface)" stroke="var(--g-hook)" stroke-width="1.6"/>
+<text class="gn" x="946" y="504" text-anchor="middle" fill="var(--g-hook)">track-skill</text>
+<text class="gk" x="946" y="522" text-anchor="middle" fill="var(--g-soft)">records skill use</text>
+<path d="M846,554 h184 l16,28 l-16,28 h-184 z" fill="var(--g-surface)" stroke="var(--g-hook)" stroke-width="1.6"/>
+<text class="gn" x="946" y="578" text-anchor="middle" fill="var(--g-hook)">handoff</text>
+<text class="gk" x="946" y="596" text-anchor="middle" fill="var(--g-soft)">handoff note</text>
+<text class="gg" x="840" y="658" fill="var(--g-back)">← defects send the work back to build</text>
+<text class="gg" x="810" y="1078" fill="var(--g-back)">← evaluation results become lessons</text>
+</svg>
+    <figcaption><strong>Lines only turn at right angles, and vertical moves happen only in the empty lanes between columns</strong> — that is what makes direction readable. <strong>Return edges (dashed) never cross the body</strong>: they drop into a channel under the band and merge into one line. <strong>Build is the hub</strong> — every preparation phase converges there, and when verification finds a defect the work <b>comes back to it</b>.</figcaption>
+  </figure>
+
+  <div class="note"><b>Only 7 edges are instrumented</b> (out of 90). The teal ones are emitted by code; the rest are <b>model behaviour, which code cannot emit</b> — so they are excluded from the "dead edge" check. <b>We do not pretend to measure what cannot be measured.</b></div>
+</section>
+
+<!-- ══════════ 1-b. what ships ══════════ -->
+<section id="ships">
+  <p class="eyebrow">What installing leaves behind</p>
+  <h2>There is more than one plugin</h2>
+  <p class="say">This repository holds <strong>one marketplace with three plugins</strong>, and their <strong>versions are independent</strong>. Knowing that is what makes "bump the version in four places" make sense — it refers to the devkit alone.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:190px">Plugin</th><th style="width:90px">Version</th><th style="width:130px">source</th><th>Who installs it</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill p-skill">orangekit-product</span></td><td class="m">3.30.0</td><td class="m">./</td><td><b>People building a product.</b> Everything this page describes lives here — 26 skills · 9 cards · 5 hooks · guide packs.</td></tr>
+        <tr><td><span class="pill p-skill">orangekit-marketing</span></td><td class="m">1.1.0</td><td class="m">./marketing/</td><td>Only when you need marketing content. <b>It is versioned separately so it never spends the development session's description budget.</b></td></tr>
+        <tr><td><span class="pill p-skill">orangekit-harness</span></td><td class="m">1.1.0</td><td class="m">./harness/</td><td><b>Only people who build the harness.</b> <span class="m">harness-evaluation</span>, which scores the graph on 8 axes, lives here — useless to anyone who merely <em>uses</em> the devkit.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>There are two roots — this repo is not your project</h3>
+  <figure class="scroller">
+    <svg viewBox="0 0 1120 250" role="img" aria-label="How the plugin repository layout maps onto a consumer project. The repository's rules directory is copied by an installer into the project's .claude/rules, and the guide axis packs are assembled into guide skills under .claude/skills. Hooks and skills are never copied — they run from the plugin cache.">
+      <defs><marker id="rr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--line-hard)"/></marker></defs>
+      <text class="mm" x="20" y="24" font-size="11" font-weight="600" fill="var(--faint)">THIS REPOSITORY (the plugin)</text>
+      <text class="mm" x="700" y="24" font-size="11" font-weight="600" fill="var(--faint)">YOUR PROJECT (the consumer)</text>
+      <g>
+        <rect x="20" y="38" width="230" height="34" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.4"/>
+        <text class="mm" x="34" y="60" font-size="12" fill="var(--rule)">rules/ — 9 cards</text>
+        <rect x="20" y="84" width="230" height="34" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="34" y="106" font-size="12" fill="currentColor">guides/ — 12 axes · 3 seams</text>
+        <rect x="20" y="130" width="230" height="34" fill="var(--hook-soft)" stroke="var(--hook)" stroke-width="1.4"/>
+        <text class="mm" x="34" y="152" font-size="12" fill="var(--hook)">scripts/ + hooks/</text>
+        <rect x="20" y="176" width="230" height="34" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.4"/>
+        <text class="mm" x="34" y="198" font-size="12" fill="var(--skill)">skills/ — 26</text>
+      </g>
+      <g>
+        <rect x="700" y="38" width="400" height="34" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.4"/>
+        <text class="mm" x="714" y="60" font-size="12" fill="var(--rule)">.claude/rules/ — copied in as real files</text>
+        <rect x="700" y="84" width="400" height="34" fill="var(--surface)" stroke="var(--skill)" stroke-width="1.4"/>
+        <text class="mm" x="714" y="106" font-size="12" fill="var(--skill)">.claude/skills/frontend-guide · backend-guide</text>
+        <rect x="700" y="130" width="400" height="34" fill="none" stroke="var(--line-hard)" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text class="mm" x="714" y="152" font-size="12" fill="var(--faint)">never copied — runs from the cache</text>
+        <rect x="700" y="176" width="400" height="34" fill="none" stroke="var(--line-hard)" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text class="mm" x="714" y="198" font-size="12" fill="var(--faint)">never copied — loads from the cache</text>
+      </g>
+      <g stroke="var(--line-hard)" stroke-width="1.6" marker-end="url(#rr)">
+        <line x1="256" y1="55" x2="694" y2="55"/>
+        <line x1="256" y1="101" x2="694" y2="101"/>
+      </g>
+      <text class="mm" x="475" y="46" font-size="10.5" fill="var(--rule)" text-anchor="middle">install-rules.sh</text>
+      <text class="mm" x="475" y="92" font-size="10.5" fill="var(--skill)" text-anchor="middle">install-guide.sh — assembles the axes</text>
+      <text class="mm" x="256" y="152" font-size="10.5" fill="var(--faint)">✕</text>
+      <text class="mm" x="256" y="198" font-size="10.5" fill="var(--faint)">✕</text>
+      <text class="mm" x="20" y="236" font-size="10.5" fill="var(--soft)">A plugin manifest has no "rules" component type — which is why an installer has to move the cards in as files. That absence is why 697 lines of rules reached nobody for four months in v2.</text>
+    </svg>
+    <figcaption><strong>Only the cards and the guides are copied as files.</strong> Hooks and skills run out of the plugin cache and leave no trace in the project — which is why <span class="m">doctor</span> carries two roots (<span class="m">PLUGIN_ROOT</span> and <span class="m">PROJ</span>).</figcaption>
+  </figure>
+
+  <h3>A consumer ends up with more than 9 cards — ownership splits</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:240px">Card</th><th style="width:130px">Owner</th><th>Update rule</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill p-rule">workflow-routing</span> and <b>8 others</b></td><td><b>the harness</b></td><td><span class="m">install-rules.sh</span> compares version stamps — <b>same version, skip; older, update and leave a <span class="m">.bak</span>; edited by the user at the same version, leave it alone.</b></td></tr>
+        <tr><td><span class="pill p-rule">project-structure</span><br><span class="pill p-rule">code-conventions</span><br><span class="pill p-rule">task-workflow</span></td><td><b style="color:var(--webbing)">the project</b></td><td>Created by <span class="pill p-skill">/orangekit-init</span> and <span class="pill p-skill">/codebase-survey</span>, and <b>never updated by the harness</b> — they describe your repository, not ours.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The official way for a project to raise the floor</h3>
+  <p class="say">Drop <span class="m">.md</span> files into these three folders under <span class="m">.claude/resources/</span> and <strong>the skills read them automatically.</strong> If a folder is empty, that section is simply ignored.</p>
+  <div class="blocks">
+    <div><h4><span class="m">design-principles/</span></h4><ul><li>brand guides, design principles</li><li>read by <span class="pill p-skill">/ui-ux-design</span></li></ul></div>
+    <div><h4><span class="m">domain-knowledge/</span></h4><ul><li>domain UX patterns, industry rules</li><li>read by the design and planning skills</li></ul></div>
+    <div><h4><span class="m">coding-standards/</span></h4><ul><li>your project's own conventions</li><li>read during implementation</li></ul></div>
+  </div>
+  <div class="note"><b>This is the actual channel behind "the safety floor can only be raised."</b> Lowering what the harness sets requires an explicit request — but <b>making it stricter takes nothing more than putting a file in that folder.</b></div>
+</section>
+
+<!-- ══════════ 2. phases ══════════ -->
+<section id="phases">
+  <p class="eyebrow">First axis</p>
+  <h2>Task type selects the phases</h2>
+  <p class="say">Running all seven is rare. <strong>The numbers mark order, not obligation</strong> — no document is produced for a condition that is already satisfied.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:132px">Phase</th>
+          <th style="width:160px">Executed by</th>
+          <th>When it fires, and what that actor actually does</th>
+          <th class="usehead" colspan="6">Used by task type</th>
+        </tr>
+        <tr>
+          <th></th><th></th><th></th>
+          <th class="usehead">NEW</th><th class="usehead">PRD</th><th class="usehead">EDIT</th>
+          <th class="usehead">BUG</th><th class="usehead">REF</th><th class="usehead">DOC</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="gate"><td colspan="9"><b>shortcut</b>When all four entry states hold, <b style="color:var(--ink);font-family:var(--body);text-transform:none;letter-spacing:0">P0 through P3 are skipped entirely</b> — intent clear · context current · impact radius known · verification path exists. <b style="color:var(--ink);font-family:var(--body);text-transform:none;letter-spacing:0">Skipping is the default; running them is the exception.</b></td></tr>
+        <tr>
+          <td><span class="m" style="font-weight:600">P0</span> Frame<br><small style="color:var(--faint)">conditional</small></td>
+          <td>main session</td>
+          <td><b>When the idea, market or requirements are still empty.</b> Runs whichever of five exploration skills is needed — nothing is delegated.<br><span class="pill p-skill" style="font-size:11px">/brainstorming</span> <span class="pill p-skill" style="font-size:11px">/research</span> <span class="pill p-skill" style="font-size:11px">/service-planner</span> <span class="pill p-skill" style="font-size:11px">/business-planner</span> <span class="pill p-skill" style="font-size:11px">/council-review</span></td>
+          <td class="use y">●</td><td class="use n">—</td><td class="use n">—</td><td class="use n">—</td><td class="use n">—</td><td class="use n">—</td>
+        </tr>
+        <tr>
+          <td><span class="m" style="font-weight:600">P1</span> Sharpen<br><small style="color:var(--faint)">conditional</small></td>
+          <td>main session</td>
+          <td><b>When what to build is settled but the project context is missing.</b> Surveys structure, dependencies and existing conventions to make the request executable.<br><span class="pill p-skill" style="font-size:11px">/prompt-enhancer</span></td>
+          <td class="use c">◐</td><td class="use n">—</td><td class="use n">—</td><td class="use n">—</td><td class="use n">—</td><td class="use n">—</td>
+        </tr>
+        <tr>
+          <td><span class="m" style="font-weight:600">P2</span> Specify<br><small style="color:var(--faint)">conditional</small></td>
+          <td>main session</td>
+          <td><b>When no PRD in <span class="m">dev/docs/prd/</span> covers the feature.</b> Picks single or modular form by scale. After any edit, <span class="pill p-skill" style="font-size:11px">/prd-reviewer</span> is mandatory.<br><span class="pill p-skill" style="font-size:11px">/prd-generator</span></td>
+          <td class="use y">●</td><td class="use n">—</td><td class="use n">—</td><td class="use n">—</td><td class="use n">—</td><td class="use c">◐</td>
+        </tr>
+        <tr>
+          <td><span class="m" style="font-weight:600">P3</span> Plan<br><small style="color:var(--faint)">conditional</small></td>
+          <td>main session<br><span class="pill p-agent" style="font-size:11px">orangekit-planner</span></td>
+          <td><b>When the work will outlive the session.</b> Writes plan · context · tasks into <span class="m">dev/active/</span>. <b>If two or more entry states are unmet</b>, the planner subagent diagnoses the impact radius — <b>it has no Write tool, so producing documents is structurally impossible.</b><br><span class="pill p-skill" style="font-size:11px">/dev-docs-generator</span></td>
+          <td class="use y">●</td><td class="use y">●</td><td class="use n">—</td><td class="use n">—</td><td class="use y">●</td><td class="use n">—</td>
+        </tr>
+        <tr>
+          <td><span class="m" style="font-weight:600;color:var(--ink)">P4</span> <b>Build</b><br><small style="color:var(--alert)">always</small></td>
+          <td>main session</td>
+          <td><b>It always runs.</b> The path you edit summons the rule cards, and before every write or command <span class="pill p-hook" style="font-size:11px">security-check</span> screens 24 patterns. If there is a test runner and behaviour changes, the test comes first.<br><span class="pill p-skill" style="font-size:11px">/test-driven-development</span> <span class="pill p-skill" style="font-size:11px">/ui-ux-design</span> <span class="pill p-skill" style="font-size:11px">frontend · backend-guide</span></td>
+          <td class="use y">●</td><td class="use y">●</td><td class="use y">●</td><td class="use y">●</td><td class="use y">●</td><td class="use n">—</td>
+        </tr>
+        <tr>
+          <td><span class="m" style="font-weight:600">P5</span> Verify<br><small style="color:var(--faint)">class sets intensity</small></td>
+          <td>main session<br><span class="pill p-agent" style="font-size:11px">orangekit-reviewer</span></td>
+          <td><b>The reversibility class changes who executes it.</b> Reversible and the main session syncs the docs; <b>Costly or worse and the reviewer audits the real diff independently</b> — never substituted by self-review.<br><span class="pill p-skill" style="font-size:11px">/completion-review</span> <span class="pill p-skill" style="font-size:11px">/pr-prep</span></td>
+          <td class="use y">●</td><td class="use y">●</td><td class="use y">●</td><td class="use y">●</td><td class="use y">●</td><td class="use n">—</td>
+        </tr>
+        <tr>
+          <td><span class="m" style="font-weight:600;color:var(--alert)">P6</span> Cross-check<br><small style="color:var(--alert)">Irreversible only</small></td>
+          <td><span class="pill p-agent" style="font-size:11px">orangekit-reviewer ×3</span><br><span class="pill p-skill" style="font-size:11px">codex</span> <small style="color:var(--faint)">optional · consent required</small></td>
+          <td><b>Only when the change cannot be taken back.</b> Fans out across correctness, security and reversibility and decides by majority, with <b>user confirmation and a rollback procedure</b> attached. External-model verification <b>never runs without consent, because the source leaves the machine.</b></td>
+          <td class="use c">◐</td><td class="use c">◐</td><td class="use c">◐</td><td class="use c">◐</td><td class="use c">◐</td><td class="use n">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="say" style="margin-top:16px;font-size:14px">● always · <span style="color:var(--webbing)">◐</span> only when the condition holds · — never. <strong>P6's condition is the reversibility class</strong>; the other <span style="color:var(--webbing)">◐</span> marks are decided by the entry states.</p>
+
+  <h3>Before any of that — the four entry states</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:190px">State</th><th style="width:320px">What "satisfied" means</th><th>If it is not</th></tr></thead>
+      <tbody>
+        <tr><td><b>intent clear</b></td><td>what is being built, and why, fits in one sentence</td><td style="color:var(--webbing);font-weight:600">You get asked, regardless of how many others are unmet — this is the one Claude cannot fill in</td></tr>
+        <tr><td>context current</td><td>the code and docs you are citing are still valid</td><td>Claude reads them and fills it in</td></tr>
+        <tr><td>impact radius known</td><td>you know how far the change reaches</td><td>Claude explores and fills it in</td></tr>
+        <tr><td>verification path exists</td><td>there is a way to confirm it worked</td><td>Claude finds the test or build path</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>Two or more unmet</b> and the <span class="pill p-agent">orangekit-planner</span> subagent runs the diagnosis.</div>
+</section>
+
+<!-- ══════════ 3. depth ══════════ -->
+<section id="depth">
+  <p class="eyebrow">Second axis</p>
+  <h2>Reversibility class sets the depth</h2>
+  <p class="say"><strong>It is judged by path, never by size.</strong> A five-line migration is more dangerous than a four-hundred-line refactor.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:160px">Class</th><th style="width:330px">Paths that decide it</th><th>What it requires — and who does it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b style="color:var(--alert)">Irreversible</b><br><small style="color:var(--soft)">you cannot take it back</small></td>
+          <td class="paths">**/migrations/** · auth/RLS<br>payments · settlement · production data</td>
+          <td><span class="pill p-agent">orangekit-reviewer</span> <b>multi-lens fan-out</b> + user confirmation + a rollback procedure<br><span style="color:var(--soft)">a majority across correctness · security · reversibility</span></td>
+        </tr>
+        <tr>
+          <td><b style="color:var(--webbing)">Costly</b><br><small style="color:var(--soft)">undoing it costs other people</small></td>
+          <td class="paths">shared packages · public API · type contracts<br>**/api/** · **/actions.ts** · **/middleware.ts** · generated files</td>
+          <td><span class="pill p-agent">orangekit-reviewer</span> <b>mandatory</b> — never substituted by self-review<br><span style="color:var(--soft)">it audits the real diff, not the implementer's report</span></td>
+        </tr>
+        <tr>
+          <td><b style="color:var(--skill)">Reversible</b><br><small style="color:var(--soft)">the default</small></td>
+          <td class="paths">everything else — tests included</td>
+          <td>Proceed. Closing docs handled by <span class="pill p-skill">/completion-review</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>Why it works this way</b> — reversible mistakes are cheap and irreversible ones are expensive, so the verification budget is pushed onto the second kind. <b>Attach a review to every change and nobody reads any of them.</b></div>
+</section>
+
+<!-- ══════════ 4. matrix ══════════ -->
+<section id="matrix">
+  <p class="eyebrow">Where the two axes cross</p>
+  <h2>Every case, spelled out</h2>
+  <p class="say">Multiply the two axes and you get the literal sequence that runs. The thing to notice is <strong>what the class does <em>not</em> do</strong> — <strong>it never adds phases at the front.</strong> A one-line migration fix is still <span class="m">P4 → P5</span>; P5 simply gets much heavier and P6 appears behind it.</p>
+
+  <div class="tbl-wrap">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th style="width:200px">Task type</th>
+          <th class="c-rev" style="width:250px">Reversible<small>the default · tests included</small></th>
+          <th class="c-cos" style="width:250px">Costly<small>undoing it costs other people</small></th>
+          <th class="c-irr">Irreversible<small>you cannot take it back</small></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="who">New feature — no PRD<small>6 of 7 phases</small></td>
+          <td class="c-rev">P0 → P1 → P2 → P3 → P4 → P5<small>/completion-review</small></td>
+          <td class="c-cos">P0 → P1 → P2 → P3 → P4 → P5<small>orangekit-reviewer, mandatory</small></td>
+          <td class="c-irr">P0 → … → P5 → <b>P6</b><small>fan-out + confirm + rollback</small></td>
+        </tr>
+        <tr>
+          <td class="who">New feature — PRD exists<small>3 of 7 phases</small></td>
+          <td class="c-rev">P3 → P4 → P5<small>/completion-review</small></td>
+          <td class="c-cos">P3 → P4 → P5<small>orangekit-reviewer, mandatory</small></td>
+          <td class="c-irr">P3 → P4 → P5 → <b>P6</b><small>fan-out + confirm + rollback</small></td>
+        </tr>
+        <tr>
+          <td class="who">Extend or delete existing<small>2 of 7 phases</small></td>
+          <td class="c-rev">P4 → P5<small>/completion-review</small></td>
+          <td class="c-cos">P4 → P5<small>orangekit-reviewer, mandatory</small></td>
+          <td class="c-irr">P4 → P5 → <b>P6</b><small>fan-out + confirm + rollback</small></td>
+        </tr>
+        <tr>
+          <td class="who">Bug fix<small>2 of 7 phases</small></td>
+          <td class="c-rev">P4 → P5<small>/completion-review</small></td>
+          <td class="c-cos">P4 → P5<small>orangekit-reviewer, mandatory</small></td>
+          <td class="c-irr">P4 → P5 → <b>P6</b><small>one line on an auth guard lands here</small></td>
+        </tr>
+        <tr>
+          <td class="who">Refactor<small>3 of 7 phases</small></td>
+          <td class="c-rev">P3 → P4 → P5<small>400 lines still lands here</small></td>
+          <td class="c-cos">P3 → P4 → P5<small>orangekit-reviewer, mandatory</small></td>
+          <td class="c-irr">P3 → P4 → P5 → <b>P6</b><small>fan-out + confirm + rollback</small></td>
+        </tr>
+        <tr>
+          <td class="who">Docs · tooling · research<small>not applicable</small></td>
+          <td class="c-rev" colspan="3" style="font-family:var(--body);font-size:13.5px">No phase procedure applies. But editing <span class="m">dev/docs/prd/</span> still pulls in <span class="pill p-skill">/prd-reviewer</span> — the <span class="pill p-rule">doc-dependency</span> card triggers it.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note"><b>The floor under every cell</b> — whatever the class, <b>editing source and running the build or tests is one action</b>, and <span class="pill p-hook">build-gate</span> enforces it. And when a user corrects you, it is recorded in <span class="m">docs/lessons.md</span> immediately, <b>whatever the path.</b></div>
+</section>
+
+<!-- ══════════ 5. explorer ══════════ -->
+<section id="cases">
+  <p class="eyebrow">The permutations — 6 types × 5 paths × UI × tests</p>
+  <h2>Pick a case and its path appears</h2>
+  <p class="say">Choose the four below and you get <strong>everything that actually fires for that combination</strong>, lane by lane — which skills are called, which rule cards load, whether a subagent attaches, where a hook blocks. <strong>An empty lane is information too.</strong></p>
+
+  <div class="explorer" id="explorer">
+    <div class="ctrls">
+      <fieldset>
+        <legend>Task type</legend>
+        <label><input type="radio" name="etype" value="new-noprd"><span>New feature — no PRD</span></label>
+        <label><input type="radio" name="etype" value="new-prd"><span>New feature — PRD exists</span></label>
+        <label><input type="radio" name="etype" value="modify"><span>Extend or delete existing</span></label>
+        <label><input type="radio" name="etype" value="bug" checked><span>Bug fix</span></label>
+        <label><input type="radio" name="etype" value="refactor"><span>Refactor</span></label>
+        <label><input type="radio" name="etype" value="docs"><span>Docs · research</span></label>
+      </fieldset>
+      <fieldset>
+        <legend>What you touch</legend>
+        <label><input type="radio" name="epath" value="db"><span>migrations/ · DB schema</span></label>
+        <label><input type="radio" name="epath" value="auth" checked><span>auth · RLS</span></label>
+        <label><input type="radio" name="epath" value="pay"><span>payments · settlement · prod data</span></label>
+        <label><input type="radio" name="epath" value="costly"><span>api/ · actions.ts · shared packages</span></label>
+        <label><input type="radio" name="epath" value="plain"><span>anything else — components · utils · tests</span></label>
+      </fieldset>
+      <fieldset>
+        <legend>Does it touch the UI?</legend>
+        <label><input type="radio" name="eui" value="y"><span>Yes</span><small>components/ · page.tsx · css</small></label>
+        <label><input type="radio" name="eui" value="n" checked><span>No</span></label>
+      </fieldset>
+      <fieldset>
+        <legend>Is there a test runner?</legend>
+        <label><input type="radio" name="etest" value="y" checked><span>Yes</span><small>behaviour changes ⇒ test first</small></label>
+        <label><input type="radio" name="etest" value="n"><span>No</span></label>
+      </fieldset>
+    </div>
+    <div class="res" id="res"></div>
+  </div>
+
+  <div class="note"><b>Combinations worth trying</b> — ⓐ <b>Bug fix × auth</b> (the default): only two phases, yet the reviewer fans out into three. ⓑ <b>Refactor × anything else</b>: four hundred lines and the agent lane stays empty. ⓒ <b>Docs · research</b>: zero phases, and a card still makes a skill mandatory. ⓓ <b>New · no PRD × payments × UI yes</b>: every lane fills.</div>
+
+  <h3 style="margin-top:44px">The lane format at full size — when every lane fills</h3>
+  <p class="say" style="margin-bottom:0">Combination ⓓ above, drawn out. <b>The bottom row is the time axis</b>; the four rows above it are kinds of asset.</p>
+<figure class="scroller">
+    <svg viewBox="0 0 1400 350" role="img" aria-label="The whole flow for building a new payment screen. Framing produces the screen list and a multi-lens review, then the PRD and dev documents; the design phase runs the direction review and the canvas before implementation. Because the path is payments, the data-modeling card attaches as well, the class is judged Irreversible, and fan-out review plus user confirmation and a rollback are required.">
+      <defs><marker id="s3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--line-hard)"/></marker></defs>
+      <rect x="94" y="4" width="1288" height="196" fill="var(--sunk)" opacity=".35"/>
+      <line x1="1214" y1="4" x2="1214" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <line x1="1054" y1="4" x2="1054" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <line x1="894" y1="4" x2="894" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <line x1="734" y1="4" x2="734" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <line x1="574" y1="4" x2="574" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <line x1="414" y1="4" x2="414" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <line x1="254" y1="4" x2="254" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <rect x="94" y="4" width="1010" height="196" fill="var(--sunk)" opacity=".35"/>
+      <line x1="274" y1="4" x2="274" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <line x1="514" y1="4" x2="514" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <line x1="774" y1="4" x2="774" y2="248" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6" opacity=".8"/>
+      <g class="mm" font-size="11" fill="var(--faint)" text-anchor="end">
+        <text x="88" y="42">skills</text><text x="88" y="90">rules</text><text x="88" y="138">agents</text><text x="88" y="186">hooks</text>
+      </g>
+      <g stroke="var(--line)" stroke-width="1">
+        <line x1="96" y1="52" x2="1384" y2="52"/><line x1="96" y1="100" x2="1384" y2="100"/>
+        <line x1="96" y1="148" x2="1384" y2="148"/><line x1="96" y1="196" x2="1384" y2="196"/>
+      </g>
+      <!-- skills lane -->
+      <g>
+        <rect x="102" y="6" width="152" height="24" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.3"/><rect x="107" y="11" width="2.5" height="14" fill="var(--skill)"/>
+        <text class="mm" x="178" y="22" font-size="10" fill="var(--skill)" text-anchor="middle">/service-planner</text>
+        <rect x="102" y="32" width="152" height="24" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.3"/><rect x="107" y="37" width="2.5" height="14" fill="var(--skill)"/>
+        <text class="mm" x="178" y="48" font-size="10" fill="var(--skill)" text-anchor="middle">/council-review</text>
+        <rect x="262" y="18" width="152" height="28" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.3"/><rect x="267" y="23" width="2.5" height="18" fill="var(--skill)"/>
+        <text class="mm" x="338" y="37" font-size="10" fill="var(--skill)" text-anchor="middle">/prd-generator</text>
+        <rect x="422" y="18" width="152" height="28" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.3"/><rect x="427" y="23" width="2.5" height="18" fill="var(--skill)"/>
+        <text class="mm" x="498" y="37" font-size="10" fill="var(--skill)" text-anchor="middle">/dev-docs-generator</text>
+        <rect x="582" y="18" width="152" height="28" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.3"/><rect x="587" y="23" width="2.5" height="18" fill="var(--skill)"/>
+        <text class="mm" x="658" y="37" font-size="10" fill="var(--skill)" text-anchor="middle">/ui-ux-design</text>
+        <rect x="742" y="6" width="152" height="20" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.3"/><rect x="747" y="11" width="2.5" height="10" fill="var(--skill)"/>
+        <text class="mm" x="818" y="20" font-size="9.5" fill="var(--skill)" text-anchor="middle">/test-driven-dev</text>
+        <rect x="742" y="28" width="152" height="26" fill="var(--surface)" stroke="var(--skill)" stroke-width="1.3" stroke-dasharray="3 2"/>
+        <text class="mm" x="818" y="40" font-size="9" fill="var(--skill)" text-anchor="middle">frontend-guide</text>
+        <text class="mm" x="818" y="51" font-size="9" fill="var(--skill)" text-anchor="middle">backend-guide</text>
+        <rect x="1062" y="18" width="152" height="28" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.3"/><rect x="1067" y="23" width="2.5" height="18" fill="var(--skill)"/>
+        <text class="mm" x="1138" y="37" font-size="10" fill="var(--skill)" text-anchor="middle">/security-review</text>
+        <rect x="1222" y="18" width="152" height="28" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.3"/><rect x="1227" y="23" width="2.5" height="18" fill="var(--skill)"/>
+        <text class="mm" x="1298" y="37" font-size="10" fill="var(--skill)" text-anchor="middle">/pr-prep</text>
+      </g>
+      <!-- rules lane -->
+      <g>
+        <rect x="422" y="66" width="152" height="28" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.3"/><rect x="427" y="71" width="2.5" height="18" fill="var(--rule)"/>
+        <text class="mm" x="498" y="85" font-size="10" fill="var(--rule)" text-anchor="middle">doc-dependency</text>
+        <rect x="582" y="66" width="152" height="28" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.3"/><rect x="587" y="71" width="2.5" height="18" fill="var(--rule)"/>
+        <text class="mm" x="658" y="85" font-size="10" fill="var(--rule)" text-anchor="middle">ui-design</text>
+        <rect x="742" y="56" width="152" height="22" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.3"/><rect x="747" y="61" width="2.5" height="12" fill="var(--rule)"/>
+        <text class="mm" x="818" y="71" font-size="9.5" fill="var(--rule)" text-anchor="middle">code-change · security</text>
+        <rect x="742" y="80" width="152" height="22" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.3"/><rect x="747" y="85" width="2.5" height="12" fill="var(--rule)"/>
+        <text class="mm" x="818" y="95" font-size="9.5" fill="var(--rule)" text-anchor="middle">data-modeling</text>
+        <rect x="902" y="66" width="152" height="28" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.3"/><rect x="907" y="71" width="2.5" height="18" fill="var(--rule)"/>
+        <text class="mm" x="978" y="85" font-size="10" fill="var(--rule)" text-anchor="middle">reversibility</text>
+      </g>
+      <!-- agents lane -->
+      <g>
+        <rect x="102" y="114" width="152" height="28" fill="none" stroke="var(--agent)" stroke-width="1.3" stroke-dasharray="4 3"/>
+        <text class="mm" x="178" y="133" font-size="9.5" fill="var(--agent)" text-anchor="middle">orangekit-planner (conditional)</text>
+        <rect x="1062" y="114" width="152" height="28" fill="var(--agent-soft)" stroke="var(--agent)" stroke-width="1.8"/><rect x="1067" y="119" width="2.5" height="18" fill="var(--agent)"/>
+        <text class="mm" x="1138" y="133" font-size="10" fill="var(--agent)" text-anchor="middle">orangekit-reviewer ×3</text>
+      </g>
+      <!-- hooks lane -->
+      <g>
+        <rect x="102" y="162" width="152" height="28" fill="var(--hook-soft)" stroke="var(--hook)" stroke-width="1.8"/><rect x="107" y="167" width="2.5" height="18" fill="var(--hook)"/>
+        <text class="mm" x="178" y="181" font-size="10" fill="var(--hook)" text-anchor="middle">session-brief</text>
+        <rect x="742" y="162" width="152" height="28" fill="var(--hook-soft)" stroke="var(--hook)" stroke-width="1.8"/><rect x="747" y="167" width="2.5" height="18" fill="var(--hook)"/>
+        <text class="mm" x="818" y="181" font-size="10" fill="var(--hook)" text-anchor="middle">security-check</text>
+        <rect x="1222" y="162" width="152" height="28" fill="var(--hook-soft)" stroke="var(--hook)" stroke-width="1.8"/><rect x="1227" y="167" width="2.5" height="18" fill="var(--hook)"/>
+        <text class="mm" x="1298" y="181" font-size="10" fill="var(--hook)" text-anchor="middle">build-gate</text>
+      </g>
+      <!-- spine -->
+      <g>
+        <rect x="102" y="214" width="152" height="34" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="178" y="230" font-size="11" font-weight="600" fill="currentColor" text-anchor="middle">P0</text>
+        <text x="178" y="244" font-size="10" fill="var(--soft)" text-anchor="middle">frame</text>
+        <rect x="262" y="214" width="152" height="34" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="338" y="230" font-size="11" font-weight="600" fill="currentColor" text-anchor="middle">P2</text>
+        <text x="338" y="244" font-size="10" fill="var(--soft)" text-anchor="middle">PRD</text>
+        <rect x="422" y="214" width="152" height="34" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text class="mm" x="498" y="230" font-size="11" font-weight="600" fill="currentColor" text-anchor="middle">P3</text>
+        <text x="498" y="244" font-size="10" fill="var(--soft)" text-anchor="middle">dev docs</text>
+        <rect x="582" y="214" width="152" height="34" fill="var(--surface)" stroke="var(--skill)" stroke-width="1.5"/>
+        <text x="658" y="235" font-size="11" fill="currentColor" text-anchor="middle">design phase</text>
+        <rect x="742" y="214" width="152" height="34" fill="var(--ink)"/>
+        <text x="818" y="235" font-size="12" font-weight="700" fill="var(--surface)" text-anchor="middle">P4 build</text>
+        <rect x="902" y="214" width="152" height="34" fill="var(--alert-soft)" stroke="var(--alert)" stroke-width="1.5"/>
+        <text x="978" y="235" font-size="10.5" font-weight="600" fill="var(--alert)" text-anchor="middle">payments → Irreversible</text>
+        <rect x="1062" y="214" width="152" height="34" fill="var(--surface)" stroke="var(--alert)" stroke-width="1.5"/>
+        <text x="1138" y="235" font-size="11" fill="currentColor" text-anchor="middle">P5·P6 + confirm · rollback</text>
+        <rect x="1222" y="214" width="152" height="34" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text x="1298" y="235" font-size="11" fill="currentColor" text-anchor="middle">ship</text>
+      </g>
+      <g stroke="var(--line-hard)" stroke-width="1.3" marker-end="url(#s3)">
+        <line x1="256" y1="231" x2="258" y2="231"/><line x1="416" y1="231" x2="418" y2="231"/>
+        <line x1="576" y1="231" x2="578" y2="231"/><line x1="736" y1="231" x2="738" y2="231"/>
+        <line x1="896" y1="231" x2="898" y2="231"/><line x1="1056" y1="231" x2="1058" y2="231"/>
+        <line x1="1216" y1="231" x2="1218" y2="231"/>
+      </g>
+      <text class="mm" x="582" y="278" font-size="10.5" fill="var(--soft)">direction review → canvas draft → the user edits it → write-back and compare</text>
+      <text class="mm" x="102" y="302" font-size="10.5" fill="var(--soft)">P1 is skipped because the P0 output is already concrete — the numbers mark order, not obligation</text>
+      <text class="mm" x="102" y="326" font-size="10.5" fill="var(--alert)">a human acts in three places — settling intent · editing the canvas · approving the irreversible</text>
+    </svg>
+    <figcaption>The moment you edit the PRD, the <span class="pill p-rule">doc-dependency</span> card summons <span class="pill p-skill">/prd-reviewer</span>. Because the payment schema is involved, <span class="pill p-rule">data-modeling</span> attaches on top — <strong>cards are summoned by the path, not by the phase.</strong></figcaption>
+  </figure>
+
+  <h3 style="margin-top:44px">The emptiest case — editing only a PRD</h3>
+  <p class="say" style="margin-bottom:0">Documentation work — <b>no phase applies, and a rule card still summons a skill.</b></p>
+<figure class="scroller">
+    <svg viewBox="0 0 1120 250" role="img" aria-label="The flow for editing only a PRD. No phase procedure applies, yet the doc-dependency card loads and summons prd-reviewer. Because no source changed, build-gate never fires.">
+      <defs><marker id="s4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--line-hard)"/></marker></defs>
+      <g class="mm" font-size="11" fill="var(--faint)" text-anchor="end">
+        <text x="88" y="42">skills</text><text x="88" y="90">rules</text><text x="88" y="138">agents</text><text x="88" y="186">hooks</text>
+      </g>
+      <g stroke="var(--line)" stroke-width="1">
+        <line x1="96" y1="52" x2="1104" y2="52"/><line x1="96" y1="100" x2="1104" y2="100"/>
+        <line x1="96" y1="148" x2="1104" y2="148"/><line x1="96" y1="196" x2="1104" y2="196"/>
+      </g>
+      <rect x="522" y="18" width="240" height="28" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.4"/><rect x="527" y="23" width="2.5" height="18" fill="var(--skill)"/>
+      <text class="mm" x="642" y="37" font-size="11" fill="var(--skill)" text-anchor="middle">/prd-reviewer — mandatory</text>
+      <rect x="282" y="66" width="220" height="28" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.8"/><rect x="287" y="71" width="2.5" height="18" fill="var(--rule)"/>
+      <text class="mm" x="392" y="85" font-size="11" fill="var(--rule)" text-anchor="middle">doc-dependency</text>
+      <rect x="282" y="114" width="220" height="28" fill="none" stroke="var(--line-hard)" stroke-width="1.4" stroke-dasharray="5 4"/>
+      <text class="mm" x="392" y="133" font-size="10.5" fill="var(--faint)" text-anchor="middle">never attaches</text>
+      <rect x="782" y="162" width="300" height="28" fill="none" stroke="var(--line-hard)" stroke-width="1.4" stroke-dasharray="5 4"/>
+      <text class="mm" x="932" y="181" font-size="10.5" fill="var(--faint)" text-anchor="middle">build-gate will not fire — zero source changes</text>
+      <g>
+        <rect x="102" y="214" width="160" height="34" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text x="182" y="235" font-size="11.5" fill="currentColor" text-anchor="middle">no phases apply</text>
+        <rect x="282" y="214" width="220" height="34" fill="var(--ink)"/>
+        <text class="mm" x="392" y="235" font-size="11.5" font-weight="600" fill="var(--surface)" text-anchor="middle">editing dev/docs/prd/</text>
+        <rect x="522" y="214" width="240" height="34" fill="var(--surface)" stroke="var(--skill)" stroke-width="1.5"/>
+        <text x="642" y="235" font-size="11.5" fill="currentColor" text-anchor="middle">checking dependent documents</text>
+        <rect x="782" y="214" width="300" height="34" fill="var(--surface)" stroke="var(--line-hard)"/>
+        <text x="932" y="235" font-size="11.5" fill="currentColor" text-anchor="middle">done — no review, no build gate</text>
+      </g>
+      <g stroke="var(--line-hard)" stroke-width="1.4" marker-end="url(#s4)">
+        <line x1="264" y1="231" x2="278" y2="231"/><line x1="504" y1="231" x2="518" y2="231"/>
+        <line x1="764" y1="231" x2="778" y2="231"/>
+      </g>
+    </svg>
+    <figcaption><strong>The phase axis and the card axis are independent.</strong> A card fires even on work where no procedure runs at all, and that card makes a skill mandatory — because editing one document makes the documents depending on it drift silently.</figcaption>
+  </figure>
+
+  <h3 style="margin-top:44px">The four extremes side by side</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:250px">Combination</th><th style="width:100px">Phases</th><th style="width:140px">Rule cards</th><th style="width:170px">Subagents</th><th>Where a human acts</th></tr></thead>
+      <tbody>
+        <tr><td><b>One line on an auth guard</b><br><small style="color:var(--soft)">bug × Irreversible</small></td><td class="m">2</td><td class="m" style="color:var(--rule)">3</td><td class="m" style="color:var(--agent)">reviewer ×3</td><td><b>approving the irreversible</b></td></tr>
+        <tr><td><b>400-line refactor</b><br><small style="color:var(--soft)">refactor × Reversible</small></td><td class="m">3</td><td class="m" style="color:var(--rule)">3</td><td class="m" style="color:var(--faint)">none</td><td>nowhere</td></tr>
+        <tr><td><b>New payment screen</b><br><small style="color:var(--soft)">new × Irreversible</small></td><td class="m">6</td><td class="m" style="color:var(--rule)">5</td><td class="m" style="color:var(--agent)">planner + reviewer ×3</td><td><b>intent · canvas edit · approval</b></td></tr>
+        <tr><td><b>PRD edit</b><br><small style="color:var(--soft)">docs — no phases</small></td><td class="m">0</td><td class="m" style="color:var(--rule)">1</td><td class="m" style="color:var(--faint)">none</td><td>nowhere</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>Phase count and weight are not proportional.</b> The two-phase case is far heavier than the three-phase one, and the zero-phase case still makes a skill mandatory. <b>This is what "the two axes are orthogonal" looks like in practice.</b></div>
+</section>
+
+<!-- ══════════ 6. agents ══════════ -->
+<section id="agents">
+  <p class="eyebrow">P3, and P5 · P6</p>
+  <h2>What the two subagents do</h2>
+  <p class="say">They are not skills — they are <strong>separate sessions</strong>. They spend none of the main conversation's context, and <strong>the tools they hold are the limit of what they can do.</strong></p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:180px">Agent</th><th style="width:200px">Tools it holds</th><th>What it does, and why only those tools</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="pill p-agent">orangekit-planner</span></td>
+          <td class="m">Read · Grep · Glob<br>WebSearch · WebFetch</td>
+          <td>Diagnoses <b>which of the four entry states are unmet</b> and returns a concrete implementation plan, exploring the codebase to resolve the ambiguity.<br><b>It has no Write.</b> Producing unnecessary documents is <b>structurally impossible</b>. Recording the plan is the main session's job.</td>
+        </tr>
+        <tr>
+          <td><span class="pill p-agent">orangekit-reviewer</span></td>
+          <td class="m">Read · Grep · Glob · Bash</td>
+          <td><b>Audits the real diff independently of the implementer's report.</b> For Irreversible work it fans out across three lenses — correctness, security, reversibility — and decides by majority.<br><b>It is read-only.</b> A reviewer that starts fixing things is no longer reviewing; it does not even move files.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════ 7. runtime ══════════ -->
+<section id="runtime">
+  <p class="eyebrow">Runtime</p>
+  <h2>What actually fires while you build</h2>
+  <p class="say">Two kinds. <strong>Hooks are deterministic</strong> — the script runs whether or not the model remembers, it costs no tokens, and two of them refuse outright. <strong>Rule cards are semantic</strong> — when the path matches they enter the context and change the model's judgement.</p>
+
+  <h3>5 hook scripts · 6 event registrations</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:160px">Script</th><th style="width:190px">When</th><th style="width:300px">What it does</th><th>Why it has this shape</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="pill p-hook">session-brief</span><br><span class="m" style="font-size:11px;color:var(--faint)">338 lines</span></td>
+          <td class="m">SessionStart<br><span style="font-family:var(--body);color:var(--soft)">every time a session opens</span></td>
+          <td>Injects the operating contract (T0) · branch and uncommitted count · <b>a hook survival roll-call</b> · restores the handoff note</td>
+          <td>A rule that is not in the session context <b>does not exist.</b> Rules that live only as files are read by nobody.</td>
+        </tr>
+        <tr>
+          <td><span class="pill p-hook">security-check</span> <span class="badge b-always">blocks</span><br><span class="m" style="font-size:11px;color:var(--faint)">500 lines</span></td>
+          <td class="m">PreToolUse<br>Edit｜Write｜MultiEdit｜Bash<br><span style="font-family:var(--body);color:var(--soft)">just <b>before</b> writing or running</span></td>
+          <td><b>Screens 24 patterns and exits 2 on a hit</b> — the tool call itself is refused. It also summons the <span class="pill p-rule">ui-design</span> card when a new UI file is created.</td>
+          <td>Catching it after the write is too late. <b>Content checks are portable; path checks are not</b> — so this hook never needs to know a path. Placement mistakes (a server key behind <span class="m">NEXT_PUBLIC_</span>) are impossible for a regex in principle, so the <span class="pill p-rule">security</span> card takes those.</td>
+        </tr>
+        <tr>
+          <td><span class="pill p-hook">build-gate</span> <span class="badge b-always">blocks</span><br><span class="m" style="font-size:11px;color:var(--faint)">139 lines</span></td>
+          <td class="m">Stop<br><span style="font-family:var(--body);color:var(--soft)">when the turn tries to end</span></td>
+          <td><b>Refuses to let the session finish</b> when source changed and no build or test ran. Reads git state and parses the transcript for <b>actual Bash invocations</b>.</td>
+          <td>v2's version of this <b>never blocked once.</b> ⓐ It emitted <span class="m">{"decision":"block"}</span>, and <b>Stop does not support that field</b>. ⓑ It judged with <span class="m">grep "test"</span>, so the word "test" anywhere in the conversation let it through.</td>
+        </tr>
+        <tr>
+          <td><span class="pill p-hook">handoff</span><br><span class="m" style="font-size:11px;color:var(--faint)">90 lines · 2 registrations</span></td>
+          <td class="m">PreCompact · SessionEnd<br><span style="font-family:var(--body);color:var(--soft)">just before compaction or exit</span></td>
+          <td>Leaves a handoff note for the next session. <span class="pill p-hook">session-brief</span> reads it back.</td>
+          <td>Compaction <b>turns the primary source into a summary, and that loss cannot be undone.</b> At minimum, what you were in the middle of has to survive.</td>
+        </tr>
+        <tr>
+          <td><span class="pill p-hook">track-skill</span><br><span class="m" style="font-size:11px;color:var(--faint)">42 lines</span></td>
+          <td class="m">PostToolUse · Skill<br><span style="font-family:var(--body);color:var(--soft)">after a skill is invoked</span></td>
+          <td>Records the use. <b>It never blocks.</b></td>
+          <td>Without telemetry <b>there is no way to find the dead assets nobody uses.</b> <span class="pill p-skill">/execution-dashboard</span> and <span class="m">doctor --usage</span> read this log.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>If a hook itself fails — three states, and where it returns</h3>
+  <p class="say">A blocking device has <strong>three</strong> states, not two. Folding the third into the first is the most common accident.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:210px">State</th><th style="width:160px">Action</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><b style="color:var(--alert)">violation confirmed</b></td><td class="m">block — exit 2</td><td>States the reason and refuses the tool call</td></tr>
+        <tr><td><b style="color:var(--skill)">no violation confirmed</b></td><td class="m">pass — exit 0</td><td>—</td></tr>
+        <tr><td><b style="color:var(--webbing)">cannot determine</b><br><small style="color:var(--soft)">jq missing · transcript unreadable · offline</small></td><td class="m">pass + say so</td><td><b>It does not block.</b> Fold cannot-determine into blocking and you get a false positive; a false positive makes the user turn the hook off; <b>a hook that is off blocks nothing.</b> Never assert either presence or absence.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="blocks">
+    <div>
+      <h4>Every event supports different fields</h4>
+      <ul>
+        <li><span class="m">Stop</span> <b>does not support</b> <span class="m">decision</span>/<span class="m">reason</span> → use <span class="m">continue</span> + <span class="m">systemMessage</span></li>
+        <li><span class="m">PreCompact</span>·<span class="m">SessionEnd</span> plain stdout never becomes context → JSON required</li>
+        <li><b>Unsupported fields are silently ignored</b> — which is why v2's gate never fired</li>
+      </ul>
+    </div>
+    <div>
+      <h4>If the hook itself breaks</h4>
+      <ul>
+        <li>Root cannot be settled → <b>exit 2</b>. It does not keep running against a wrong path</li>
+        <li>Numbers pass through <span class="m">orangekit_num()</span> — never swallowed by <span class="m">|| echo 0</span></li>
+        <li>The session briefing reports a <b>hook survival roll-call</b> every time — a dead hook shows up next session</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Failure is declared in the graph</h4>
+      <ul>
+        <li><b>21 nodes</b> return to <span class="m">user-report</span> — the place where the loop ends at a person</li>
+        <li><b>2</b> (verify · cross-check) return to <span class="m">build</span> — back to be fixed</li>
+        <li>The point of the declaration is that <b>failure never disappears quietly</b></li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>What security-check blocks — all 24</h3>
+  <div class="blocks">
+    <div>
+      <h4 style="color:var(--hook)">Hard-coded secrets — 15</h4>
+      <ul>
+        <li>AWS access key — <span class="m">AKIA</span>+16</li>
+        <li>GitHub PAT — <span class="m">ghp_</span>+36</li>
+        <li>GitHub tokens — <span class="m">gho_/ghu_/ghs_/ghr_</span></li>
+        <li>Stripe — <span class="m">sk_live_ · sk_test_</span></li>
+        <li>Toss Payments — <span class="m">test_sk_ · live_sk_</span></li>
+        <li>KakaoPay — <span class="m">secretKey · adminKey</span></li>
+        <li>OpenAI — <span class="m">sk-proj-</span></li>
+        <li>Anthropic — <span class="m">sk-ant-</span></li>
+        <li>Google — <span class="m">AIza</span>+35</li>
+        <li>Supabase secret — <span class="m">sb_secret_</span></li>
+        <li>Supabase service_role JWT</li>
+        <li>suspected Supabase JWT</li>
+        <li>GCP service-account JSON</li>
+        <li>PEM private key</li>
+        <li>a secret inside <span class="m">package.json</span></li>
+      </ul>
+    </div>
+    <div>
+      <h4 style="color:var(--hook)">Destructive commands — 8</h4>
+      <ul>
+        <li><span class="m">DROP</span> — table · database · schema</li>
+        <li><span class="m">TRUNCATE</span></li>
+        <li><span class="m">DELETE FROM</span> without <span class="m">WHERE</span></li>
+        <li><span class="m">supabase db reset</span></li>
+        <li>prisma schema reset</li>
+        <li>reverting every migration</li>
+        <li>git history rewrite · mirror push</li>
+        <li>force-push to a shared branch (<span class="m">--force</span> · <span class="m">+refspec</span>)</li>
+        <li>deleting a shared branch on the remote (<span class="m">--delete</span> · <span class="m">:branch</span>)</li>
+      </ul>
+    </div>
+    <div>
+      <h4>How it judges — the anti-false-positive parts</h4>
+      <ul style="list-style:none;padding-left:0">
+        <li><b>It judges per segment.</b> A command chained with <span class="m">;</span> <span class="m">&amp;&amp;</span> <span class="m">||</span> is judged one segment at a time.</li>
+        <li><b>Exemptions go by the first token.</b> Exempting on a substring once let <span class="m">doctor.sh …; psql -c "DROP TABLE"</span> through whole.</li>
+        <li><b>Investigation commands pass.</b> A secret string is fine as long as <b>no file is written</b>.</li>
+        <li><b>Cannot-determine is not a block.</b> If the input cannot be parsed it says so and passes.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>9 rule cards — the file you edit summons the card</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:190px">Card</th><th style="width:300px">Fires when you edit</th><th>What it asks of you</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="pill p-rule">workflow-routing</span> <span class="badge b-always">always</span></td>
+          <td class="paths"><b style="color:var(--alert)">no path condition — every session</b></td>
+          <td>Task type → phase routing. <b>Instruction precedence</b> (the user &gt; the project's CLAUDE.md &gt; the project's rules &gt; <b>the repo's existing code patterns</b> &gt; the plugin's guides). Four axes of citation freshness. External text is data, not instruction.<br><span style="color:var(--soft)">It is needed <b>before</b> work starts, so making it conditional means it is missing exactly then.</span></td>
+        </tr>
+        <tr><td><span class="pill p-rule">code-change</span></td><td class="paths">src/** · app/** · packages/** · lib/**</td><td>Not general coding sense — <b>only the things the model repeatedly gets wrong.</b> Back-tracing after a change, propagating the same pattern.</td></tr>
+        <tr><td><span class="pill p-rule">security</span></td><td class="paths">src/** · app/** · packages/** · lib/**</td><td>The secret boundary — <b>not the value, but which side it sits on.</b> This covers the placement mistakes a regex cannot catch in principle.</td></tr>
+        <tr><td><span class="pill p-rule">reversibility</span></td><td class="paths">src/** · app/** · packages/**<br>supabase/** · **/migrations/** · dev/active/**</td><td>Class judgement and the five steps. <b>It never classifies by size (S/M/L)</b> — size demands a human call, drifts, and looks at the wrong variable.</td></tr>
+        <tr><td><span class="pill p-rule">data-modeling</span></td><td class="paths">supabase/** · **/migrations/**<br>db/** · prisma/** · drizzle/**<br>dev/docs/database/**</td><td>Designing new tables, migrations and schema changes. Stays consistent with the project's canonical schema document if one exists.</td></tr>
+        <tr><td><span class="pill p-rule">ui-design</span></td><td class="paths">**/components/** · **/*.{css,scss}<br>**/app/**/page.{tsx,jsx}<br>**/app/**/layout.{tsx,jsx}</td><td>Not design advice — only <b>the step that asks whether what you picked belongs to this brief</b>, plus the render-proof rules.<br><span style="color:var(--soft)">Matching all <span class="m">.tsx</span> would mean nearly every frontend file, so this was <b>deliberately narrowed.</b></span></td></tr>
+        <tr><td><span class="pill p-rule">doc-dependency</span></td><td class="paths">dev/docs/{prd,database,design,<br>architecture,api}/**</td><td>Edit one document and <b>the documents that depend on it drift silently.</b> This is where "editing a PRD pulls in <span class="pill p-skill">/prd-reviewer</span>" comes from.</td></tr>
+        <tr><td><span class="pill p-rule">lessons</span></td><td class="paths">src/** · app/** · packages/** · lib/**<br>.claude/** · scripts/** · dev/docs/**</td><td>The <b>format</b> for recording a lesson. The paths are broad on purpose — it has to fire <b>while you are doing work that draws corrections</b>, not when you edit the lessons file.</td></tr>
+        <tr><td><span class="pill p-rule">harness-change</span></td><td class="paths">.claude/** · scripts/** · hooks/**<br>dev/docs/harness-evaluation/**</td><td>Touching a hook, rule, skill or agent. The three questions before adding, the order of remedies, verifying reach, proving that it blocks.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>Who wins in a conflict</b> — there are two layers and they point in opposite directions. The <b>safety floor</b> (reversibility class · verification duty · secret boundary) can only be <b>raised</b> by a project. <b>Procedure and form</b> (stack conventions · naming · document format) are <b>won by the project</b> — and in particular, <b>the repository's existing code patterns beat the plugin's guides.</b></div>
+</section>
+
+<!-- ══════════ 8. skills ══════════ -->
+<section id="skills">
+  <p class="eyebrow">All 27 skills</p>
+  <h2>Every one is attached to a stage in the graph</h2>
+  <p class="say">A skill <strong>loads only when it is invoked, so it costs nothing until it is needed.</strong> Twenty-one trigger on their own when the situation matches; six wait for a <span class="badge b-cmd">/command</span>. All of them are wired to a stage, which is what lets <span class="m">doctor --usage</span> answer <strong>"has this skill ever actually been used?"</strong> — and this repository's rule is that <strong>nothing gets culled without that measurement.</strong></p>
+
+  <div class="note"><b>Only two things ever leave your machine.</b> Every other skill finishes locally. <span class="pill p-skill" style="font-size:11px">/codex-claude-loop</span> sends <b>plan text or a <span class="m">git diff</span></b> — never the whole tree — and asks every time. <span class="pill p-skill" style="font-size:11px">/image-generator</span> sends <b>only the image prompt</b>, never source, but it is <b>billed separately from any ChatGPT subscription</b> — so it shows the price before calling and records your answer in <span class="m">orangekit.config.json</span> instead of asking again. With no API key it <b>does not block</b>: it writes a prompt for you to paste into ChatGPT yourself.</div>
+
+  <div class="filterbar">
+    <input id="q" type="search" placeholder="Search by situation or name — e.g. PRD, security, review, design" aria-label="Search skills">
+    <span class="count" id="cnt">showing all 27</span>
+  </div>
+
+  <div class="tbl-wrap">
+    <table id="skilltable">
+      <thead><tr><th style="width:220px">Skill</th><th style="width:110px">Invoked</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr class="grouphead"><td colspan="3">understand <span class="cnt">· 2</span> — <span class="why">working out what is actually being asked</span></td></tr>
+        <tr><td><span class="pill p-skill">/prompt-enhancer</span></td><td><span class="badge b-auto">auto</span></td><td>Takes a request where what to build is settled but the context is missing and enriches it with <b>real structure, dependencies and existing conventions</b>.</td></tr>
+        <tr><td><span class="pill p-skill">/codebase-survey</span></td><td><span class="badge b-auto">auto</span></td><td>When the harness was installed late, or the code outgrew the cards, it <b>measures the real stack and structure</b>, refreshes the project-structure and code-conventions cards and reports the drift.</td></tr>
+
+        <tr class="grouphead"><td colspan="3">plan <span class="cnt">· 7</span> — <span class="why">only reached when two or more entry states are unmet</span></td></tr>
+        <tr><td><span class="pill p-skill">/brainstorming</span></td><td><span class="badge b-auto">auto</span></td><td>Turns a vague idea into a concrete design <b>through dialogue</b>. Not for bug fixes, config changes or already-clear requirements.</td></tr>
+        <tr><td><span class="pill p-skill">/research</span></td><td><span class="badge b-auto">auto</span></td><td>Web-search research, written out to <span class="m">dev/docs/research/</span> as a structured document.</td></tr>
+        <tr><td><span class="pill p-skill">/service-planner</span></td><td><span class="badge b-auto">auto</span></td><td>Service structure and concrete functional requirements — <b>screens, flows, feature list.</b> The screen list settled here becomes the input to the design phase.</td></tr>
+        <tr><td><span class="pill p-skill">/business-planner</span></td><td><span class="badge b-auto">auto</span></td><td>Business-case validation and a plan document — revenue model, market entry, viability.</td></tr>
+        <tr><td><span class="pill p-skill">/council-review</span></td><td><span class="badge b-auto">auto</span></td><td>Technical, business and UX lenses analysed <b>in parallel</b>, then reconciled into one recommendation. For planning decisions that are hard to reverse.</td></tr>
+        <tr><td><span class="pill p-skill">/prd-generator</span></td><td><span class="badge b-auto">auto</span></td><td>Writes the PRD when none covers the feature. Picks single or modular form by scale.</td></tr>
+        <tr><td><span class="pill p-skill">/dev-docs-generator</span></td><td><span class="badge b-auto">auto</span></td><td>Creates plan · context · tasks in <span class="m">dev/active/</span>. <b>Only when the work will outlive the session.</b></td></tr>
+
+        <tr class="grouphead"><td colspan="3">build <span class="cnt">· 8</span> — <span class="why">the largest cluster — where things actually get made</span></td></tr>
+        <tr><td><span class="pill p-skill">/ui-ux-design</span></td><td><span class="badge b-auto">auto</span></td><td>Picks style, palette and type pairing from datasets into a design system → <b>a direction review</b> (is this my default?) → a canvas draft → write-back and comparison → <b>render proof</b> (zero console errors · empty/loading/error states).</td></tr>
+        <tr><td><span class="pill p-skill">/image-generator</span></td><td><span class="badge b-auto">auto</span></td><td>Makes <b>raster images</b> that code cannot produce — photos, illustrations, mockups. With <code>OPENAI_API_KEY</code> it generates them through gpt-image-2.5-flare (<b>billed separately from any ChatGPT subscription</b> — it asks once and remembers), and without a key it writes <b>a prompt you can paste straight into ChatGPT</b> to get the same result. Diagrams belong to <span class="pill p-skill" style="font-size:11px">diagram-design</span>.</td></tr>
+        <tr><td><span class="pill p-skill">/test-driven-development</span></td><td><span class="badge b-auto">auto</span></td><td>Write the failing test before the implementation. Covers where tests go (the seams) and <b>what makes a passing test worthless.</b></td></tr>
+        <tr><td><span class="pill p-skill">/prd-reviewer</span></td><td><span class="badge b-auto">auto</span></td><td>Audits a PRD for implementation fit, requirement clarity and internal consistency, and produces a report that <b>names where each fix belongs.</b> <b>Mandatory after any PRD edit.</b></td></tr>
+        <tr><td><span class="pill p-skill">/security-review</span></td><td><span class="badge b-auto">auto</span></td><td>Full audit — dependency CVEs, an exhaustive secret sweep, payment paths. <b>Broader than the built-in diff-only check.</b></td></tr>
+        <tr><td><span class="pill p-skill">/completion-review</span></td><td><span class="badge b-auto">auto</span></td><td>Syncs docs, ticks tasks, archives. <b>The finishing move for a Reversible change.</b></td></tr>
+        <tr><td><span class="pill p-skill">/pr-prep</span></td><td><span class="badge b-auto">auto</span></td><td>Collects the diff → judges the class → runs the verification commands → writes a body carrying <b>the sections that class demands</b> (rollback procedure, call sites, justification).</td></tr>
+        <tr><td><span class="pill p-skill">/shortcut-ledger</span></td><td><span class="badge b-auto">auto</span></td><td>Harvests the <span class="m">ORANGEKIT-SHORTCUT:</span> markers left in the code and re-evaluates <b>whether the ceiling that justified each shortcut still holds.</b></td></tr>
+
+        <tr class="grouphead"><td colspan="3">verify · cross-check <span class="cnt">· 2</span> — <span class="why">intensity set by the reversibility class</span></td></tr>
+        <tr><td><span class="pill p-skill">/receiving-code-review</span></td><td><span class="badge b-auto">auto</span></td><td><b>Vets incoming review feedback against the real code</b> before adopting it, and <b>argues back with evidence</b> where it is wrong. It never accepts blindly.</td></tr>
+        <tr><td><span class="pill p-skill">/codex-claude-loop</span></td><td><span class="badge b-auto">auto</span></td><td>Independent verification by OpenAI Codex. <b>The source leaves the machine, so it never runs without consent.</b></td></tr>
+
+        <tr class="grouphead"><td colspan="3">install · guides <span class="cnt">· 3</span> — <span class="why">seating the harness in a project</span></td></tr>
+        <tr><td><span class="pill p-skill">/orangekit-init</span></td><td><span class="badge b-cmd">/command</span></td><td>First-time setup — writes <span class="m">orangekit.config.json</span> and <span class="m">CLAUDE.md</span>, and generates guides once you pick the stack.</td></tr>
+        <tr><td><span class="pill p-skill">/stack-guide-generator</span></td><td><span class="badge b-auto">auto</span></td><td>Assembles frontend-guide and backend-guide into your <span class="m">.claude/skills/</span>. <b>It assembles axes (4 frontend · 8 backend), not combinations (32)</b>, so a stack outside the presets still works immediately.</td></tr>
+        <tr><td><span class="pill p-skill">/orangekit-migrate</span></td><td><span class="badge b-cmd">/command</span></td><td>Moves a v2 harness to v3 — removes dead hooks, re-tiers the rules, renames the agents.</td></tr>
+
+        <tr class="grouphead"><td colspan="3">the harness itself <span class="cnt">· 5</span> — <span class="why">measuring and repairing the gear</span></td></tr>
+        <tr><td><span class="pill p-skill">/health-check</span></td><td><span class="badge b-cmd">/command</span></td><td>Build, lint, typecheck and test in a single pass.</td></tr>
+        <tr><td><span class="pill p-skill">/execution-dashboard</span></td><td><span class="badge b-cmd">/command</span></td><td>A <b>timeline</b> of which skills, rules and hooks this session actually touched.</td></tr>
+        <tr><td><span class="pill p-skill">/harness-evaluation</span></td><td><span class="badge b-cmd">/command</span></td><td>Scores the graph on <b>8 axes per path</b> and emits a severity-ranked defect list. <b>It only judges</b> — <span class="m">doctor</span> supplies the facts, and a Critical is confirmed only by an isolated reproduction.</td></tr>
+        <tr><td><span class="pill p-skill">/skill-enhancer</span></td><td><span class="badge b-auto">auto</span></td><td>First decides between <b>keep · split the boundary · make it manual · merge · delete</b>, then injects boundary declarations, behavioural contracts, failure paths and machine verification into whatever survives. Pairs with the bundled <span class="m">skill-creator</span>.</td></tr>
+        <tr><td><span class="pill p-skill">/fix-issue</span></td><td><span class="badge b-cmd">/command</span></td><td>Pulls issue context through <span class="m">gh</span> or <span class="m">glab</span> and fixes the bug with that context in hand.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p id="noresult" style="display:none;font-size:14px;color:var(--faint)">No skill matches. Try different words.</p>
+
+  <div class="note"><b>It never competes with the built-ins.</b> <span class="m">/code-review</span> · <span class="m">/simplify</span> · <span class="m">/init</span> · <span class="m">/run</span> · <span class="m">/loop</span> · <span class="m">skill-creator</span> come from Claude Code. The harness's rule is to pick one of three verdicts whenever there is overlap — <b>replace with native · keep custom · compose as a thin wrapper.</b></div>
+</section>
+
+<!-- ══════════ 8-b. guides ══════════ -->
+<section id="guides">
+  <p class="eyebrow">The largest asset in the repo — 154 files, 2 MB</p>
+  <h2>Guides are built from axes, not combinations</h2>
+  <p class="say">Four frontend axes × eight backend axes is <strong>32 combinations.</strong> Prebuild all 32 and fixing one thing means editing 32 places. So <strong>only 12 axes and 3 seams are prebuilt</strong> and the rest is assembled — which is why a stack outside the presets comes out immediately.</p>
+
+  <figure class="scroller">
+    <svg viewBox="0 0 1120 320" role="img" aria-label="How guides are assembled. One frontend axis and one backend axis are chosen; if a prebuilt seam exists it is used, otherwise the axes' seam slots are filled to generate one. The result is the frontend-guide and backend-guide skills in the project.">
+      <defs><marker id="ga2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--line-hard)"/></marker></defs>
+      <text class="mm" x="20" y="22" font-size="11" font-weight="600" fill="var(--faint)">FRONTEND AXES · 4</text>
+      <g class="mm" font-size="11.5">
+        <rect x="20" y="32" width="150" height="26" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.2"/><text x="34" y="50" fill="var(--skill)">nextjs</text>
+        <rect x="20" y="62" width="150" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="34" y="80" fill="currentColor">react-vite</text>
+        <rect x="20" y="92" width="150" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="34" y="110" fill="currentColor">vue</text>
+        <rect x="20" y="122" width="150" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="34" y="140" fill="currentColor">vanilla</text>
+      </g>
+      <text class="mm" x="20" y="186" font-size="11" font-weight="600" fill="var(--faint)">BACKEND AXES · 8</text>
+      <g class="mm" font-size="11">
+        <rect x="20" y="196" width="150" height="24" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.2"/><text x="34" y="212" fill="var(--skill)">supabase</text>
+        <rect x="20" y="224" width="150" height="24" fill="var(--surface)" stroke="var(--line-hard)"/><text x="34" y="240" fill="currentColor">aws-container</text>
+        <rect x="20" y="252" width="150" height="24" fill="var(--surface)" stroke="var(--line-hard)"/><text x="34" y="268" fill="currentColor">aws-serverless</text>
+        <rect x="20" y="280" width="150" height="24" fill="var(--surface)" stroke="var(--line-hard)"/><text x="34" y="296" fill="currentColor">node-api · nest · fastapi …</text>
+      </g>
+      <rect x="228" y="32" width="270" height="272" fill="var(--sunk)" stroke="var(--line)"/>
+      <text class="mm" x="242" y="52" font-size="11" font-weight="600" fill="var(--faint)">INSIDE ONE AXIS — A PACK</text>
+      <g class="mm" font-size="11">
+        <rect x="242" y="62" width="242" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="254" y="80" fill="currentColor">pack.json — 19 keys</text>
+        <rect x="242" y="94" width="242" height="26" fill="var(--webbing-soft)" stroke="var(--webbing)" stroke-width="1.4"/><text x="254" y="112" fill="var(--webbing)">fixesVariants — mandatory</text>
+        <rect x="242" y="126" width="242" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="254" y="144" fill="currentColor">policies.md — proof example required</text>
+        <rect x="242" y="158" width="242" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="254" y="176" fill="currentColor">ledger.md — the ledger</text>
+        <rect x="242" y="190" width="242" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="254" y="208" fill="currentColor">PACK.md + resources/ ×7</text>
+        <rect x="242" y="222" width="242" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="254" y="240" fill="currentColor">seamSlots — filled by a seam</text>
+        <rect x="242" y="254" width="242" height="26" fill="var(--surface)" stroke="var(--line-hard)"/><text x="254" y="272" fill="currentColor">knownGaps — what it cannot cover</text>
+      </g>
+      <rect x="556" y="32" width="250" height="140" fill="var(--rule-soft)" stroke="var(--rule)" stroke-width="1.6"/>
+      <text class="mm" x="570" y="54" font-size="12" font-weight="600" fill="var(--rule)">SEAMS · 3 PREBUILT</text>
+      <g class="mm" font-size="11" fill="currentColor">
+        <text x="570" y="76">nextjs + supabase</text>
+        <text x="570" y="94">react-vite + aws-container</text>
+        <text x="570" y="112">vue + node-api</text>
+      </g>
+      <text class="mm" x="570" y="138" font-size="10.5" fill="var(--soft)">contract.md · seam.json</text>
+      <text class="mm" x="570" y="156" font-size="10.5" fill="var(--soft)">frontend/HUB.md · backend/HUB.md</text>
+      <rect x="556" y="188" width="250" height="116" fill="none" stroke="var(--rule)" stroke-width="1.4" stroke-dasharray="5 4"/>
+      <text class="mm" x="570" y="210" font-size="12" font-weight="600" fill="var(--rule)">IF THE PAIR ISN'T PREBUILT</text>
+      <text class="mm" x="570" y="232" font-size="10.5" fill="var(--soft)">the axes' seamSlots are filled to generate one</text>
+      <text class="mm" x="570" y="252" font-size="10.5" fill="var(--soft)">serverRuntime is passed to the backend</text>
+      <text class="mm" x="570" y="278" font-size="10.5" fill="var(--alert)">failing self-verification means not installed —</text>
+      <text class="mm" x="570" y="294" font-size="10.5" fill="var(--alert)">a false contract is structurally impossible</text>
+      <rect x="864" y="80" width="236" height="120" fill="var(--skill-soft)" stroke="var(--skill)" stroke-width="1.8"/>
+      <text class="mm" x="878" y="104" font-size="12" font-weight="600" fill="var(--skill)">LANDS IN YOUR PROJECT</text>
+      <text class="mm" x="878" y="128" font-size="11.5" fill="currentColor">.claude/skills/</text>
+      <text class="mm" x="878" y="148" font-size="11.5" fill="currentColor">  frontend-guide</text>
+      <text class="mm" x="878" y="168" font-size="11.5" fill="currentColor">  backend-guide</text>
+      <text class="mm" x="878" y="190" font-size="10.5" fill="var(--soft)">always fires at P4</text>
+      <g stroke="var(--line-hard)" stroke-width="1.6" marker-end="url(#ga2)">
+        <line x1="176" y1="90" x2="222" y2="90"/>
+        <line x1="176" y1="240" x2="222" y2="240"/>
+        <line x1="504" y1="140" x2="550" y2="140"/>
+        <line x1="812" y1="140" x2="858" y2="140"/>
+      </g>
+    </svg>
+    <figcaption>Because the prebuilt unit is <strong>the axis, not the combination</strong>, fixing one axis fixes every combination that uses it. Thirty-two copies would have meant thirty-two edits.</figcaption>
+  </figure>
+
+  <h3>Why <span class="m">fixesVariants</span> is mandatory</h3>
+  <p class="say">An axis must <strong>declare what it pins down.</strong> Leave it out and the axis's guidance gets applied to <strong>projects it is wrong for.</strong></p>
+  <div class="note">
+    <b>A real case</b> — the <span class="m">nextjs</span> axis decides fetching, routing and the server runtime for itself, so the only things it pins are <b>client state and forms</b>: <span class="m">store: zustand</span> · <span class="m">forms: react-hook-form</span>.
+    <b>For a project committed to Redux or Jotai, that pack's state-management section is wrong guidance</b> — which is why the declaration is mandatory and a missing one is a FAIL.
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:240px">Check</th><th style="width:170px">What it looks at</th><th>When to run it</th></tr></thead>
+      <tbody>
+        <tr><td class="m">guide-gate.sh --pack</td><td>static check of one pack</td><td>When you touch a pack resource. It looks at <span class="m">ledger.md</span>, <span class="m">pack.json</span> and <span class="m">policies.md</span> <b>together</b></td></tr>
+        <tr><td class="m">pack-smoke.sh</td><td>execution check</td><td>Same — does the assembly actually work</td></tr>
+        <tr><td class="m">guide-gate.sh --regress</td><td>shipped-asset regression</td><td><b>When bumping the version</b> — use this instead of <span class="m">--self-test</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>How to write a contract</b> — in <span class="m">seams/*/contract.md</span>, <b>values belong only in lists and table rows.</b> Backticks in prose are explanation, and <b>a negative written into a list reads as a requirement in both directions</b> — "do not use X" in a list can be read as a demand for X.</div>
+</section>
+
+<!-- ══════════ 8-c. outputs ══════════ -->
+<section id="outputs">
+  <p class="eyebrow">Outputs</p>
+  <h2>What gets written, and who reads it back</h2>
+  <p class="say">The path is not the point. <strong>A store nothing reads is pure cost and a source of drift</strong>, so the harness checks not that "a document exists" but that <strong>"a document is consumed."</strong></p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:220px">Who writes it</th><th style="width:280px">Where</th><th>Who reads it back</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill p-skill">/service-planner</span></td><td class="m">dev/docs/service/service-plan-&lt;name&gt;.md</td><td><span class="pill p-skill">/prd-generator</span> · <span class="pill p-skill">/ui-ux-design</span> (the screen list)</td></tr>
+        <tr><td><span class="pill p-skill">/business-planner</span></td><td class="m">dev/docs/business/business-plan-&lt;name&gt;.md</td><td><span class="pill p-skill">/service-planner</span> (pulls out only the constraints)</td></tr>
+        <tr><td><span class="pill p-skill">/research</span></td><td class="m">dev/docs/research/&lt;topic&gt;/</td><td>the planning skills generally</td></tr>
+        <tr><td><span class="pill p-skill">/council-review</span></td><td class="m">dev/docs/council/council-review-&lt;name&gt;.md</td><td>the decision moves into the <b>decisions store</b></td></tr>
+        <tr><td><span class="pill p-skill">/prd-generator</span></td><td class="m">dev/docs/prd/</td><td><span class="pill p-skill">/prd-reviewer</span> · <span class="pill p-skill">/dev-docs-generator</span> · implementation</td></tr>
+        <tr><td><span class="pill p-skill">/dev-docs-generator</span></td><td class="m">dev/active/&lt;slug&gt;/{plan,context,tasks}.md</td><td>implementation · <span class="pill p-skill">/completion-review</span> (ticks and archives)</td></tr>
+        <tr><td><span class="pill p-skill">/ui-ux-design</span></td><td class="m">dev/docs/design/&lt;project&gt;/MASTER.md<br>dev/docs/design/&lt;project&gt;/pages/</td><td><b>implementation</b> — tokens from here, screen composition from wherever <span class="m">## Canvas</span> points</td></tr>
+        <tr><td><span class="pill p-skill">/harness-evaluation</span></td><td class="m">dev/docs/harness-evaluation/vN.md</td><td><b>asset promotion</b> · <span class="pill p-skill">/skill-enhancer</span></td></tr>
+        <tr><td>a user's correction</td><td class="m">docs/lessons.md</td><td><span class="m">doctor --lessons</span> tallies it → promotion candidates</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Four stores — each needs both a write and a read</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:170px">Store</th><th style="width:220px">What it holds</th><th>Why it is separate</th></tr></thead>
+      <tbody>
+        <tr><td class="m" style="color:var(--store)">lessons</td><td><b>mistakes</b> — things a user corrected</td><td>Three in one category and <b>an answering asset is built and the entries physically move to the archive</b></td></tr>
+        <tr><td class="m" style="color:var(--store)">decisions</td><td><b>choices</b> — what the user picked at a decision point</td><td><b>A different axis from lessons.</b> Mix them and both become unusable — legitimate choices diluting a list of mistakes makes the tally meaningless</td></tr>
+        <tr><td class="m" style="color:var(--store)">eval-report</td><td><b>defects</b> — what the evaluation found</td><td>The defect list is the input to asset promotion. If the evaluation finds an error in its own verdict, that goes to lessons instead</td></tr>
+        <tr><td class="m" style="color:var(--store)">design-system</td><td><b>tokens and direction</b></td><td><b>Jurisdiction splits with the canvas.</b> Disagreement across the shared three (colour, type, signature) is detected by <span class="m">design-sync.sh</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>The telemetry is honest</b> — of 90 graph edges, <b>only 7 are emitted by code</b> and 3 more are conditional. The rest are model behaviour, which code cannot emit, so they are <b>excluded from the "dead edge" check.</b> We do not pretend to measure what cannot be measured.</div>
+</section>
+
+<!-- ══════════ 9. stuck ══════════ -->
+<section id="stuck">
+  <p class="eyebrow">When you get blocked</p>
+  <h2>Three cases, three responses</h2>
+
+  <div class="stack">
+    <div class="row"><span class="tag" style="color:var(--alert)">genuinely dangerous</span><p><b>This is most of them.</b> The message names the pattern you hit — move the secret to an environment variable, narrow the destructive SQL.</p></div>
+    <div class="row"><span class="tag" style="color:var(--webbing)">false positive</span><p>Typically an investigation command that <b>contains a secret string but writes no file.</b> Put the command in a file and run it, or split the segments. And <b>tell Claude it was a false positive</b> — two on the same device makes it a candidate for <b>narrowing that device rather than adding a rule.</b></p></div>
+    <div class="row"><span class="tag" style="color:var(--skill)">cannot determine</span><p><b>This is not a block.</b> It means a tool is missing (jq, playwright) or you are offline, so it <b>passes</b> — but it is never counted as "verified". Neither presence nor absence is asserted.</p></div>
+  </div>
+
+  <p class="pull">Don't turn a hook off.<br>A hook that is off blocks nothing.</p>
+
+  <h3>When the session gets long — the first "yes" from the top wins</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:40px">#</th><th style="width:440px">Question</th><th>If yes</th></tr></thead>
+      <tbody>
+        <tr><td class="m">①</td><td>Will the next phase use <b>this conversation as its primary source</b>? Is there room in the window?</td><td><b>keep going</b></td></tr>
+        <tr><td class="m">②</td><td>Is the current context irrelevant to the next phase?</td><td><span class="m">/clear</span></td></tr>
+        <tr><td class="m">③</td><td>Are you handing this to another tool, directory or person?</td><td>hand off</td></tr>
+        <tr><td class="m">④</td><td>Can it be finished without supervision?</td><td>subagent</td></tr>
+        <tr><td class="m">⑤</td><td>Anything else</td><td><span class="m">/compact</span> plus an instruction for what comes next</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note"><b>Rule out ① first</b> — the other four all turn the primary source into a summary, and <b>that loss cannot be undone.</b> And make this call <b>when a phase ends.</b> Never mid-phase.</div>
+</section>
+
+<footer>
+  <p>The full prose documents live in the repository — <code>docs/user-manual.md</code> · <code>docs/getting-started.md</code> (install) · <code>docs/configuration.md</code> (options) · <code>docs/harness-anatomy.md</code> (why it looks like this) · <code>docs/presets.md</code> (axes and guides).</p>
+  <p style="color:var(--faint)">If you <em>maintain</em> the harness, go to <code>docs/operations-manual.md</code>. <b>Where this page and the repository disagree, the repository is right.</b></p>
+</footer>
+
+</div>
+
+
+<script>
+(function(){
+  var PH = [
+    {id:'P0', name:'Frame',       actor:'main session',        d:'requirements are still empty — 5 exploration skills'},
+    {id:'P1', name:'Sharpen',     actor:'main session',        d:'what to build is settled, project context is missing'},
+    {id:'P2', name:'Specify',     actor:'main session',        d:'no PRD covers it — single or modular by scale'},
+    {id:'P3', name:'Plan',        actor:'main session · planner', d:'the work outlives the session — dev/active/'},
+    {id:'P4', name:'Build',       actor:'main session',        d:'always runs — cards load and hooks guard throughout'},
+    {id:'P5', name:'Verify',      actor:'the class decides',   d:''},
+    {id:'P6', name:'Cross-check', actor:'reviewer ×3',         d:'only when it cannot be taken back — fan-out + confirm + rollback'}
+  ];
+  var TYPES = {
+    'new-noprd': {label:'New feature · no PRD', phases:['P0','P1','P2','P3','P4','P5'], code:true},
+    'new-prd':   {label:'New feature · PRD exists', phases:['P3','P4','P5'], code:true},
+    'modify':    {label:'Extend or delete existing', phases:['P4','P5'], code:true},
+    'bug':       {label:'Bug fix', phases:['P4','P5'], code:true},
+    'refactor':  {label:'Refactor', phases:['P3','P4','P5'], code:true},
+    'docs':      {label:'Docs · research', phases:[], code:false}
+  };
+  var PATHS = {
+    'db':    {label:'migrations/ · DB schema', cls:'irr', extraRule:'data-modeling'},
+    'auth':  {label:'auth · RLS', cls:'irr'},
+    'pay':   {label:'payments · settlement · prod data', cls:'irr'},
+    'costly':{label:'api/ · actions.ts · middleware.ts · shared packages', cls:'cos'},
+    'plain': {label:'anything else — components · utils · tests', cls:'rev'}
+  };
+  var CLS = {
+    irr:{name:'Irreversible', color:'var(--alert)', verify:'multi-lens fan-out + user confirmation + rollback'},
+    cos:{name:'Costly',       color:'var(--webbing)', verify:'orangekit-reviewer audits the diff — mandatory'},
+    rev:{name:'Reversible',   color:'var(--skill)', verify:'closed out by /completion-review'}
+  };
+
+  function q(n){ var e=document.querySelector('input[name="'+n+'"]:checked'); return e?e.value:null; }
+  function chip(text, kind, dashed, note){
+    return '<span class="chip'+(dashed?' dash':'')+'" style="color:var(--'+kind+')">'+text+
+           (note?' <em>'+note+'</em>':'')+'</span>';
+  }
+  function lane(name, items){
+    var body = items.length ? '<div class="items">'+items.join('')+'</div>'
+                            : '<div class="none">— nothing fires here in this case</div>';
+    return '<div class="lane"><div class="lname">'+name+'</div>'+body+'</div>';
+  }
+
+  function render(){
+    var t = q('etype'), pth = q('epath'), ui = q('eui')==='y', tr = q('etest')==='y';
+    if(!t || !pth) return;
+    var T = TYPES[t], P = PATHS[pth];
+    var cls = T.code ? P.cls : 'rev';
+    var C = CLS[cls];
+    var phases = T.phases.slice();
+    if(T.code && cls==='irr') phases.push('P6');
+
+    var skills = [];
+    if(t==='new-noprd'){
+      skills.push(chip('/brainstorming','skill',false,'when the intent is hazy'));
+      skills.push(chip('/service-planner','skill'));
+      if(cls==='irr') skills.push(chip('/council-review','skill',false,'hard-to-reverse planning call'));
+      skills.push(chip('/prompt-enhancer','skill',true,'P1 · conditional'));
+      skills.push(chip('/prd-generator','skill'));
+    }
+    if(t==='new-prd' || t==='refactor' || t==='new-noprd')
+      skills.push(chip('/dev-docs-generator','skill',true,'only if it outlives the session'));
+    if(t==='bug') skills.push(chip('/fix-issue','skill',true,'when there is an issue number'));
+    if(T.code && tr) skills.push(chip('/test-driven-development','skill'));
+    if(T.code && ui){
+      skills.push(chip('/ui-ux-design','skill'));
+      skills.push(chip('frontend-guide','skill',true,'project-owned'));
+    }
+    if(T.code) skills.push(chip('backend-guide','skill',true,'project-owned'));
+    if(t==='docs') skills.push(chip('/prd-reviewer','skill',false,'mandatory after a PRD edit'));
+    if(T.code && cls==='rev') skills.push(chip('/completion-review','skill'));
+    if(T.code && cls==='irr') skills.push(chip('/security-review','skill',true,'payment · auth paths'));
+    if(T.code) skills.push(chip('/pr-prep','skill'));
+
+    var rules = [chip('workflow-routing','rule',false,'always')];
+    if(T.code){
+      rules.push(chip('code-change','rule'));
+      rules.push(chip('security','rule'));
+      rules.push(chip('reversibility','rule'));
+      rules.push(chip('lessons','rule',false,'if you get corrected'));
+      if(ui) rules.push(chip('ui-design','rule'));
+      if(P.extraRule) rules.push(chip(P.extraRule,'rule'));
+    } else {
+      rules.push(chip('doc-dependency','rule'));
+      rules.push(chip('lessons','rule',false,'if you get corrected'));
+    }
+
+    var agents = [];
+    if(t==='new-noprd') agents.push(chip('orangekit-planner','agent',true,'if 2+ entry states are unmet'));
+    if(T.code && cls==='cos') agents.push(chip('orangekit-reviewer','agent',false,'once'));
+    if(T.code && cls==='irr') agents.push(chip('orangekit-reviewer ×3','agent',false,'correctness · security · reversibility'));
+
+    var hooks = [chip('session-brief','hook',false,'at session start')];
+    if(T.code){
+      hooks.push(chip('security-check','hook',false,'before every write · blocks'));
+      hooks.push(chip('build-gate','hook',false,'when the turn ends · blocks'));
+    } else {
+      hooks.push(chip('security-check','hook',true,'secret screening runs on docs too'));
+      hooks.push(chip('build-gate','hook',true,'no source changed — it will not fire'));
+    }
+    hooks.push(chip('track-skill','hook',false,'records skill use'));
+
+    var human = ['Give the intent — of the four states, this is the one Claude cannot fill in'];
+    if(T.code && ui) human.push('Edit the canvas draft directly (when /design is available)');
+    if(T.code && cls==='irr') human.push('Approve the irreversible change — the last cheap place to turn back');
+
+    var gates = [];
+    if(T.code) gates.push('Editing source and <b>running the build or tests</b> is one action — build-gate enforces it');
+    if(T.code && ui) gates.push('<b>Render proof</b> — screenshots · zero console errors · empty/loading/error states');
+    if(T.code && cls==='irr') gates.push('Write down the <b>rollback procedure</b>');
+    if(T.code && cls!=='rev') gates.push('<b>After</b> the review lands, vet it with /receiving-code-review');
+    if(!T.code) gates.push('No build gate and no review — but <b>a card still makes a skill mandatory</b>');
+
+    var used = {}; phases.forEach(function(x){ used[x]=1; });
+    var ladder = '';
+    if(!T.code){
+      ladder = '<div class="lgate"><b>no phases</b>No phase procedure applies — yet <b style="font-family:var(--body);text-transform:none;letter-spacing:0;color:var(--ink)">rule cards are summoned by path and still fire</b>, and a card can make a skill mandatory.</div>';
+    } else {
+      ladder = PH.map(function(P2){
+        var on = !!used[P2.id];
+        var cn = on ? (P2.id==='P4' ? 'lrow hot' : (P2.id==='P6' ? 'lrow irr' : 'lrow on')) : 'lrow off';
+        var actor = P2.actor, d = P2.d;
+        if(P2.id==='P5'){
+          actor = (cls==='rev') ? 'main session' : 'orangekit-reviewer';
+          d = (cls==='rev') ? 'syncs docs · ticks tasks · archives'
+                            : (cls==='cos' ? 'audits the real diff — never self-review'
+                                           : 'the front half of the three-lens fan-out');
+        }
+        if(P2.id==='P3' && t==='new-noprd') d = d + ' · planner diagnoses if 2+ entry states are unmet';
+        var body = on
+          ? '<span class="la">'+actor+'</span><span class="ld">'+d+'</span>'
+          : '<span class="la"></span><span class="ld">skipped — this type and class never run it</span>';
+        return '<div class="'+cn+'"><span class="lp">'+P2.id+'</span><span class="ln">'+P2.name+'</span>'+body+'</div>';
+      }).join('');
+      if(phases[0] !== 'P0'){
+        ladder = '<div class="lgate"><b>shortcut</b>All four entry states already hold, so the preparation phases are skipped.</div>' + ladder;
+      }
+    }
+
+    document.getElementById('res').innerHTML =
+      '<div class="verdict">'+
+        '<span class="cls" style="color:'+C.color+'">'+C.name+'</span>'+
+        '<span class="meta"><b>'+T.label+'</b> · '+P.label+'</span>'+
+        '<span class="meta">Verification: '+C.verify+'</span>'+
+      '</div>'+
+      '<div class="ladder">'+ladder+'</div>'+
+      lane('skills', skills)+
+      lane('rule cards', rules)+
+      lane('subagents', agents)+
+      lane('hooks', hooks)+
+      '<div class="human"><b>where a human acts · '+human.length+'</b><ol><li>'+human.join('</li><li>')+'</li></ol></div>'+
+      '<div class="gates"><b>what closes this case</b><ul><li>'+gates.join('</li><li>')+'</li></ul></div>';
+  }
+
+  var box = document.getElementById('explorer');
+  if(box){ box.addEventListener('change', render); render(); }
+})();
+</script>
+
+<script>
+(function(){
+  var q=document.getElementById('q'), cnt=document.getElementById('cnt'), none=document.getElementById('noresult');
+  var tbl=document.getElementById('skilltable');
+  if(!q||!tbl) return;
+  var all=Array.prototype.slice.call(tbl.querySelectorAll('tbody tr'));
+  var heads=all.filter(function(r){return r.classList.contains('grouphead');});
+  var rows=all.filter(function(r){return !r.classList.contains('grouphead');});
+  var total=rows.length;
+  rows.forEach(function(r){ r._t=(r.textContent||'').toLowerCase(); });
+  function apply(){
+    var v=(q.value||'').trim().toLowerCase(), shown=0;
+    rows.forEach(function(r){ var hit=!v||r._t.indexOf(v)!==-1; r.hidden=!hit; if(hit) shown++; });
+    heads.forEach(function(h){
+      var any=false, n=h.nextElementSibling;
+      while(n && !n.classList.contains('grouphead')){ if(!n.hidden){any=true;break;} n=n.nextElementSibling; }
+      h.hidden=!any;
+    });
+    none.style.display=shown?'none':'block';
+    cnt.textContent=v?(shown+' match'):(total+' shown');
+  }
+  q.addEventListener('input',apply);
+})();
+</script>
+
+</body>
+</html>

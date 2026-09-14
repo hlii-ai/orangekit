@@ -1,0 +1,47 @@
+<!-- AI prompt preview page — a copy button per card. Card blocks are inserted at {{CARDS}} -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{PRODUCT_NAME}} — AI prompts</title>
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; padding: 48px 24px; }
+  h1 { text-align: center; margin-bottom: 8px; }
+  .sub { text-align: center; color: #8b949e; margin-bottom: 40px; }
+  .grid { display: grid; gap: 20px; max-width: 960px; margin: 0 auto; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; }
+  .card h2 { font-size: 16px; margin-bottom: 4px; }
+  .meta { color: #8b949e; font-size: 13px; margin-bottom: 12px; }
+  pre { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 14px;
+        white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; }
+  button { margin-top: 10px; background: #238636; color: #fff; border: 0; border-radius: 6px;
+           padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  button.copied { background: #1f6feb; }
+</style>
+</head>
+<body>
+<h1>{{PRODUCT_NAME}}</h1>
+<p class="sub">Assembled · deconstructed · video transition — use each card's button to copy the prompt and paste it into the target AI model</p>
+<div class="grid">
+{{CARDS}}
+<!-- Card format:
+<div class="card">
+  <h2>Assembled</h2>
+  <p class="meta">Target model: Midjourney v7 · ratio 4:5</p>
+  <pre id="p1">prompt body…</pre>
+  <button onclick="copyPrompt(this,'p1')">Copy prompt</button>
+</div>
+-->
+</div>
+<script>
+function copyPrompt(btn, id) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => {
+    btn.textContent = "Copied ✓"; btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = "Copy prompt"; btn.classList.remove("copied"); }, 1500);
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+{
+  "combo": "vue+node-api",
+  "frontendPack": "frontend/vue",
+  "backendPack": "backend/node-api",
+  "seamVersion": "3.13.0",
+  "verified": "2026-08-23",
+  "extractedFrom": "Newly authored — no demonstrated original. No other seam was opened, not even as a format reference",
+  "prebuilt": true,
+
+  "contract": "contract.md",
+
+  "hubs": {
+    "frontend": "frontend/HUB.md",
+    "backend": "backend/HUB.md"
+  },
+
+  "note": "The first seam authored after the shape column (the call signature in the ledger's provides · requires) was in place. Both axis packs pin even the argument order in requires, so the seam's author does not have to guess a signature — this is the test bed for the very hole that produced 2 fatal defects in the node-api measurement.",
+
+  "boundaryNote": "There is only one boundary. Vue is an SPA and node-api is a separate server, so there is a single HTTP boundary between the browser's fetch and the Express router — there is no second boundary of Server Components · Server Actions the way nextjs×supabase has. So every section of the contract applies to both sides and there is no surface: declaration.",
+
+  "policyEngineNote": "The backend axis has no data-layer policy engine (dataLayerPolicyEngine: false). The application layer is the only boundary, so an ownership failure is returned as 404 rather than 403 — distinguishing them would let an unauthorized user enumerate the existence of resources. The frontend handles 404 in one screen as \"absent, or not mine\".",
+
+  "frontend": {
+    "resources": [
+      { "file": "data-fetching.md",     "nav": "HTTP client · error normalization · query/mutation composables · query keys · cache invalidation · consuming cursor pagination" },
+      { "file": "auth-and-session.md",  "nav": "Login/logout · token storage · one reissue on 401 · return path validation · clearing cache and client state on logout" },
+      { "file": "complete-example.md",  "nav": "One feature end to end, from list query to create" }
+    ]
+  },
+
+  "backend": {
+    "resources": [
+      { "file": "api-endpoints.md",     "nav": "Adding a router · request/response envelope · cursor pagination response · status codes · CORS · consuming the validation helper" },
+      { "file": "auth-boundaries.md",   "nav": "Token verification · requireAuth wiring · extending the req.user type · roles/scopes · login and logout · the 401 reissue contract" },
+      { "file": "complete-example.md",  "nav": "Migration → schema → query → service → router → test, the whole span" }
+    ]
+  },
+
+  "packRequiresSatisfied": {
+    "frontend/vue": ["Task", "http", "ApiError", "useTasksQuery", "useCreateTaskMutation", "useAuth"],
+    "backend/node-api": ["AppError", "errorHandler", "requireAuth", "AuthUser", "authFor", "tasksRouter"]
+  },
+
+  "knownGaps": []
+}

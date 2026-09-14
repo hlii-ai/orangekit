@@ -1,0 +1,16 @@
+{
+  "axis": "frontend",
+  "name": "none",
+  "displayName": "None (API-only project)",
+  "description": "No frontend. A project that builds only a backend API — frontend-guide is not generated.",
+  "techStack": {
+    "framework": "",
+    "language": "",
+    "packageManager": "",
+    "commands": { "build": "", "test": "", "lint": "" },
+    "additionalStack": []
+  },
+  "notes": {
+    "serverCode": "The frontend consumer lives outside this repository — the backend guide gives more weight to the API contract (versioning · compatibility · documentation)"
+  }
+}

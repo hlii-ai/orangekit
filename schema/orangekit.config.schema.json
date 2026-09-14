@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/hlii-ai/orangekit/main/schema/orangekit.config.schema.json",
+  "title": "ORANGEKIT Devkit Configuration",
+  "description": "Configuration schema for OrangeKit Claude Code Devkit",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference"
+    },
+    "project": {
+      "type": "object",
+      "description": "Project metadata",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Project name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Project description"
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "examples": [
+            "ko",
+            "en",
+            "id",
+            "vi",
+            "ja",
+            "zh"
+          ],
+          "default": "en",
+          "description": "Response language (BCP-47 tag). Not an enum — /orangekit-init offers ko/en/id/vi plus free entry, so any valid tag is accepted. Internal reasoning stays English; output is localized for meaning, and industry-standard technical terms stay in English."
+        },
+        "languageLabel": {
+          "type": "string",
+          "description": "Endonym shown in the T0 language directive, e.g. 한국어, Bahasa Indonesia, Tiếng Việt. Written by /orangekit-init for languages outside the known set; session-brief.sh falls back to `language` when absent."
+        },
+        "experienceLevel": {
+          "type": "string",
+          "enum": [
+            "senior",
+            "mid",
+            "junior"
+          ],
+          "default": "senior",
+          "description": "Developer experience level — affects response detail"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "techStack": {
+      "type": "object",
+      "description": "Technology stack configuration",
+      "properties": {
+        "preset": {
+          "type": "string",
+          "default": "none+none",
+          "description": "Legacy single-axis name ('nextjs-supabase' and the like) or the composite notation '<frontend>+<backend>'. New configs treat the presets object as canonical and record this field alongside it for backward compatibility"
+        },
+        "deliveryModel": {
+          "type": "string",
+          "enum": [
+            "web",
+            "hybrid",
+            "native",
+            "api-only"
+          ],
+          "description": "The form in which the product reaches the user. A dimension, not an axis — it does not pick a pack; it turns a pack's conditional slots (offline · shell · auth transport · push) on and off. hybrid wraps web code in a native shell (Capacitor, etc.); native covers React Native, Flutter, Swift, and Kotlin (no matching axis pack, so it takes the generation path)"
+        },
+        "clientKind": {
+          "type": "string",
+          "enum": [
+            "browser",
+            "app"
+          ],
+          "description": "Derived from deliveryModel — browser for 'web', app for the other three. It is the only value the backend and infrastructure guides look at. If each pack re-derived it, the wording would diverge, so it is settled in this one place and packs read only this value. browser activates cookie sessions and CSRF; app activates Bearer + secure storage, idempotent batch collection, push, and API version negotiation slots"
+        },
+        "pwa": {
+          "type": "boolean",
+          "description": "Meaningful only when deliveryModel is 'web'. When true, the frontend guide's service worker, manifest, offline cache, install prompt, and update strategy slots become active"
+        },
+        "nativeStack": {
+          "type": "string",
+          "description": "The technology actually used when deliveryModel is 'native' (React Native, Flutter, Swift, Kotlin, etc.). There is no matching axis pack, so the frontend guide is generated with this value as input"
+        },
+        "vcsPlatform": {
+          "type": "string",
+          "enum": [
+            "github",
+            "gitlab"
+          ],
+          "description": "Code hosting platform. A dimension, not an axis — it does not change which guide pack is installed, only the issue and change-request commands (gh ↔ glab/push options, PR ↔ MR, reference symbol #N ↔ !N). An absent value does not fall back to a default: it is decided by 'git remote get-url origin', and if that is still unclear the user is asked"
+        },
+        "framework": {
+          "type": "string",
+          "description": "The project's representative framework (per-axis detail lives in techStack.frontend/backend). Kept for backward compatibility"
+        },
+        "language": {
+          "type": "string",
+          "description": "The project's representative language (per-axis detail lives in techStack.frontend/backend). Kept for backward compatibility"
+        },
+        "packageManager": {
+          "type": "string",
+          "enum": [
+            "npm",
+            "pnpm",
+            "yarn",
+            "bun",
+            "uv",
+            "pip"
+          ],
+          "default": "npm"
+        },
+        "commands": {
+          "type": "object",
+          "properties": {
+            "build": {
+              "type": "string"
+            },
+            "test": {
+              "type": "string"
+            },
+            "lint": {
+              "type": "string"
+            },
+            "sonar": {
+              "type": "string"
+            }
+          },
+          "description": "The project's representative commands. build-gate and health-check read these values, so they must be filled in. sonar is optional and filled in only by projects that use SonarQube (health-check Step 5.5 reads it). When the toolchains differ per axis, record them separately under each axis's commands and keep the representative values here"
+        },
+        "backend": {
+          "type": "object",
+          "description": "The backend axis. Preset values are defaults and are settled during the interview. A self-hosted combination may have a different toolchain (language, package manager, commands) from the frontend",
+          "properties": {
+            "backendType": {
+              "type": "string",
+              "enum": [
+                "baas",
+                "serverless",
+                "cloud-server",
+                "framework-builtin",
+                ""
+              ],
+              "description": "baas (Supabase, Firebase — the vendor supplies DB, auth, and storage together) / serverless (AWS Lambda, GCP Cloud Functions — per-function deployment, no resident server) / cloud-server (a self-operated API server — FastAPI, Express, etc.) / framework-builtin (built into the frontend framework, e.g. Next.js Route Handlers)"
+            },
+            "cloudProvider": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "AWS / GCP / Azure / Vercel / self-hosted (required when serverless or cloud-server)"
+            },
+            "database": {
+              "type": "string",
+              "description": "PostgreSQL / MySQL / MongoDB / DynamoDB / ..."
+            },
+            "dataAccess": {
+              "type": "string",
+              "description": "Prisma / Drizzle / SQLAlchemy / SDK direct / ..."
+            },
+            "auth": {
+              "type": "string",
+              "description": "Supabase Auth / NextAuth / Cognito / custom"
+            },
+            "framework": {
+              "type": "string",
+              "description": "The framework when self-hosting (FastAPI / Express / ...). Empty for BaaS"
+            },
+            "language": {
+              "type": "string"
+            },
+            "packageManager": {
+              "type": "string",
+              "enum": [
+                "npm",
+                "pnpm",
+                "yarn",
+                "bun",
+                "uv",
+                "pip",
+                ""
+              ]
+            },
+            "commands": {
+              "type": "object",
+              "properties": {
+                "build": {
+                  "type": "string"
+                },
+                "test": {
+                  "type": "string"
+                },
+                "lint": {
+                  "type": "string"
+                },
+                "sonar": {
+                  "type": "string"
+                }
+              }
+            },
+            "sourceDir": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalStack": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional technologies (e.g., 'Tailwind CSS v4', 'Supabase')"
+        },
+        "presets": {
+          "type": "object",
+          "description": "Two-axis preset selection. The stack combination is fixed only once both axes are chosen, and the guide is generated by looking at that whole combination",
+          "properties": {
+            "frontend": {
+              "type": "string",
+              "enum": [
+                "nextjs",
+                "react-vite",
+                "vue",
+                "vanilla",
+                "none"
+              ],
+              "description": "presets/frontend/<name>.json"
+            },
+            "backend": {
+              "type": "string",
+              "enum": [
+                "supabase",
+                "firebase",
+                "aws-serverless",
+                "aws-container",
+                "gcp-serverless",
+                "fastapi",
+                "node-api",
+                "node-nest",
+                "none"
+              ],
+              "description": "presets/backend/<name>.json"
+            }
+          },
+          "required": [
+            "frontend",
+            "backend"
+          ]
+        },
+        "frontend": {
+          "type": "object",
+          "description": "The frontend axis. Preset values are defaults and are settled during the interview",
+          "properties": {
+            "framework": {
+              "type": "string",
+              "description": "Next.js 15 (App Router) / React + Vite / ..."
+            },
+            "language": {
+              "type": "string",
+              "description": "TypeScript / JavaScript — the guide's type-standard slot varies with this value"
+            },
+            "packageManager": {
+              "type": "string",
+              "enum": [
+                "npm",
+                "pnpm",
+                "yarn",
+                "bun",
+                ""
+              ]
+            },
+            "commands": {
+              "type": "object",
+              "properties": {
+                "build": {
+                  "type": "string"
+                },
+                "test": {
+                  "type": "string"
+                },
+                "lint": {
+                  "type": "string"
+                },
+                "sonar": {
+                  "type": "string"
+                }
+              }
+            },
+            "sourceDir": {
+              "type": "string"
+            },
+            "additionalStack": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "preset"
+      ]
+    },
+    "domains": {
+      "type": "object",
+      "description": "Domain boundary configuration for the guard hook",
+      "properties": {
+        "sourceDir": {
+          "type": "string",
+          "default": "src",
+          "description": "Source code root directory"
+        },
+        "sharedPackage": {
+          "type": "string",
+          "description": "Shared package path (requires approval to modify)"
+        },
+        "importAlias": {
+          "type": "string",
+          "description": "Import alias (e.g., '@/')"
+        },
+        "repoTopology": {
+          "type": "string",
+          "enum": [
+            "monorepo",
+            "single",
+            "msa"
+          ],
+          "default": "monorepo",
+          "description": "Repository topology chosen at orangekit-init (drives the generated project-structure rule card)"
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "description": "Generated-asset preferences recorded once and reused, so the harness does not re-ask every time",
+      "properties": {
+        "imageProvider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "manual"
+          ],
+          "description": "How /image-generator produces raster images. 'openai' calls the Images API (billed separately from any ChatGPT subscription); 'manual' skips the API and hands the user a ready-to-paste prompt instead. Absent means not yet chosen — the skill asks once and records the answer."
+        }
+      }
+    }
+  },
+  "required": [
+    "project",
+    "techStack"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "session_id": "orangekit-doctor-test",
+  "cwd": ".",
+  "tool_name": "Bash",
+  "hook_event_name": "PreToolUse",
+  "tool_input": {
+    "command": "bash scripts/doctor.sh --help >/dev/null; psql -d app -c \"DROP TABLE users\""
+  }
+}

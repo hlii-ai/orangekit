@@ -1,0 +1,21 @@
+{
+  "axis": "backend",
+  "name": "firebase",
+  "displayName": "Firebase (BaaS)",
+  "description": "Firebase BaaS — Firestore + Authentication + Storage + Cloud Functions. No separately operated server.",
+  "techStack": {
+    "backend": {
+      "backendType": "baas",
+      "cloudProvider": "GCP",
+      "database": "Firestore (NoSQL document store)",
+      "dataAccess": "Firebase SDK",
+      "auth": "Firebase Authentication"
+    },
+    "additionalStack": ["Firebase (Firestore + Auth + Storage)"]
+  },
+  "notes": {
+    "securityBoundary": "Security Rules are the last line of defense — declarative rules enforce access at the data layer. That the default with no rules is fully open is the exact opposite of RLS (fully blocked with no policy), so the guide must call it out",
+    "serverCodeLocation": "In the frontend axis's server runtime if it provides one, otherwise in Cloud Functions",
+    "dataModeling": "A NoSQL document store, so the T1 data-modeling card (relational) lies dormant through paths non-matching — write document design, denormalization, and collection-group query patterns directly into the resources"
+  }
+}

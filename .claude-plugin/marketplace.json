@@ -1,0 +1,97 @@
+{
+  "name": "orangekit",
+  "owner": {
+    "name": "hlii-ai"
+  },
+  "metadata": {
+    "description": "OrangeKit Claude Code Devkit — AI Native Dev Harness (reversibility axis + self-testing hooks + graph instrumentation)",
+    "version": "1.0.1"
+  },
+  "plugins": [
+    {
+      "name": "orangekit-product",
+      "source": "./",
+      "description": "AI Native Dev Harness — reversibility-axis workflow, 5 hooks that verify themselves, graph instrumentation (doctor). 26 skills + axis guide packs (frontend 4 · backend 8), 2-axis presets (frontend 5 · backend 9).",
+      "version": "1.0.1",
+      "author": {
+        "name": "hlii-ai"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/hlii-ai/orangekit",
+      "repository": "https://github.com/hlii-ai/orangekit",
+      "keywords": [
+        "claude-code",
+        "ai-native",
+        "dev-harness",
+        "code-review",
+        "planning"
+      ],
+      "category": "development-workflows",
+      "tags": [
+        "workflow",
+        "agent",
+        "governance",
+        "code-review",
+        "planning",
+        "nextjs",
+        "react",
+        "fastapi",
+        "aws",
+        "postgresql",
+        "drizzle"
+      ]
+    },
+    {
+      "name": "orangekit-marketing",
+      "source": "./marketing/",
+      "description": "Product marketing content pipeline — AI prompt generation → scroll-driven site build → SEO 3-Mode analysis → web asset generation. 5 marketing skills. Versioned independently of the dev harness.",
+      "version": "1.1.1",
+      "author": {
+        "name": "hlii-ai"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/hlii-ai/orangekit",
+      "repository": "https://github.com/hlii-ai/orangekit",
+      "keywords": [
+        "claude-code",
+        "marketing",
+        "seo",
+        "scroll-animation",
+        "og-image"
+      ],
+      "category": "productivity",
+      "tags": [
+        "marketing",
+        "seo",
+        "content",
+        "favicon",
+        "landing-page"
+      ]
+    },
+    {
+      "name": "orangekit-harness",
+      "source": "./harness/",
+      "description": "Harness-authoring tools only — the harness-evaluation skill, which evaluates the graph engine exhaustively on 8 axes at path granularity. Useless to people who **use** orangekit-product; installed only by people who **build** it. Versioned independently of the dev harness.",
+      "version": "1.1.0",
+      "author": {
+        "name": "hlii-ai"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/hlii-ai/orangekit",
+      "repository": "https://github.com/hlii-ai/orangekit",
+      "keywords": [
+        "claude-code",
+        "harness",
+        "evaluation",
+        "meta"
+      ],
+      "category": "development-workflows",
+      "tags": [
+        "harness",
+        "evaluation",
+        "graph",
+        "meta"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "axis": "backend",
+  "name": "fastapi",
+  "displayName": "FastAPI (self-hosted server · SQLAlchemy 2.0 + Pydantic v2 + PostgreSQL)",
+  "packVersion": "3.14.0",
+  "verified": "2026-08-24",
+  "extractedFrom": "Newly created — no empirical source. No other pack was opened, not even as a format reference (only assets/pack-resource-template.md was used)",
+
+  "backendType": "cloud-server",
+  "registry": "pypi",
+  "dataLayerPolicyEngine": false,
+  "policyEngineNote": "There is no row-level policy engine. The application connects to the DB over a trusted connection, so **a missing ownership filter is a data leak outright**. Carrying the BaaS axes' (supabase·firebase) 'RLS is the backup, so the application check is defense in depth' narrative over to this axis produces exactly the opposite instruction — a value that must be passed on when generating the seam",
+
+  "symbolSurface": true,
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task",
+    "note": "Every pack and seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from these values and the gate blocks any divergence — measured, the frontend used /tasks while the backend used /notes and the complete examples could not run against each other"
+  },
+
+  "fixesVariants": { "framework": "fastapi", "orm": "sqlalchemy" },
+  "fixesVariantsNote": "The router shape (APIRouter + Depends injection) and the query shape (SQLAlchemy 2.0 async ORM + Alembic) are the premise of the entire pack body. For a project that picked Django REST Framework, the ORM, routing, and serialization are a different system rather than a variant of FastAPI, so a separate axis pack is needed. The same goes for Flask + SQLAlchemy, whose dependency injection and async boundary differ",
+
+  "pkgs": [
+    "fastapi@0.141", "pydantic@2", "pydantic-settings@2",
+    "sqlalchemy@2", "greenlet@3", "alembic@1", "asyncpg@0.31",
+    "uvicorn@0.52", "pytest@9", "pytest-asyncio@1", "httpx@0.28",
+    "ruff@0.16", "pyright@1"
+  ],
+  "pkgsNote": "**For 0.x, write the minor too.** In semver's 0.y.z, y is the breaking-change axis, so declaring `fastapi@0` means rot never becomes visible (guide-freshness.sh catches that shape with a WARN). `greenlet` is an implicit dependency **without which SQLAlchemy 2.0 async cannot run a single line**, and there are environments where installing only `sqlalchemy` does not pull it in — it was absent from the venv audit B inherited, so not one data-access claim could be executed (measured). `pyright` is in pkgs because `pack-smoke.sh --online` installs only pkgs — without it the type check stays a skip, and that skip is not a pass but an uninspected check",
+
+  "runtime": { "python": "3.11", "postgresql": "16" },
+  "runtimeNote": "These are interpreter and server runtime versions, not PyPI dependencies. Put them in pkgs and the installer fetches the wrong package — `postgres@16` in node-api·aws-container was exactly that mistake (it is Porsager's npm driver and has no version 16)",
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "project-structure.md", "nav": "layer boundaries (routers → services → repo) · create_app assembly · lifespan · mounting APIRouter · dependency-injection wiring · registering exception handlers" },
+    { "file": "data-access.md",       "nav": "AsyncSession lifetime · ownership filter · checking rowcount · transaction boundary · keyset pagination · N+1 and selectinload" },
+    { "file": "migrations.md",      "nav": "Alembic wiring (synchronous migrations over an async engine) · what autogeneration cannot see · expand-contract · backfill and rowcount · CREATE INDEX CONCURRENTLY · where upgrade head is run · round trip and an empty diff" },
+    { "file": "input-validation.md",  "nav": "Pydantic v2 schemas · partial update and exclude_unset · model_config (extra) · validating the environment with pydantic-settings · boot-time failure" },
+    { "file": "error-handling.md",    "nav": "domain error → status code mapping · deciding IntegrityError by SQLSTATE (23505·23503) · normalizing RequestValidationError · no existence leaks" },
+    { "file": "testing.md",           "nav": "pytest-asyncio setup · calling the app directly with httpx ASGITransport · dependency overrides · integration tests against a real DB · test DB isolation and cleanup" },
+    { "file": "operations.md",        "nav": "lifespan shutdown and returning the pool · health checks (live/ready) · pool sizing · structured logging · observing slow queries" }
+  ],
+
+  "seamSlots": ["api-endpoints", "auth-boundaries", "complete-example"],
+
+  "seamSlotNotes": {
+    "api-endpoints": "APIRouter shape + request/response envelope + emitting the error envelope. The envelope is a function of the wire contract, so the combination decides it, not the axis. **Two things the axis nails down**: ⓐ the list query is received as `Annotated[TaskQuery, Query()]` (`Depends()` ignores `extra='forbid'`, so unknown parameters pass silently — confirmed by running it) ⓑ a successful create is **201** (the test guard asserts this value. For the seam to pick 200, the pack's tests have to be changed with it)",
+    "auth-boundaries": "how the token is verified (self-issued JWT · session cookie · external IdP) · wiring the `current_user` dependency · roles/scopes · login and logout flow. **The authentication method is not a function of the axis** — whether the frontend axis has a server runtime is what decides between a session cookie and a bearer token",
+    "complete-example": "a pass through migration → model → schema → repository → service → router → test"
+  },
+
+  "clusters": [
+    { "id": "C1", "pilot": true, "files": ["input-validation.md", "error-handling.md"],
+      "why": "Settings and the request schemas are a function of the error code table and vice versa. RequestValidationError → the field-error envelope and IntegrityError 23505 → 409 come out of one table. It is the pilot because it is where the `AppError` shape from requires is most entangled" },
+    { "id": "C2", "files": ["data-access.md", "project-structure.md"],
+      "why": "Ownership of the AsyncSession (engine · sessionmaker · the get_session dependency) and the wiring in create_app are the same decision. The layering discipline 'the data layer knows nothing about HTTP' also spans both files" },
+    { "id": "C3", "files": ["testing.md", "operations.md"],
+      "why": "They share the process lifetime (lifespan · pool · health checks). Test DB isolation and connection pool sizing handle the same resource, and dependency overrides retrace the wiring in create_app" }
+  ],
+
+  "knownGaps": [
+    {
+      "what": "no verified round trip against a real PostgreSQL 16",
+      "where": "resources/data-access.md · resources/testing.md · resources/operations.md",
+      "detail": "The authoring and verification environment had no PostgreSQL server, so verification was done by proxy on SQLite (aiosqlite). Framework- and ORM-layer results are engine-independent, but **SQLSTATE detection (23505·23503) · PG-specific behavior of Alembic autogeneration · the row-value comparison of keyset pagination** could not be run against the real thing. The proxy scope is written on each tag"
+    },
+    {
+      "what": "machine policies aimed at the seam are only decided after assembly",
+      "where": "the 3 rows with scope=seam in policies.md",
+      "detail": "`seam-no-http-exception` · `seam-status-lookup` · `seam-depends-current-user` only acquire target files once the seam exists. `--pack` explicitly reports these three as 'deferred until after assembly', and `--guide --assembly` decides them after `install-guide.sh` assembles"
+    }
+  ]
+}

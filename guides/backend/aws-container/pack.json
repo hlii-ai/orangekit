@@ -1,0 +1,64 @@
+{
+  "axis": "backend",
+  "name": "aws-container",
+  "displayName": "AWS containers (ECS/Fargate + RDS PostgreSQL)",
+  "packVersion": "3.12.0",
+  "verified": "2026-08-22",
+  "extractedFrom": "skills/react-aws-backend-guide (v3.11.0)",
+
+  "backendType": "cloud-server",
+  "dataLayerPolicyEngine": false,
+  "policyEngineNote": "There is no row-level policy engine. The application layer is the only boundary, so a missing ownership filter is a data leak. Move the BaaS axis pack's 'the data layer backs you up' statement here and it becomes exactly the opposite guidance — a value that must be passed on when generating the seam",
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task"
+  },
+
+  "fixesVariants": {
+    "framework": "hono",
+    "orm": "drizzle-orm"
+  },
+  "fixesVariantsNote": "The handler shape and the query shape are the premise of the entire pack body. Assemble this pack for a project running Express+Prisma on ECS and it gets the wrong guidance — that combination is owned by the backend/node-api pack",
+
+  "pkgs": [
+    "hono@4", "@hono/node-server@1", "typescript@5",
+    "drizzle-orm@0.45", "drizzle-kit@0.31", "pg@8", "jose@5", "zod@4",
+    "vitest@2",
+    "aws-cdk-lib@2", "@aws-sdk/client-s3@3", "@aws-sdk/s3-request-presigner@3"
+  ],
+
+  "runtime": { "postgresql": "16" },
+  "runtimeNote": "These are server runtime versions, not npm dependencies. Put them in pkgs and `npm i` fetches the wrong packages — `postgres` is Porsager's driver and has no version 16",
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "data-access.md",              "nav": "Drizzle queries and transactions · ownership filters · checking affected rows · running migrations" },
+    { "file": "input-validation.md",         "nav": "Writing Zod schemas · request parsing helpers · doubling up with DB constraints · the environment schema · failing at boot" },
+    { "file": "testing.md",                  "nav": "Vitest setup · real-DB integration tests · docker compose local parity · test DB isolation" },
+    { "file": "portability-boundaries.md",   "nav": "Confining AWS dependencies to the infrastructure layer · an on-premises migration checklist · logging, storage and secrets" },
+    { "file": "deployment-and-operations.md","nav": "Dockerfile · deploy order (migrations as a separate task) · health checks and shutdown · pool sizing · slow query observability" }
+  ],
+
+  "seamSlots": ["api-endpoints", "auth-boundaries", "complete-example"],
+
+  "seamSlotNotes": {
+    "api-endpoints": "The handler shape + request/response envelope + **error envelope emission** + **handler-layer tests**. The last two were pulled out of the axis files — the emission mechanism (NextResponse.json · res.json · Response) and tests that call the handler are a function of where the server code lives, so they depend on the frontend axis",
+    "auth-boundaries": "Token verification · requireAuth wiring · roles and scopes · login and logout flows · return path validation",
+    "complete-example": "Migration → schema → query → service → handler → test, end to end"
+  },
+
+  "knownGaps": [
+    {
+      "symbol": "insertTask",
+      "where": "resources/data-access.md",
+      "detail": "Of CRUD, only the create query is missing from the pack and lives in the seam's complete-example.md. The asymmetry was inherited from the original react-aws-backend-guide and is declared in the ledger's requires so it does not end up undefined after assembly",
+      "carriedFrom": "v3.11.0"
+    }
+  ]
+}

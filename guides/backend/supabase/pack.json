@@ -1,0 +1,42 @@
+{
+  "axis": "backend",
+  "name": "supabase",
+  "displayName": "Supabase (BaaS · PostgreSQL + RLS)",
+  "packVersion": "3.12.0",
+  "verified": "2026-08-21",
+  "extractedFrom": "skills/nextjs-backend-guide (v3.11.0) + nextjs-frontend-guide §Generated types",
+
+  "backendType": "baas",
+  "dataLayerPolicyEngine": true,
+  "policyEngineNote": "RLS is the last line of defense. Use it on the premise of defense in depth, together with application-layer checks. Moving this statement to an axis with no policy engine (aws-container and the like) turns it into exactly the opposite guidance — a value that must be passed on when generating the seam",
+
+  "symbolSurface": false,
+  "symbolSurfaceNote": "A pattern-knowledge pack — 0 top-level exports. The gate does not apply the reverse ledger check (find exports missing from the ledger) to this pack. See ledger.md for the full reasoning",
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task"
+  },
+
+  "fixesVariants": {},
+  "fixesVariantsNote": "No variant is nailed down. This pack is pattern-knowledge (0 exports) and the client, auth and policy are decided by the Supabase product — there is no in-axis branch the project can choose",
+
+  "pkgs": ["@supabase/ssr@0.12", "@supabase/supabase-js@2", "zod@4", "vitest@4"],
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "database-patterns.md", "nav": "Client matrix · typed queries · read/write patterns · filter misuse · embedded lookups · N+1 and indexes · RPC · storage · realtime · generated types" },
+    { "file": "testing.md",           "nav": "Vitest setup · Zod schema tests · local Supabase RLS integration tests · what not to test" }
+  ],
+
+  "seamSlots": ["api-endpoints", "auth-boundaries", "complete-example", "server-client", "handler-testing", "validation-and-errors", "edge-and-operations"],
+
+  "thinPackNote": "This pack is thin — 2 resources, 380 lines. A BaaS axis's backend guide is mostly about the host runtime (handlers, middleware, the error envelope, validation wiring), and the frontend axis decides that. Hence the 7 seamSlots — exactly the inverse ratio of a self-hosted server axis (aws-container: 5 pack resources, 1,191 lines · 3 seam slots).",
+
+  "knownGaps": []
+}

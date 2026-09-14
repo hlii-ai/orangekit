@@ -1,0 +1,84 @@
+{
+  "axis": "backend",
+  "name": "aws-serverless",
+  "displayName": "AWS serverless (Lambda + API Gateway + DynamoDB)",
+  "packVersion": "3.13.0",
+  "verified": "2026-08-23",
+  "extractedFrom": "Newly written — no proven original. No other pack was opened, not even as a format reference (only assets/pack-resource-template.md was used)",
+
+  "backendType": "serverless",
+  "dataLayerPolicyEngine": false,
+  "policyEngineNote": "DynamoDB has no row-level enforcement like RLS. IAM condition keys can restrict some of it but are not a general substitute — the application layer is the only real boundary, and leaving ownership out of the key condition is a data leak in waiting. Move the BaaS axis's 'double defense' statement here and it becomes exactly the opposite guidance",
+
+  "symbolSurface": true,
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task",
+    "note": "Uses the same example domain as the other packs. From this value L0 issues the vocabulary policy (vocab-task) so the gate blocks divergence"
+  },
+
+  "fixesVariants": { "iac": "aws-cdk-lib", "sdk": "@aws-sdk/lib-dynamodb" },
+  "fixesVariantsNote": "IaC is pinned to CDK and DynamoDB access to SDK v3's DocumentClient. A project that chose SAM (YAML templates) has an entirely different deployment and permissions section, so assembling this pack hands it the wrong guidance. A variant that goes to a relational DB makes backendType cloud-server, so backend/node-api or aws-container owns it",
+
+  "runtime": { "nodejs": "22", "lambdaArch": "arm64" },
+  "runtimeNote": "These are Lambda runtime versions, not npm dependencies",
+
+  "pkgs": [
+    "@aws-sdk/client-dynamodb@3", "@aws-sdk/lib-dynamodb@3",
+    "@aws-lambda-powertools/logger@2", "aws-cdk-lib@2", "constructs@10",
+    "zod@4", "typescript@5", "vitest@2", "esbuild@0.28",
+    "@types/aws-lambda@8", "@types/node@22", "aws-jwt-verify@5"
+  ],
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "handler-patterns.md",   "nav": "The Lambda handler shape · API Gateway events and responses · initialization outside the cold start · middleware composition · timeouts and retries · structured logging" },
+    { "file": "data-modeling.md",      "nav": "Access patterns first · single-table design · PK/SK combinations · choosing a GSI · item shape and version · contrast with relational habits" },
+    { "file": "data-access.md",        "nav": "The DocumentClient singleton · Query vs Scan · ownership in the key condition · conditional writes · pagination (LastEvaluatedKey) · batches and transactions" },
+    { "file": "input-validation.md",   "nav": "Zod schemas · parsing the event body, path and query · the environment schema · failing at cold start" },
+    { "file": "error-handling.md",     "nav": "Domain error → status code · identifying DynamoDB errors (ConditionalCheckFailed and the rest) · normalizing ZodError · no existence leaks" },
+    { "file": "deploy-and-iam.md",     "nav": "Composing the CDK stack · least-privilege IAM per function (read/write/batch) · bundling and bundle size · deploy order and irreversible changes" },
+    { "file": "testing.md",            "nav": "The test harness (invokeHandler) · the arrange step of a handler test · positive/negative pairs · separating the wiring layer from the data layer" }
+  ],
+
+  "seamSlots": ["api-endpoints", "auth-boundaries", "complete-example"],
+
+  "seamSlotNotes": {
+    "api-endpoints": "Route↔function mapping and emitting the response envelope. The envelope is a function of the wire contract",
+    "auth-boundaries": "Cognito token verification · extracting the subject from the claims · roles and scopes. **The auth method is a function of the combination, not of the axis** — a SPA frontend axis means bearer tokens, and a server runtime takes a different shape",
+    "complete-example": "IaC → table → access pattern → query → handler → test, end to end"
+  },
+
+  "clusters": [
+    { "id": "C1", "pilot": true, "files": ["input-validation.md", "error-handling.md"],
+      "why": "The environment schema and the error code table are functions of each other. ZodError → field-error envelope and DynamoDB ConditionalCheckFailed → 409 come out of one table. This is where the AppError shape in requires gets tangled the most" },
+    { "id": "C2", "files": ["data-modeling.md", "data-access.md"],
+      "why": "The key design is the query shape. Without a settled PK/SK you cannot use Query, and the GSI choice decides whether an ownership filter is possible at all — one author has to decide them together" },
+    { "id": "C3", "files": ["handler-patterns.md", "deploy-and-iam.md", "testing.md"],
+      "why": "The handler lifetime (cold start · where initialization goes · timeouts) and deployment and permissions are one decision. Per-function IAM is a function of what the handler calls" }
+  ],
+
+  "knownGaps": [
+    {
+      "what": "The test examples do not run as written",
+      "where": "resources/testing.md §1·§2",
+      "detail": "The handler test calls the real `handler` and that chain runs `EnvSchema.safeParse(process.env)` at module load — the vitest process has no `TABLE_NAME` or `AWS_REGION`, so it throws at the import step. Even past that, `getTask` calls the real `ddb.send`. The pack carries no stand-in method (`vi.mock` · seeding · starting DynamoDB Local) (audit A run confirmed: `Test Files 1 failed`)"
+    },
+    {
+      "what": "grantTaskAccess does not grant batch or transaction permissions",
+      "where": "resources/deploy-and-iam.md §3 ↔ resources/data-access.md §6",
+      "detail": "The pack teaches `TransactWriteCommand`, `BatchWriteCommand` and `BatchGetCommand` as normal patterns, yet the read 2 / write 3 actions of the IAM helper carry no `TransactWriteItems`, `BatchWriteItem`, `BatchGetItem` or `ConditionCheckItem`. Follow the pack and the deploy succeeds while the runtime returns AccessDenied → 500 (audits A and C)"
+    },
+    {
+      "what": "ValidationException goes out as a 500",
+      "where": "the ERROR_STATUS ↔ toAppError of resources/error-handling.md",
+      "detail": "The ordinary UI path of reusing a cursor against a query on a different index takes a DynamoDB `ValidationException` and becomes an `INTERNAL` 500. `data-access.md` admits the risk in prose but there is no mapping (audit A, measured)"
+    }
+  ]
+}

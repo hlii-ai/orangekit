@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- The **defect** fixture for ui-probe --self-test. It plants one of each of the 3 runtime axes.
+     Build a guard and you prove the blocking — and check that it trips **for the intended reason**
+     (with ORANGEKIT_FX_WHY=1 it also prints what tripped).
+
+       ① console error   — a direct console.error call
+       ② uncaught exception — a top-level throw
+       ③ failed request  — a local image that does not exist (net::ERR_FILE_NOT_FOUND under file://)
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ui-probe broken fixture</title>
+</head>
+<body>
+  <h1>A screen with defects planted in it</h1>
+  <p>The build passes but the screen is broken — that gap is why this mechanism exists.</p>
+
+  <!-- ③ failed request -->
+  <img src="./__missing_asset_do_not_create__.png" alt="missing image">
+
+  <button type="button">A button that does nothing</button>
+
+  <script>
+    // ① console error
+    console.error('ORANGEKIT_FIXTURE console error: the data was empty after render');
+  </script>
+  <script>
+    // ② uncaught exception — a separate script tag, so it does not stop ① from running
+    (function () {
+      var data = null;
+      document.body.dataset.count = data.items.length; // TypeError
+    })();
+  </script>
+</body>
+</html>

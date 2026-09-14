@@ -1,0 +1,44 @@
+{
+  "axis": "frontend",
+  "name": "vue",
+  "displayName": "Vue 3 + Vite 5 SPA",
+  "packVersion": "3.12.0",
+  "verified": "2026-08-23",
+  "extractedFrom": "Newly written — no empirical original (the react-vite pack was a format reference only, with a content firewall)",
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/tasks",
+    "note": "Every pack and seam uses the same example domain. The L0 contract passes this value to the seam and the gate's --pair checks it — this repairs the measured defect where the frontend called /tasks while the backend served /notes"
+  },
+
+  "fixesVariants": {
+    "store": "pinia",
+    "query": "@tanstack/vue-query"
+  },
+  "fixesVariantsNote": "The router is not a variant, since vue-router is effectively the only one. What varies is state management (Vuex still lingering) and the server cache",
+
+  "pkgs": [
+    "vue@3", "vite@5", "typescript@5", "vue-router@4", "pinia@2",
+    "tailwindcss@3.4", "@tanstack/vue-query@5", "vitest@2",
+    "@vue/test-utils@2", "msw@2", "clsx@2", "tailwind-merge@2"
+  ],
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "component-patterns.md",   "nav": "Building an SFC · declaring props/emits/slot types · extracting repeated UI into shared ones · generic components · who owns design tokens" },
+    { "file": "styling.md",              "nav": "Writing Tailwind classes · telling :class and cn() apart · defining variants · no scoped CSS·no inline style" },
+    { "file": "state-management.md",     "nav": "Deciding whether to add global state · writing a Pinia store · subscribing with storeToRefs · using a store outside a component · the URL as state" },
+    { "file": "routing.md",              "nav": "Adding a route · nested layouts · navigation guards · validating the return path · route/chunk errors · lazy loading · deep links (history fallback)" },
+    { "file": "loading-error-states.md", "nav": "Loading skeletons · empty states · error states · the onErrorCaptured boundary · why Suspense is not used · showing form validation errors" },
+    { "file": "types-and-testing.md",    "nav": "vue-tsc configuration · component props types · environment variable types · narrowing API responses · Vitest + @vue/test-utils component/store tests · msw HTTP mocking" }
+  ],
+
+  "seamSlots": ["data-fetching", "auth-and-session", "complete-example"],
+
+  "knownGaps": []
+}

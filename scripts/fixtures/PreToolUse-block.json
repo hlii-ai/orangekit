@@ -1,0 +1,1 @@
+{"session_id":"orangekit-doctor-test","cwd":"__ROOT__","tool_name":"Write","hook_event_name":"PreToolUse","tool_input":{"file_path":"src/config.ts","content":"export const client = init({\n  accessKeyId: 'AKIAIOSFODNN7EXAMPLE',\n  secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'\n})\n"}}

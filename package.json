@@ -1,0 +1,49 @@
+{
+  "name": "orangekit",
+  "version": "1.0.1",
+  "description": "OrangeKit Claude Code Devkit — AI Native Dev Harness Runtime Plugin",
+  "author": "gyeong",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hlii-ai/orangekit"
+  },
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "ai-native",
+    "dev-harness",
+    "phase-workflow",
+    "agent-orchestration",
+    "code-review",
+    "planning"
+  ],
+  "files": [
+    ".claude-plugin/",
+    "hooks/",
+    "scripts/",
+    "skills/",
+    "agents/",
+    "rules/",
+    "references/",
+    "guides/",
+    "presets/",
+    "templates/",
+    "schema/",
+    "docs/",
+    "workflow.graph.json"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "doctor": "bash scripts/doctor.sh",
+    "doctor:all": "bash scripts/doctor.sh --all",
+    "test": "bash scripts/doctor.sh --default && bash scripts/doctor.sh --self-test && bash scripts/doctor.sh --consumer && bash skills/ui-ux-design/scripts/ui-probe.sh --self-test",
+    "test:render": "bash skills/ui-ux-design/scripts/ui-probe.sh --self-test"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "axis": "backend",
+  "name": "aws-serverless",
+  "displayName": "AWS serverless (Lambda + API Gateway)",
+  "description": "A serverless backend assembled on AWS — Lambda + API Gateway + DynamoDB + Cognito. Deployed per function, with no resident server.",
+  "techStack": {
+    "backend": {
+      "backendType": "serverless",
+      "cloudProvider": "AWS",
+      "database": "DynamoDB",
+      "dataAccess": "AWS SDK v3",
+      "auth": "Amazon Cognito",
+      "language": "TypeScript",
+      "packageManager": "npm",
+      "commands": {
+        "build": "npm run build",
+        "test": "npm test",
+        "lint": "npm run lint"
+      },
+      "sourceDir": "src"
+    },
+    "additionalStack": ["AWS Lambda", "API Gateway", "DynamoDB", "Amazon Cognito", "IaC (CDK or SAM)"]
+  },
+  "notes": {
+    "securityBoundary": "**There is no row-level policy engine** — DynamoDB has no data-layer enforcement like RLS, so the application-layer authorization check is effectively the only boundary (IAM condition keys can restrict some things but are not a general substitute). Using the BaaS combination's 'defense in depth' wording verbatim is wrong — the guide must be written on the premise that a missing ownership check is a data leak",
+    "serverCodeLocation": "Lambda handlers (behind API Gateway). Even when the frontend axis has a server runtime, this backend owns the API",
+    "runtimeConstraints": "Cold starts, per-function IAM roles, an execution time limit, no resident connections — switching to a relational DB makes connection pooling (RDS Proxy, etc.) a mandatory topic",
+    "dataModeling": "DynamoDB centers on single-table design, partition/sort keys, and GSIs, so the T1 card (relational) lies dormant — write access-pattern-first design directly into the resources",
+    "variants": "To move to containers (ECS/Fargate + RDS), change backendType to cloud-server and re-fix the DB and data access"
+  }
+}

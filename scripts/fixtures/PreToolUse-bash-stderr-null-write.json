@@ -1,0 +1,9 @@
+{
+  "session_id": "orangekit-doctor-test",
+  "cwd": ".",
+  "tool_name": "Bash",
+  "hook_event_name": "PreToolUse",
+  "tool_input": {
+    "command": "printf 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\\n' > creds.txt 2>/dev/null"
+  }
+}

@@ -1,0 +1,1 @@
+{"session_id":"orangekit-doctor-test","cwd":"__ROOT__","tool_name":"Bash","hook_event_name":"PostToolUse","tool_input":{"command":"pnpm build"},"tool_response":{"exit_code":0}}

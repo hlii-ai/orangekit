@@ -1,0 +1,75 @@
+{
+  "axis": "frontend",
+  "name": "vanilla",
+  "displayName": "Vanilla JavaScript + Vite 8 (no framework · JSDoc + zod)",
+  "packVersion": "3.14.0",
+  "verified": "2026-08-24",
+  "extractedFrom": "newly created — no proven original. No other pack was opened, not even as a format reference (only assets/pack-resource-template.md was used)",
+
+  "registry": "npm",
+  "symbolSurface": true,
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/tasks",
+    "displayLabel": "Task",
+    "note": "Every pack and every seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from this value so that the gate blocks divergence — measured, the frontend used /tasks and the backend /notes, and the complete examples could not run against each other"
+  },
+
+  "fixesVariants": { "language": "javascript", "bundler": "vite", "router": "history-api" },
+  "fixesVariantsNote": "**The language is the whole of this pack.** The preset leaves the default at JavaScript, and that choice replaces the type-standard slot with **JSDoc + runtime schema validation** — a project that picks TypeScript gets that slot back, so this pack hands it not a variant but **the wrong thing**. Routing is pinned to a **single History API entry point**: choose multiple HTML entry points and the whole account of the router·state restoration·link interception becomes meaningless (it turns into a question about Vite's multi-input configuration). The bundler is Vite — `import.meta.env` and the module resolution rules are premises of the body text",
+
+  "pkgs": [
+    "vite@8", "zod@4", "vitest@4", "happy-dom@20", "typescript@7"
+  ],
+  "pkgsNote": "**`typescript` is not the language this pack ships but its checker.** tsc with `checkJs` on reads JSDoc comments as types and checks them — that is the only device that actually enforces this axis's type-standard slot. `pack-smoke.sh --online` installs only `pkgs`, so without it here the typecheck stays a skip, and **that skip is not a pass but an absence of checking**. Measured (2026-08-24): with `allowJs` alone, a planted JSDoc type error still came out as a typecheck pass. `happy-dom` is Vitest's DOM environment — lighter than jsdom, and it covers the surface this pack uses (DOM·events·History)",
+
+  "runtime": { "nodejs": "22", "browsers": "browsers with native support for ES2022 modules (Vite's default target)" },
+  "runtimeNote": "the runtime environment, not an npm dependency",
+
+  "notesLanguage": "This pack has no `dataLayerPolicyEngine` — that value is **a property of the backend axis**, and the frontend axis only learns it at combination time. When the seam is generated, the backend pack's value has to be passed along with it, and in a combination where the value is `false` (a self-hosted server·DynamoDB and the like) an account saying the data layer backs it up gives exactly the opposite instruction",
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "types-and-testing.md",   "nav": "the JSDoc type convention and checkJs · zod schemas and re-validation at the boundary · validated environment values (config) · Vitest + happy-dom · what not to test" },
+    { "file": "state-management.md",    "nav": "module-scope stores · subscribing and unsubscribing · derived values · the local vs global criterion · where not to use a store" },
+    { "file": "component-patterns.md",  "nav": "the DOM-manipulation boundary · building with the template element · event delegation · extracting a shared component and the duty to search before creating one · the cleanup contract" },
+    { "file": "styling.md",             "nav": "CSS custom properties and @layer · the tokens a component owns · the class-name convention · the boundary where inline styles are banned" },
+    { "file": "routing.md",             "nav": "the History API router · link interception and modifier keys · where the protected route goes · return-path validation (safeReturnTo) · 404 and scroll restoration" },
+    { "file": "loading-error-states.md","nav": "the three states loading·empty·error · AbortController and races · retry and backoff · where not to do an optimistic update" }
+  ],
+
+  "seamSlots": ["data-fetching", "auth-and-session", "complete-example"],
+
+  "seamSlotNotes": {
+    "data-fetching": "the actual API call·envelope parsing·cache. The envelope is a function of the wire contract, so the combination decides it, not the axis. **Two things the axis pins down**: ⓐ a response is not trusted input, so **parse it with zod at the boundary** (`TaskSchema.safeParse`) ⓑ cancellation goes through `AbortController` and that signal is handed to `createResource`",
+    "auth-and-session": "where the token·session is kept and how it is refreshed · the login/logout flow · the protected route's verdict. **The auth method is not a function of the axis** — the backend axis decides whether it is a session cookie or a bearer token. **The one thing the axis provides is `safeReturnTo`**, and the seam **must** pass the post-login return through it",
+    "complete-example": "schema → store → component → route → test, end to end"
+  },
+
+  "clusters": [
+    { "id": "C1", "pilot": true, "files": ["types-and-testing.md", "state-management.md"],
+      "why": "**This is the first pack of a new toolchain, so a pilot is mandatory.** The JSDoc convention and the zod schemas are premises of every other file, and the store's generic (`@template T`) is the hardest spot in JSDoc — whether tsc with `checkJs` on really checks that shape is confirmed here for the first time. Launch three clusters at once on top of a wrong convention and all of them get reverted" },
+    { "id": "C2", "files": ["component-patterns.md", "styling.md"],
+      "why": "The design tokens a component owns span both files. The class-name convention and the form of DOM creation are the same decision" },
+    { "id": "C3", "files": ["routing.md", "loading-error-states.md"],
+      "why": "A route change has to cancel the request in flight, so the lifetime of `AbortController` is tied to the router's. The three-state render and the 404 render contend for the same container" }
+  ],
+
+  "knownGaps": [
+    {
+      "what": "no real-browser round trip verified",
+      "where": "resources/routing.md · resources/component-patterns.md · resources/styling.md",
+      "detail": "The authoring·verification environment has no browser. **DOM·events·History are verified by proxy with `happy-dom`** (the Vitest environment), and the real render·computed CSS values·scroll restoration·per-browser differences in `popstate` cannot be run against the real thing. Each tag records how far the proxy reaches"
+    },
+    {
+      "what": "machine policies aimed at the seam are judged only after assembly",
+      "where": "the scope=seam entries in policies.md",
+      "detail": "The target files only exist once there is a seam. `--pack` reports them explicitly as deferred to after assembly, and once `install-guide.sh` has assembled, `--guide --assembly` renders the verdict"
+    }
+  ]
+}
