@@ -69,8 +69,10 @@ Run Claude Code in your project directory, then:
 ```
 
 It runs interactively:
-- **Pick the product shape** — web · hybrid app · native · API-only. It asks about the product before the technology, and this answer narrows the lists in the questions that follow
-- Pick a preset — frontend axis (nextjs·react-vite·vue·vanilla·none) + backend axis (supabase·firebase·aws-serverless·aws-container·gcp-serverless·fastapi·node-api·node-nest·none)
+- **Pick the product shape** — web · mobile app · API-only. It asks about the product before the technology, and this answer narrows the lists in the questions that follow. A mobile app then splits into hybrid (web screens + app shell) · cross-platform · fully native
+- Pick a preset — web screen axis (nextjs·react-vite·vue·vanilla·none) + app axis (react-native·flutter·ios-swift·android-kotlin·native-dual) + backend axis (supabase·firebase·aws-serverless·aws-container·gcp-serverless·fastapi·node-api·node-nest·fastify·rust-axum·none)
+- If it is not on the list, type it in as **custom**; if you are not sure, pick **get a recommendation** or **decide later**
+- Before writing any file, it shows a **confirmation summary** and asks you to confirm
 - Collect project information
 - Generate `orangekit.config.json` + `CLAUDE.md`
 - **Install rule cards into `.claude/rules/`** ← new in v3
@@ -114,10 +116,10 @@ A Phase number marks order, not obligation — when the 4 entry conditions hold,
 | Layer | Count | Contents |
 |------|-----|------|
 | **Hooks** | 5 scripts / 6 registrations | SessionStart · PreToolUse · Stop · PreCompact · SessionEnd · PostToolUse |
-| **Rules** | T0 41 lines + T1 9 cards 1,073 lines | T0 is injected by a hook at all times (plugin-owned). Of T1, `workflow-routing` is **always on, every session**; the rest load conditionally on a path match |
+| **Rules** | T0 41 lines + T1 9 cards 1,089 lines | T0 is injected by a hook at all times (plugin-owned). Of T1, `workflow-routing` is **always on, every session**; the rest load conditionally on a path match |
 | **Agents** | 2 | `orangekit-planner` (no writes) · `orangekit-reviewer` (read-only) |
 | **Skills** | 26 | Survey · planning · implementation · verification · security · PR workflow + stack guide generator + skill enhancer (the 5 marketing skills are split into `orangekit-marketing`, the 1 harness evaluation skill into the `orangekit-harness` plugin) |
-| **Presets** | 2-axis 5+9 | Frontend: nextjs·react-vite·vue·vanilla·none / Backend: supabase·firebase·aws-serverless·aws-container·gcp-serverless·fastapi·node-api·node-nest·none |
+| **Presets** | 3-axis 5+5+11 | Web screens: nextjs·react-vite·vue·vanilla·none / App: react-native·flutter·ios-swift·android-kotlin·native-dual / Backend: supabase·firebase·aws-serverless·aws-container·gcp-serverless·fastapi·node-api·node-nest·fastify·rust-axum·none |
 
 ### Hooks
 
@@ -232,7 +234,7 @@ regenerate with `/stack-guide-generator`.
 | `react-vite` × `aws-container` | React+Vite SPA + ECS/Fargate + RDS PostgreSQL + Drizzle | Uses the pre-built version |
 | `vue` × `node-api` | Vue 3 SPA + Express 5 + PostgreSQL + Prisma | Uses the pre-built version |
 | `none` × `none` | Custom | No guide (Core only) |
-| Every other combination | The combination of the two axes | Guide is **generated** (verification loop included) |
+| Every other combination | The combination of the axes (including the app axis · `fastify` · `rust-axum` · custom) | Guide is **generated** (verification loop included) |
 
 ## Project Override — precedence for the user's assets
 
@@ -283,7 +285,7 @@ It checks with `doctor --default` after each step as it goes, and preserves proj
 | Item | v2 | v3 |
 |------|-----|-----|
 | Hooks | 11 (many void from output-format violations such as Stop's `decision`/`reason`) | **5, every one self-testing** |
-| Rules | the generator copied them into `.claude/rules/` (3 unconditionally loaded + 11 conditional) | **T0 41 lines + T1 1,073 lines, installation demonstrated by `install-rules.sh`. The always-on/conditional split is kept** |
+| Rules | the generator copied them into `.claude/rules/` (3 unconditionally loaded + 11 conditional) | **T0 41 lines + T1 1,089 lines, installation demonstrated by `install-rules.sh`. The always-on/conditional split is kept** |
 | Verification strength | S/M/L size judgement | **reversibility axis (decided by path)** |
 | Phase | P0~P6 (`.claude/rules/task-workflow.md` loaded always) | **P0~P6 kept** — moved to `workflow-routing.md`, the always-loaded property preserved |
 | Agents | no frontmatter, access to every tool | **full contract + least privilege** |

@@ -27,9 +27,9 @@ across everything, repair round trips) and its mitigations are all there.
 > If L1 departs from the declaration the gate's ledger check catches it, and what has to be repaired is then limited to the
 > complete example alone. If departures are frequent, put L2 back behind L1 (+5 minutes of critical path).
 
-What to hand over: **the confirmed stack specification for both axes** (versions included) · the Step 2 combination dependency items
+What to hand over: **the confirmed stack specification for every axis being generated** (versions included — for the app axis, `techStack.app` · `appShell` · the app preset notes) · the Step 2 combination dependency items
 (where the server code lives · the security boundary · whether there is a policy engine · the language) · **the full text of the Step 3-0 contract file**
-(for two guides, identical on both sides down to the wording) · **the package manager** (the preset's `packageManager`) ·
+(for two or more guides, identical in all of them down to the wording) · **the package manager** (the preset's `packageManager`) ·
 **the list of pinned packages and major versions** (this becomes `pkgs=` in the generation stamp — without it the later drift
 check has nothing to compare against) · absolute paths to the spec and the gate script · the output location ·
 the generation rules below · "return the final text as data (file list · line counts · slot mapping · empty slots · **the ledger**)".
@@ -71,10 +71,10 @@ Generation rules (instruct the subagent with these verbatim):
    - **Tag version claims** — when you write something of the form `added in vN / removed in vN` · `now requires` · `no longer`,
      put `<!-- verified: evidence -->` or `<!-- unverified -->` on the same line or the line before.
      The gate collects untagged claims and hands them to audit B (measured: 5 of this class were false)
-4. Organize resources/ according to the spec's **resource slot table** — cover the 7 required slots
+4. Organize resources/ according to the spec's **resource slot table** — cover that guide's required slots (7 for frontend · backend, 6 for app)
    with dedicated files or by merging (leave a slot you are unsure of empty, but state it in the report), and
    split into the 6~10 files derived from the slot count, mapping every one of them in the Navigation Guide
-5. Output location: the project's `.claude/skills/frontend-guide/` · `.claude/skills/backend-guide/`
+5. Output location: the project's `.claude/skills/frontend-guide/` · `.claude/skills/backend-guide/` · `.claude/skills/app-guide/`
 6. **Run the gate yourself before returning** — reach **0 FAILs** with `guide-gate.sh --guide <path> --generated`
    and then return. Do not fix WARNs and REVIEWs; **report them with a reason attached**
 7. **For a relational DB, link to the data-modeling card — do not copy it.** The canonical source is

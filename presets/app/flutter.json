@@ -1,0 +1,27 @@
+{
+  "axis": "app",
+  "name": "flutter",
+  "displayName": "Flutter",
+  "description": "Flutter + Dart + Riverpod + go_router + Dio. Draws native iOS and Android UI from one codebase.",
+  "fits": ["cross-platform"],
+  "techStack": {
+    "app": {
+      "framework": "Flutter",
+      "language": "Dart",
+      "packageManager": "pub",
+      "platforms": ["ios", "android"],
+      "commands": {
+        "build": "flutter analyze",
+        "test": "flutter test",
+        "lint": "flutter analyze"
+      },
+      "sourceDir": "lib",
+      "additionalStack": ["Riverpod", "go_router", "Dio", "freezed"]
+    }
+  },
+  "notes": {
+    "platformBoundary": "Tokens go in flutter_secure_storage (Keychain · Keystore) — shared_preferences is plaintext. Platform features are called through plugins or platform channels, and permissions are declared in Info.plist · AndroidManifest",
+    "toolchain": "**The toolchain splits from the web frontend and the backend** (pub ↔ npm). Shared types are generated from a language-neutral contract such as OpenAPI",
+    "release": "Store review is the only release path (no code push). Old app versions keep running, so API version negotiation is required"
+  }
+}

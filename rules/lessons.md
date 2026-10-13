@@ -3,6 +3,10 @@ paths:
   - "src/**"
   - "app/**"
   - "packages/**"
+  - "apps/**"
+  - "services/**"
+  - "ios/**"
+  - "android/**"
   - "lib/**"
   - ".claude/**"
   - "scripts/**"
@@ -10,7 +14,7 @@ paths:
   - "docs/lessons.md"
   - "docs/lessons-archive.md"
 ---
-<!-- orangekit-rule-version: 3.28.0 -->
+<!-- orangekit-rule-version: 3.32.0 -->
 <!-- paths must fire "when doing work that could draw a correction", not "when editing the lessons file".
      Match only lessons.md and it loads after you already went to record — the trigger is inverted. -->
 

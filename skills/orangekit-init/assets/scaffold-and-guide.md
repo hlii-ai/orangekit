@@ -59,15 +59,17 @@ previous version of this section became **a rule that deleted the resources just
 mkdir -p .orangekit && cat > .orangekit/preset-notes.json <<'JSON'
 { "serverCode": "<frontend preset notes>", "securityBoundary": "<backend preset notes>",
   "policyEngine": <true|false>, "language": "<TypeScript|JavaScript>",
-  "deliveryModel": "<web|hybrid|native|api-only>", "clientKind": "<browser|app>",
-  "pwa": <true|false>, "nativeStack": "<native only>" }
+  "deliveryModel": "<web|hybrid|cross-platform|native|api-only>", "clientKind": "<browser|app>",
+  "pwa": <true|false>, "appShell": "<hybrid only>", "nativeStack": "<when there is an app axis>",
+  "appNotes": "<app preset notes — when there is an app axis>" }
 JSON
 
 SEAM=""
 [ -d "${CLAUDE_PLUGIN_ROOT}/guides/seams/<frontend>+<backend>" ] && SEAM="--seam <frontend>+<backend>"
 
+# Pass the axis values exactly as in the config's presets — custom is a generation target; undecided and none are skipped
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-guide.sh" \
-  --frontend <frontend preset|none> --backend <backend preset|none> $SEAM \
+  --frontend <presets.frontend> --backend <presets.backend> --app <presets.app> $SEAM \
   --gate --notes .orangekit/preset-notes.json
 ```
 
@@ -79,7 +81,7 @@ The single `status:` line at the end of the output is the whole result:
 | `resources` | resources only — awaiting the seam (**a normal intermediate state**) | nothing |
 | `generate` | the pack is missing or incomplete, so full generation is needed | nothing |
 | `pinned` | kept the stack assumptions of an already-installed guide | nothing |
-| `skip` | that axis is `none` | nothing |
+| `skip` | that axis is `none` or `undecided` (not chosen) | nothing |
 
 - **Do not write `.orangekit/guide-job.json` by hand.** If work remains the script writes it, and if
   not it deletes it. It is the side that knows what is left per axis

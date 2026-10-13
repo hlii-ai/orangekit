@@ -1,12 +1,13 @@
 # Presets Guide
 
-Presets are split into **two axes: frontend and backend**. Pick one of each in `/orangekit-init` and the
-stack combination is fixed, which determines the guide skill for that combination.
+Presets are split into **three axes: web screens (frontend) · app · backend**. `/orangekit-init` asks only for
+the axes the product shape needs, and the fixed combination determines the guide skills.
 
-> **Why two axes**: because guide content is not a function of one axis but **a function of the combination**.
+> **Why several axes**: because guide content is not a function of one axis but **a function of the combination**.
 > The same Supabase, paired with Next.js, centers on Route Handlers and Server Actions; paired with a
 > React+Vite SPA it centers on Edge Functions and direct browser calls — a completely different guide.
-> Both axes must be fixed first before a guide that accounts for both can be built.
+> Every axis must be fixed first before a guide that accounts for the others can be built.
+> The app axis is separate from the web screen axis because, as with a hybrid RN shell, **both live in one product**.
 
 ## Frontend axis (`presets/frontend/`)
 
@@ -25,21 +26,26 @@ guide's type-standard slot is replaced by JSDoc conventions and runtime schema v
 ## Product shape is a dimension too (`techStack.deliveryModel`)
 
 **The first thing `/orangekit-init` asks** is not the framework but **what you are building** —
-web · hybrid app · native family · API-only. Instead of a technical question you must already know the answer
-to, a product question anyone can answer comes first, and that answer narrows the list in later questions.
+web · mobile app · API-only. Instead of a technical question you must already know the answer to, a product
+question anyone can answer comes first, and that answer narrows the list in later questions. A mobile app splits by approach in the next question.
 
-| value | meaning | frontend axis |
-| --- | --- | --- |
-| `web` | reached through a browser. Installable if `pwa: true` | all 4 |
-| `hybrid` | one web codebase for both web and store apps (Capacitor, etc.) | all 4. **But `nextjs` is forced to static export** |
-| `native` | React Native · Flutter · Swift · Kotlin | **no matching axis pack** — generated with `nativeStack` as input |
-| `api-only` | no user-facing screen | `none` |
+| value | meaning | web screen axis | app axis |
+| --- | --- | --- | --- |
+| `web` | reached through a browser. Installable if `pwa: true` | all 4 | `none` |
+| `hybrid` | web screens inside an app shell. The shell approach is `appShell` | all 4. **But `nextjs` is forced to static export** | `none` for Capacitor, `react-native` for an RN shell |
+| `cross-platform` | native iOS and Android UI from one codebase | `none` (that axis if there is a separate web) | `react-native` · `flutter` |
+| `native` | built per platform | `none` (that axis if there is a separate web) | `ios-swift` · `android-kotlin` · `native-dual` |
+| `api-only` | no user-facing screen | `none` | `none` |
+
+**The hybrid app shell (`appShell`)** — `capacitor` (almost no shell code) · `rn-webview` (RN only wraps a
+webview) · `rn-native-screens` (native screens such as maps and camera are mixed into the RN shell). With the RN
+family, web screens and app code live **in one product**, so both the web screen axis and the app axis are used.
 
 **Why it is a dimension and not an axis** — because it **turns conditional slots in existing packs on and off**
 rather than adding packs. As an axis, the pre-built set would grow as a product and exceed an auditable count.
 
-The derived value **`clientKind`** (`browser` for `web`, `app` for the other three) is what splits the backend
-guide. From the backend's point of view hybrid and native are all the same — it is not "a browser talking to a
+The derived value **`clientKind`** (`browser` for `web`, `app` for the rest) is what splits the backend
+guide. From the backend's point of view hybrid, cross-platform and native are all the same — it is not "a browser talking to a
 server" but **"an app talking to an API"**.
 
 | slot | `browser` | `app` |
@@ -67,6 +73,8 @@ The backend comes in **three shapes** — these are not peer entries that differ
 | `fastapi` | own server | **Python** · FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic + pytest | the application layer is the only boundary |
 | `node-api` | own server | Express 5 + PostgreSQL + Prisma + Zod | the application layer is the only boundary |
 | `node-nest` | own server | NestJS 11 + PostgreSQL + TypeORM 1 + class-validator | the application layer is the only boundary. An **array `where` means OR**, so ownership must be repeated on every branch |
+| `fastify` | own server | Fastify 5 + PostgreSQL + Drizzle + Zod — **no pre-built pack** | the application layer is the only boundary. The auth hook applies **only inside the plugin context that registered it** |
+| `rust-axum` | own server | **Rust** · Axum + Tokio + SQLx + PostgreSQL — **no pre-built pack** | the application layer is the only boundary. Check the auth layer's scope (`route_layer`) on every router |
 | `none` | — | no backend / consuming an external REST API | where the external API token is stored is the danger point |
 
 **Whether the data layer has a policy engine is the biggest divider of guide content.** With one, the
@@ -74,6 +82,29 @@ application check is defense in depth; without one, a missing ownership check is
 descriptions creates a false sense of safety, so this value is always passed at generation time.
 
 `frontend: none` + `backend: none` corresponds to the former `blank` preset.
+
+## App axis (`presets/app/`)
+
+| name | stack | used for |
+| --- | --- | --- |
+| `react-native` | Expo + React Native + Expo Router + TanStack Query + Zustand | cross-platform · hybrid RN shell |
+| `flutter` | Flutter + Riverpod + go_router + Dio | cross-platform |
+| `ios-swift` | Swift + SwiftUI + Swift Concurrency | native (iOS only) |
+| `android-kotlin` | Kotlin + Jetpack Compose + Coroutines + Hilt | native (Android only) |
+| `native-dual` | iOS (Swift) + Android (Kotlin), two codebases | native (both) |
+
+**The app axis has no pre-built packs** — something is pre-built only when it can be registered as an audit target,
+so `app-guide` always takes the generation path. A preset supplies only defaults (framework · commands · directories) and combination context (notes).
+
+## Custom · undecided
+
+Every axis value is either a preset name or one of the three below. **Never invent a preset name.**
+
+| value | meaning | guide |
+| --- | --- | --- |
+| `custom` | user-defined — a stack not on the list. Its real name goes in that axis's `framework` | generation path |
+| `undecided` | not chosen — to be decided later | not built (later, via `/stack-guide-generator`) |
+| `none` | not applicable | none |
 
 ## Combination → guide mapping — the pre-built unit is the axis
 

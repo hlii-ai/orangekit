@@ -1,5 +1,19 @@
 # Lessons
 
+## [category: skill] With no recording rule for stacks outside the choices, init invented preset names
+
+- date: 2026-10-13
+- situation: In a consumer project (OrangeTopia), the init result recorded `presets: {frontend: "expo-universal", backend: "fastify"}`.
+  Neither name is a preset in any repository. It was recorded as hybrid, but the real structure was an RN app as the
+  primary shape, and the RN shell had no place to be recorded. The user pointed out: "don't make up stacks that don't
+  exist — have me type them in as custom."
+- mistake: The schema had a `presets` enum, but the init spec never defined the **recorded value** for an "other" entry or a "native family" pick,
+  so the model filled the blank with a plausible-looking name. No step showed the user what would be written before the files were created, so the
+  invented value never passed a human's eyes. And with only two axes, a product holding both web screens and app code could not be expressed.
+- lesson: A choice that accepts free input is specified **down to what it records** — normalize when it matches a pack name; otherwise record
+  `custom` and keep the original name in another field. Define the exit for someone who does not know (`undecided` · recommend) to the same level.
+  And put a **source-labelled confirmation summary** before generation — values produced by measurement, inference, or normalization get filtered only there.
+
 ## [category: tooling] A message string in a branch that never runs is never evaluated
 
 - date: 2026-09-13

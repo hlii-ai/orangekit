@@ -3,9 +3,13 @@ paths:
   - "src/**"
   - "app/**"
   - "packages/**"
+  - "apps/**"
+  - "services/**"
+  - "ios/**"
+  - "android/**"
   - "lib/**"
 ---
-<!-- orangekit-rule-version: 3.27.0 -->
+<!-- orangekit-rule-version: 3.32.0 -->
 
 # Code Change Card
 

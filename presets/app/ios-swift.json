@@ -1,0 +1,23 @@
+{
+  "axis": "app",
+  "name": "ios-swift",
+  "displayName": "iOS native (Swift + SwiftUI)",
+  "description": "Swift + SwiftUI + Swift Concurrency + Swift Package Manager. An iOS-only native app.",
+  "fits": ["native"],
+  "techStack": {
+    "app": {
+      "framework": "SwiftUI",
+      "language": "Swift",
+      "packageManager": "spm",
+      "platforms": ["ios"],
+      "commands": { "build": "", "test": "", "lint": "" },
+      "sourceDir": "ios",
+      "additionalStack": ["SwiftUI", "Swift Concurrency", "Swift Package Manager", "XCTest"]
+    }
+  },
+  "notes": {
+    "platformBoundary": "Tokens go in the Keychain — UserDefaults is plaintext. Without permission usage descriptions (NS…UsageDescription in Info.plist) the app is rejected in review or crashes at runtime",
+    "toolchain": "Commands depend on the Xcode scheme name, so the preset does not set them — init confirms `xcodebuild -scheme <scheme>` with the user",
+    "release": "Store review is the only release path. Old app versions keep running, so API version negotiation is required"
+  }
+}

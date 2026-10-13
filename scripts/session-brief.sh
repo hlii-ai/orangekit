@@ -283,6 +283,9 @@ GJ="$ORANGEKIT_ROOT/.orangekit/guide-job.json"
 if [ -f "$GJ" ]; then
   GJ_STATUS=$({ grep -oE '"status"[[:space:]]*:[[:space:]]*"[a-z]+"' "$GJ" 2>/dev/null || true; } | sed -E 's/.*"([a-z]+)"$/\1/')
   GJ_COMBO=$({ grep -oE '"combo"[[:space:]]*:[[:space:]]*"[^"]*"' "$GJ" 2>/dev/null || true; } | sed -E 's/.*"([^"]*)"$/\1/')
+  # The app axis is not in combo (web + backend) — append it so app-only work does not show up as `none+none`
+  GJ_APP=$({ grep -oE '"app"[[:space:]]*:[[:space:]]*"[^"]*"' "$GJ" 2>/dev/null || true; } | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+  case "${GJ_APP:-none}" in none|undecided|"") ;; *) GJ_COMBO="${GJ_COMBO:-?} · app=$GJ_APP" ;; esac
   case "${GJ_STATUS:-}" in
     pending|running|interrupted)
       printf -- '- guide generation unfinished (`%s`, status %s) — carry on with `/stack-guide-generator`\n' \

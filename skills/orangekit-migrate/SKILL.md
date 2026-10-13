@@ -166,3 +166,17 @@ Handle these at the same time as the conversion:
   `commands` into it (if the frontend is `none`, copy them into the backend axis instead)
 - **Leave the top-level `commands` alone** — it is the project-wide value that build-gate and health-check read
 - Update `preset` to the composite notation `"<frontend>+<backend>"`
+
+## App axis migration (a config whose product form predates the 3 axes)
+
+The meaning of `deliveryModel` has narrowed — the old `native` covered all of React Native · Flutter · Swift · Kotlin,
+and now it covers only per-platform development (Swift · Kotlin). If there is no `presets.app`, convert as follows:
+
+| Old value | New value |
+| --- | --- |
+| `native` + `nativeStack` is React Native · Expo | `deliveryModel: "cross-platform"` · `presets.app: "react-native"` · `frontend: "none"` |
+| `native` + `nativeStack` is Flutter | `deliveryModel: "cross-platform"` · `presets.app: "flutter"` · `frontend: "none"` |
+| `native` + `nativeStack` is Swift · Kotlin | keep `deliveryModel` · confirm `presets.app` among `ios-swift` · `android-kotlin` · `native-dual` |
+| `native` + any other `nativeStack` | `presets.app: "custom"` |
+| `hybrid` + no `appShell` | `appShell: "capacitor"` · `presets.app: "none"` — if the shell is RN, confirm with the user and correct to `rn-webview` · `rn-native-screens` + `presets.app: "react-native"` |
+| A name outside the enum in `presets.*` (an invented name) | change it to `custom` and move the original name into that axis's `framework` |

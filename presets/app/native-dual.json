@@ -1,0 +1,24 @@
+{
+  "axis": "app",
+  "name": "native-dual",
+  "displayName": "iOS + Android native (Swift · Kotlin, one each)",
+  "description": "Two per-platform codebases — Swift + SwiftUI for iOS, Kotlin + Jetpack Compose for Android. Uses ios-swift and android-kotlin together.",
+  "fits": ["native"],
+  "techStack": {
+    "app": {
+      "framework": "SwiftUI + Jetpack Compose",
+      "language": "Swift + Kotlin",
+      "packageManager": "spm + gradle",
+      "platforms": ["ios", "android"],
+      "commands": { "build": "", "test": "", "lint": "" },
+      "sourceDir": "ios",
+      "additionalStack": ["SwiftUI", "Swift Concurrency", "Jetpack Compose", "Kotlin Coroutines + Flow", "Hilt"]
+    }
+  },
+  "notes": {
+    "platformBoundary": "Tokens go in the platform secure storage (Keychain · Android Keystore)",
+    "toolchain": "**There are two toolchains.** The representative command is confirmed as a root script (a Makefile, etc.) that runs both platforms — without one, build-gate verifies only one side",
+    "sourceDirs": "Android code lives in android/ — the preset sourceDir is a single value, so it holds only ios. init Step 4.7 takes both directories and puts them into the card paths together",
+    "parity": "The same feature is implemented twice. The canonical screen and domain rules live in a shared contract (API · design tokens), and both implementations follow it"
+  }
+}

@@ -18,8 +18,9 @@
 {{#each techStack.additionalStack}}- **{{this}}**
 {{/each}}- **Package manager**: {{techStack.packageManager}}
 {{#if domains.sharedPackage}}- **Project structure**: monorepo (root app + `{{domains.sharedPackage}}`)
-{{/if}}{{#if (eq techStack.deliveryModel "hybrid")}}- **Product form**: hybrid app — web code wrapped in a native shell. **Do not assume browser-only APIs** (background location·step count·push need a native bridge). Tokens go in secure storage, not in cookies
-{{/if}}{{#if (eq techStack.deliveryModel "native")}}- **Product form**: native family ({{techStack.nativeStack}}) — do not assume web APIs. Tokens go in secure storage
+{{/if}}{{#if (eq techStack.deliveryModel "hybrid")}}- **Product form**: hybrid app — web screens wrapped in an app shell{{#if techStack.nativeStack}} ({{techStack.nativeStack}}){{/if}}. **Do not assume browser-only APIs** (background location·step count·push need a native bridge). Tokens go in secure storage, not in cookies{{#if (eq techStack.appShell "rn-native-screens")}}. **Screens live in two codebases** — web screens (`{{techStack.frontend.sourceDir}}`) and RN native screens (`{{techStack.app.sourceDir}}`). Web ↔ native bridge messages are a shared contract{{/if}}
+{{/if}}{{#if (eq techStack.deliveryModel "cross-platform")}}- **Product form**: cross-platform app ({{techStack.nativeStack}}) — one codebase ships iOS and Android. Do not assume web APIs. Tokens go in secure storage
+{{/if}}{{#if (eq techStack.deliveryModel "native")}}- **Product form**: native app ({{techStack.nativeStack}}) — built per platform. Do not assume web APIs. Tokens go in secure storage
 {{/if}}{{#if (eq techStack.deliveryModel "api-only")}}- **Product form**: API only — there is no user-facing screen
 {{/if}}{{#if techStack.pwa}}- **Product form**: installable web (PWA) — offline behavior and an update strategy are requirements
 {{/if}}

@@ -1,0 +1,31 @@
+{
+  "axis": "backend",
+  "name": "rust-axum",
+  "displayName": "Rust API server (Axum + SQLx)",
+  "description": "A self-operated Rust API server — Axum + Tokio + PostgreSQL + SQLx (compile-time checked queries) + serde.",
+  "techStack": {
+    "backend": {
+      "backendType": "cloud-server",
+      "cloudProvider": null,
+      "database": "PostgreSQL",
+      "dataAccess": "SQLx",
+      "auth": "",
+      "framework": "Axum",
+      "language": "Rust",
+      "packageManager": "cargo",
+      "commands": {
+        "build": "cargo build",
+        "test": "cargo test",
+        "lint": "cargo clippy -- -D warnings"
+      },
+      "sourceDir": "src"
+    },
+    "additionalStack": ["Axum", "Tokio", "SQLx", "serde", "tower-http"]
+  },
+  "notes": {
+    "securityBoundary": "The application layer is the only boundary. The trap specific to this axis is **extractor order and the scope of middleware layers**: attach the auth layer to only some routers instead of via `Router::route_layer` and the remaining routes open up unauthenticated. The authentication method is undecided, so it is a question to confirm",
+    "serverCodeLocation": "The API server in this repository. Its language differs from the frontend's, so shared types cross over through a language-neutral contract such as OpenAPI",
+    "toolchain": "**The toolchain splits from the frontend's** (cargo ↔ npm). Commands are taken per axis and the representative command is confirmed. Without SQLx offline mode (`.sqlx/`), the build needs a DB connection",
+    "variants": "There is no prebuilt pack — the guide takes the generation path. Other frameworks such as Actix Web are entered as user-defined"
+  }
+}

@@ -87,6 +87,17 @@ Keep to the file-count budget (6~10) by merging. A slot name is a concept; file 
 | Testing | This stack's standard test tools and patterns |
 | Complete example | One endpoint end to end, validation → handling → response |
 
+**app-guide required slots 6** (when there is an app axis — `presets.app` is neither `none` nor `undecided`):
+
+| Slot | Content contract |
+| --- | --- |
+| Screens · navigation | This stack's screen definitions · stack/tab navigation · deep links. For a hybrid RN shell, **the transition rules between native screens ↔ webview screens** are the center of this slot |
+| Bridge contract | Required only for a hybrid RN shell (empty is normal otherwise). **Verify the origin on receipt** of a webview message — accept without verification and any page loaded in the webview can call native features. The message schema lives in the shared contract package and follows the bridge section of the Step 3-0 contract file verbatim |
+| Data · auth transport | The API client layer + **tokens in the platform secure storage** (Keychain · Keystore · secure-store) — plaintext storage (AsyncStorage · shared_preferences · UserDefaults · SharedPreferences) is forbidden. Offline resends carry an idempotency key (paired with the backend-guide idempotent ingest slot) |
+| Permissions · device features | Runtime permission requests paired with manifest declarations (Info.plist · AndroidManifest · app.json), and the fallback flow on denial. Only whichever of location · camera · push the project uses |
+| Release · update | Store review · what OTA can cover (RN only; native module changes cannot) · forced update paired with API version negotiation |
+| Complete example | One screen end to end: entry → data load → an action that needs a permission → showing the result |
+
 **Optional slots** (0~3 depending on stack complexity and confidence): file organization · performance · language/type standards ·
 architecture deep-dive · frontend testing · stack-specific mechanisms (a framework's mutation mechanism,
 patterns specific to a data platform, etc.)

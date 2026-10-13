@@ -19,14 +19,17 @@ Create `orangekit.config.json` from the collected information:
   },
 
   "techStack": {
-    "presets": { "frontend": "<Step 2 choice>", "backend": "<Step 2 choice>" },
+    // Each value is one of: a name from presets/<axis>/<name>.json · custom (user-defined) · undecided (not chosen) · none.
+    // **Never invent a name** — a stack with no pack is custom, and its real name goes in that axis's framework
+    "presets": { "frontend": "<Step 2 choice>", "app": "<Step 2 choice — none if there is no app>", "backend": "<Step 2 choice>" },
     "preset": "<frontend>+<backend>",           // backward-compatible notation — presets is canonical
 
     // Dimensions — not axes. They do not pick a pack; they turn the pack's conditional slots on and off
-    "deliveryModel": "<web | hybrid | native | api-only — Step 2 ① choice>",
+    "deliveryModel": "<web | hybrid | cross-platform | native | api-only — Step 2 choice mapping table>",
     "clientKind": "<browser | app>",            // derived: browser for web, app for the rest
     "pwa": false,                                // only meaningful for web. Turns on the service-worker and install slots
-    "nativeStack": "",                           // only for native. React Native, Flutter, etc.
+    "appShell": "",                              // only for hybrid. capacitor | rn-webview | rn-native-screens | custom
+    "nativeStack": "",                           // a human-readable summary when presets.app is not none
     "vcsPlatform": "<github | gitlab>",          // the Step 0 remote decision. Splits the issue and change-request commands
 
     // Project-level values — build-gate and health-check read these. Always fill them
@@ -43,6 +46,15 @@ Create `orangekit.config.json` from the collected information:
       "sourceDir": "<preset default>",
       "additionalStack": []
     },
+    "app": {                                     // app axis (empty when presets.app is none)
+      "framework": "<input or preset default>",
+      "language": "<input or preset default>",
+      "packageManager": "<input or preset default>",
+      "platforms": ["ios", "android"],
+      "commands": { "build": "", "test": "", "lint": "" },
+      "sourceDir": "<Step 4.7 app directory or preset default>",
+      "additionalStack": []
+    },
     "backend": {                                 // backend axis
       "backendType": "<baas | serverless | cloud-server | framework-builtin | empty>",
       "cloudProvider": "<input or null>",
@@ -55,7 +67,7 @@ Create `orangekit.config.json` from the collected information:
       "commands": { "build": "", "test": "", "lint": "" },
       "sourceDir": "<self-hosted server only>"
     },
-    "additionalStack": []                        // base + both axes, accumulated
+    "additionalStack": []                        // base + every axis, accumulated
   },
 
   "domains": {

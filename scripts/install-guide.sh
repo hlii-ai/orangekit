@@ -11,11 +11,16 @@
 # that copy diverges — it actually did diverge, and became a rule that deleted a healthy assembly.
 #
 # Usage:
-#   install-guide.sh --frontend <pack|none> --backend <pack|none> [--seam <combo>]
+#   install-guide.sh --frontend <pack|none> --backend <pack|none> [--app <app|none>] [--seam <combo>]
 #                    [--gate] [--notes <file>] [--dry-run] [--force] [--no-freshness]
 #
 #   --frontend react-vite     uses guides/frontend/react-vite
 #   --backend  supabase       uses guides/backend/supabase
+#   --app      react-native   the app axis (presets/app/). **There are no prebuilt packs, so it is always a generation target**
+#                             — nothing is assembled; it is only recorded as "app" in guide-job.json's need
+#
+#   The axis value `custom` (user-defined) has no pack, so it is a generation target; `undecided` (not chosen) is
+#   skipped like `none` — no guide is built by guesswork for an axis that is still undecided
 #   --seam     nextjs+supabase  also installs the prebuilt seam (cache → pack only, when absent)
 #   --gate                      passes only axes built as far as SKILL.md to guide-gate.sh.
 #                               An axis assembled to resources only is not passed — the gate judges a missing
@@ -61,6 +66,7 @@ G="$PLUGIN_ROOT/guides"
 
 FE=""; BE=""; SEAM=""; DRY=0; FORCE=0; SAVE_SEAM=""; NO_CACHE=0; CHECK_FRESH=1
 GATE=0; NOTES=""; AXIS_STATE=""; FE_STATE=skip; BE_STATE=skip; SELFTEST=0
+APP=""; APP_STATE=skip
 PLUGIN_VER=$(grep -m1 -oE '"version"[[:space:]]*:[[:space:]]*"[0-9.]+"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
 PLUGIN_VER="${PLUGIN_VER:-0.0.0}"
 CACHE_ROOT="${ORANGEKIT_SEAM_CACHE:-$HOME/.claude/orangekit/seam-cache}"
@@ -68,6 +74,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --frontend) FE="${2:-}"; shift 2 ;;
     --backend)  BE="${2:-}"; shift 2 ;;
+    --app)      APP="${2:-}"; shift 2 ;;
     --seam)       SEAM="${2:-}"; shift 2 ;;
     --save-seam)  SAVE_SEAM="${2:-}"; shift 2 ;;
     --no-cache)   NO_CACHE=1; shift ;;
@@ -85,7 +92,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -d "$G" ] || { printf 'FATAL: no guides/: %s\n' "$G" >&2; exit 2; }
-[ "$SELFTEST" -eq 1 ] || [ -n "$SAVE_SEAM" ] || [ -n "$FE" ] || [ -n "$BE" ] || { printf 'FATAL: one of --frontend or --backend is required\n' >&2; exit 2; }
+[ "$SELFTEST" -eq 1 ] || [ -n "$SAVE_SEAM" ] || [ -n "$FE" ] || [ -n "$BE" ] || [ -n "$APP" ] || { printf 'FATAL: one of --frontend · --backend · --app is required\n' >&2; exit 2; }
 
 stamp_of() { grep -m1 -oE 'orangekit-(pack|seam): [^ ]+ v[0-9]+\.[0-9]+\.[0-9]+' "$1" 2>/dev/null | awk '{print $3}' || true; }
 TODAY=$(date +%Y-%m-%d)
@@ -398,6 +405,7 @@ write_job() {
     generate)  need="$need \"backend\"" ;;
     resources) need="$need \"seam:backend\"" ;;
   esac
+  [ "$APP_STATE" = generate ] && need="$need \"app\""
   need="${need# }"; need="${need// /, }"
   if [ -z "$need" ]; then
     if [ -f "$job" ]; then
@@ -428,8 +436,9 @@ except Exception: print('null')" 2>/dev/null || printf 'null')
   mkdir -p "$PROJECT_ROOT/.orangekit"
   { printf '{\n  "status": "pending",\n  "combo": "%s+%s",\n' "${FE:-none}" "${BE:-none}"
     printf '  "need": [%s],\n' "$need"
-    printf '  "state": { "frontend": "%s", "backend": "%s" },\n' "$FE_STATE" "$BE_STATE"
-    printf '  "packs": { "frontend": %s, "backend": %s },\n' "$fpack" "$bpack"
+    printf '  "app": "%s",\n' "${APP:-none}"
+    printf '  "state": { "frontend": "%s", "backend": "%s", "app": "%s" },\n' "$FE_STATE" "$BE_STATE" "$APP_STATE"
+    printf '  "packs": { "frontend": %s, "backend": %s, "app": null },\n' "$fpack" "$bpack"
     printf '  "notes": %s,\n' "$notes"
     printf '  "createdAt": "%s"\n}\n' "$TODAY"
   } > "$job"
@@ -489,6 +498,16 @@ run_self_test() {
     printf '  ✗ guide-job.json has no generation target\n'; fail=$((fail+1))
   fi
 
+  # ── Undecided axis · app axis ──────────────────────────────────────
+  # If undecided is not skipped like none, "not chosen" becomes a generation target and a guessed guide comes out.
+  # The app axis has no pack, so "app" must be in need — drop it and the app code never gets a guide
+  _st undecided "skip" "not chosen (undecided) is not a generation target" --app react-native
+  if grep -q '"need": \["app"\]' "$proj/.orangekit/guide-job.json" 2>/dev/null; then
+    printf '  ✓ the app axis is recorded as a generation target (need = ["app"])\n'; pass=$((pass+1))
+  else
+    printf '  ✗ the app axis is missing from guide-job.json need\n'; fail=$((fail+1))
+  fi
+
   # ── Gate FAIL → quarantine ──────────────────────────────────────────
   # **This branch moves the user's installation.** Without a fixture for the code that moves it,
   # "alive" cannot be told apart from "working". A seam that makes the gate fail is built to see
@@ -527,8 +546,15 @@ if [ "$SELFTEST" -eq 1 ]; then run_self_test; fi
 if [ -n "$SAVE_SEAM" ]; then save_seam "$SAVE_SEAM"; exit 0; fi
 
 printf 'Guide assembly\n  plugin:  %s\n  project: %s\n\n' "$G" "$PROJECT_ROOT/.claude/skills"
-if [ -n "$FE" ] && [ "$FE" != none ]; then assemble frontend "$FE"; FE_STATE="$AXIS_STATE"; fi
-if [ -n "$BE" ] && [ "$BE" != none ]; then assemble backend  "$BE"; BE_STATE="$AXIS_STATE"; fi
+# undecided (not chosen) is the same as none — no guide is built by guesswork for an undecided axis
+_axis_on() { [ -n "$1" ] && [ "$1" != none ] && [ "$1" != undecided ]; }
+if _axis_on "$FE"; then assemble frontend "$FE"; FE_STATE="$AXIS_STATE"; fi
+if _axis_on "$BE"; then assemble backend  "$BE"; BE_STATE="$AXIS_STATE"; fi
+# The app axis has no prebuilt packs — there is nothing to assemble, so it is a generation target straight away
+if _axis_on "$APP"; then
+  printf '  [app-guide]  no prebuilt pack (%s) — recorded as a full generation target\n' "$APP"
+  APP_STATE=generate
+fi
 printf '\n  new %d · updated %d · kept %d\n' "$installed" "$updated" "$skipped"
 
 gate_failed=0
@@ -543,7 +569,7 @@ elif [ "$GATE" -eq 1 ]; then
   fi
 fi
 
-printf '\n  state: frontend=%s · backend=%s\n' "$FE_STATE" "$BE_STATE"
+printf '\n  state: frontend=%s · backend=%s · app=%s\n' "$FE_STATE" "$BE_STATE" "$APP_STATE"
 printf '    complete=skill finished · resources=waiting for a seam · generate=needs generating · pinned=premise pinned · skip=not applicable\n'
 write_job
 if [ "$gate_failed" -eq 1 ]; then exit 1; fi

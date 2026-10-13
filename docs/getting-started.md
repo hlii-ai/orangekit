@@ -33,8 +33,10 @@ Start Claude Code in your project directory, then run:
 ```
 
 This will interactively:
-- Ask what you are building first — web / hybrid app / native / API-only. This is a product question, not a technical one, and it narrows every question that follows
-- Ask you to choose a frontend preset (nextjs / react-vite / vue / vanilla / none) and a backend preset (supabase / firebase / aws-serverless / aws-container / gcp-serverless / fastapi / node-api / node-nest / none)
+- Ask what you are building first — web / mobile app / API-only. This is a product question, not a technical one, and it narrows every question that follows. A mobile app then splits into hybrid (web screens in an app shell) / cross-platform / fully native
+- Ask you to choose a web preset (nextjs / react-vite / vue / vanilla / none), an app preset (react-native / flutter / ios-swift / android-kotlin / native-dual) and a backend preset (supabase / firebase / aws-serverless / aws-container / gcp-serverless / fastapi / node-api / node-nest / fastify / rust-axum / none)
+- Let you type a custom stack when it is not listed, or pick "recommend" / "decide later" when you are not sure
+- Show a confirmation summary before writing any file
 - Collect project information
 - Generate `orangekit.config.json` and `CLAUDE.md`
 - Install rule cards into `.claude/rules/`
@@ -85,7 +87,7 @@ The plugin works without `orangekit.config.json` — the five hooks and the reve
 
 ## Available Presets
 
-Presets are chosen on two axes — pick one from each.
+Presets are chosen on three axes — web screens, app and backend. Any axis can also be `custom` (type your own stack), `undecided` (decide later) or `none`.
 
 | Frontend | Stack |
 |----------|-------|
@@ -105,7 +107,19 @@ Presets are chosen on two axes — pick one from each.
 | `fastapi` | **Python** · FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic (self-hosted) |
 | `node-api` | Express 5 + PostgreSQL + Prisma (self-hosted) |
 | `node-nest` | NestJS 11 + PostgreSQL + TypeORM 1 + class-validator (self-hosted) |
+| `fastify` | Fastify 5 + PostgreSQL + Drizzle + Zod (self-hosted · no pre-built guide) |
+| `rust-axum` | **Rust** · Axum + Tokio + SQLx + PostgreSQL (self-hosted · no pre-built guide) |
 | `none` | No backend / external REST API |
+
+| App | Stack | Used for |
+|-----|-------|----------|
+| `react-native` | Expo + React Native + Expo Router + TanStack Query + Zustand | cross-platform · hybrid RN shell |
+| `flutter` | Flutter + Riverpod + go_router + Dio | cross-platform |
+| `ios-swift` | Swift + SwiftUI | native (iOS only) |
+| `android-kotlin` | Kotlin + Jetpack Compose + Hilt | native (Android only) |
+| `native-dual` | iOS (Swift) + Android (Kotlin) | native (both) |
+
+The app axis has no pre-built guide packs — its `app-guide` is always generated.
 
 The **combination** decides the guides. Three combinations ship pre-built guides —
 `nextjs` × `supabase`, `react-vite` × `aws-container` and `vue` × `node-api` — and every

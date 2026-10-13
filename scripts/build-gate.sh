@@ -45,7 +45,8 @@ else
 fi
 
 # Source extensions only (config, docs and markdown excluded)
-SRC_CHANGED=$(printf '%s\n' "$CHANGED" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|rb|php|vue|svelte)$' \
+# dart is the Flutter app axis — leave it out and a session that only edited .dart passes with no verification
+SRC_CHANGED=$(printf '%s\n' "$CHANGED" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|dart|rb|php|vue|svelte)$' \
   | grep -vE '\.(config|test|spec)\.' | grep -vE '^\s*$' || true)
 
 [ -z "$SRC_CHANGED" ] && exit 0
@@ -100,11 +101,13 @@ _verification_ran() {
     { n = split($0, seg, /;|&&|\|\|/)
       for (i = 1; i <= n; i++) {
         s = head(seg[i]); split(s, w, /[ \t]+/); t = w[1]; sub(/.*\//, "", t)
-        if (t ~ /^(pytest|jest|vitest|mocha|tsc|vue-tsc|ruff|mypy|pyright|eslint|biome|tox|nox|gradlew|gradle|mvnw|mvn|make)$/) { found = 1; exit }
+        if (t ~ /^(pytest|jest|vitest|mocha|tsc|vue-tsc|ruff|mypy|pyright|eslint|biome|tox|nox|gradlew|gradle|mvnw|mvn|make|xcodebuild)$/) { found = 1; exit }
         if (s ~ /(^|[ \t])(install|add|i)([ \t]|$)/) continue
         if (t ~ /^(pnpm|npm|yarn|bun|npx|bunx|uv|poetry|pipx|python|python3|py|deno)$/ \
             && s ~ /[ \t][a-z:_-]*(build|test|typecheck|check|lint|pytest|unittest|jest|vitest|mocha|tsc|ruff|mypy|clippy)[a-z:_-]*([ \t"\047]|$)/) { found = 1; exit }
         if (t ~ /^(cargo|go|dotnet|swift)$/ && s ~ /^[a-z0-9.\/-]+[ \t]+(build|test|check|clippy|vet)([ \t]|$)/) { found = 1; exit }
+        # App axis — flutter·dart count only when the subcommand is a verification (flutter pub get·flutter run are not)
+        if (t ~ /^(flutter|dart)$/ && s ~ /^[a-z0-9.\/-]+[ \t]+(analyze|test|build)([ \t]|$)/) { found = 1; exit }
       } }
     END { exit found ? 0 : 1 }'
 }

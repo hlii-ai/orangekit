@@ -1,0 +1,27 @@
+{
+  "axis": "app",
+  "name": "react-native",
+  "displayName": "React Native (Expo)",
+  "description": "Expo + React Native + TypeScript + Expo Router + TanStack Query + Zustand. Either the cross-platform app itself, or, in a hybrid, the shell that wraps the webview plus the native screens.",
+  "fits": ["hybrid", "cross-platform"],
+  "techStack": {
+    "app": {
+      "framework": "Expo (React Native)",
+      "language": "TypeScript",
+      "packageManager": "npm",
+      "platforms": ["ios", "android"],
+      "commands": {
+        "build": "npx tsc --noEmit",
+        "test": "npm test",
+        "lint": "npx expo lint"
+      },
+      "sourceDir": "app",
+      "additionalStack": ["Expo Router", "TanStack Query", "Zustand", "Expo Dev Client"]
+    }
+  },
+  "notes": {
+    "platformBoundary": "Tokens go in secure storage (expo-secure-store) — AsyncStorage is not encrypted. Background location, push, and camera come paired with native modules and permission declarations (app.json)",
+    "shellRole": "In a hybrid it is the shell that wraps the webview (react-native-webview). **Web ↔ native bridge messages are a contract** — accept postMessage without verifying the origin and any page loaded in the webview can call native features. The message schema lives in the shared contract package",
+    "release": "Store review and OTA (EAS Update) split the release path — once a native module changes, it cannot ship over OTA"
+  }
+}

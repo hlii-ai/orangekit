@@ -44,12 +44,14 @@ cat .orangekit/guide-job.json 2>/dev/null
 | `combo` | The confirmed combination. **Do not** ask the axis questions of Step 1 |
 | `need` | What to build. The vocabulary below maps 1:1 onto the rows of the Step 2 branch table |
 | `packs` | Paths of the assembled packs. That axis is an "axis that has a pack", so read the three files in Step 2 |
-| `notes` | The axis preset notes (serverCode · securityBoundary · policyEngine · language) **＋ dimensions that are not axes** (deliveryModel · clientKind · pwa · nativeStack). The entire input for combination dependencies and conditional slot decisions |
+| `app` | The app axis value (`presets.app`). If it is not `none`, `app-guide` is a generation target |
+| `notes` | The axis preset notes (serverCode · securityBoundary · policyEngine · language · appNotes) **＋ dimensions that are not axes** (deliveryModel · clientKind · pwa · appShell · nativeStack). The entire input for combination dependencies and conditional slot decisions |
 
 | `need` item | Meaning | What to build |
 | --- | --- | --- |
 | `seam:frontend` · `seam:backend` | The packs are assembled and only the seam is missing | That axis's seam + hub (3 files per axis) |
-| `frontend` · `backend` | There is no pack, or it is unfinished | That axis in full (hub + every resource) |
+| `frontend` · `backend` | There is no pack, or it is unfinished (including `custom`) | That axis in full (hub + every resource) |
+| `app` | The app axis — it has no prebuilt packs | `.claude/skills/app-guide/` in full. The input is `techStack.app` + the notes in `presets/app/<name>.json` (for `custom`, the entered framework) |
 
 **Write `status` as `running` when you start.** If the session dies, that state remains and
 the `session-brief` hook reports it to the next session — the device that keeps 20 minutes from vanishing silently.
@@ -68,19 +70,24 @@ PY
 
 Priority: `techStack` in `orangekit.config.json` → interview only for the dimensions still missing.
 
-If orangekit-init has run, `techStack.presets` (the two axis choices) and `techStack.frontend`/`backend` are already
-filled in. **Read both axes and treat them as a combination** — generating from one axis alone yields guides that
+If orangekit-init has run, `techStack.presets` (the per-axis choices) and `techStack.frontend`/`app`/`backend` are already
+filled in. **Read every axis and treat them as a combination** — generating from one axis alone yields guides that
 have not taken each other into account (see combination dependencies below).
 
 | Dimension | Example choices | Dependency rule |
 | --- | --- | --- |
-| **Product form** | web · hybrid app · native family · API-only | **Fix this first** — it splits the frontend choices, and the derived value `clientKind` splits the backend-guide slots. If `techStack.deliveryModel` exists it is already fixed |
-| Frontend | Next.js · React+Vite · SvelteKit · none (API-only) | If the product form is "native family" there is no matching axis pack, so generate everything with `nativeStack` as the input |
+| **Product form** | web · hybrid · cross-platform · native · API-only | **Fix this first** — it splits the screen axes, and the derived value `clientKind` splits the backend-guide slots. If `techStack.deliveryModel` exists it is already fixed |
+| Web screens | Next.js · React+Vite · SvelteKit · none | `none` when only a cross-platform or native app is built |
+| App | React Native · Flutter · Swift · Kotlin · none | `techStack.presets.app`. A hybrid has it only when `appShell` is the RN family. There are no packs, so `app-guide` is always generated in full |
 | Backend type | BaaS (Supabase · Firebase) · self-built on cloud · framework built-in | If `techStack.presets.backend` exists it is **already fixed** — do not ask again. If this skill is invoked standalone and there is no preset, this is a required question |
 | Cloud/hosting | AWS · GCP · Azure · Vercel · self-hosted | Required when self-built is chosen |
 | DB | PostgreSQL · MySQL · MongoDB · DynamoDB | For BaaS, infer automatically and only confirm; for self-built, a required question |
 | Data access | Prisma · Drizzle · SQLAlchemy · SDK directly | After the DB is fixed |
 | Auth | Supabase Auth · NextAuth · Cognito · self-built | Tied to the backend type |
+
+**Reading an old config** — a config without `presets.app` carries the pre-3-axis meaning: read a `hybrid` with no `appShell` as
+`capacitor`, and a `native` whose `nativeStack` is RN or Flutter as `cross-platform` (the canonical conversion is
+"App axis migration" in `orangekit-migrate`).
 
 Record the confirmed combination in `techStack.backend` of `orangekit.config.json` (the schema's backendType · cloudProvider · database · dataAccess · auth fields).
 
@@ -142,7 +149,9 @@ If `fixesVariants` is `{}` that is a declaration that no variant is nailed down,
 | No pack | Generate both sides in full (the existing path) | ~2,300 lines/axis |
 | Frontend `none` (API-only) | backend side only |
 | Backend `none` (static/SPA + external API) | frontend side only (including API client patterns) |
-| Both axes `none` | Do nothing |
+| Both axes `none` | Do nothing (only app-guide if there is an app axis) |
+| An axis is `undecided` | Do not build that axis — a guide for an undecided stack is not written by guesswork |
+| There is an app axis | Generate `app-guide` in full. For a hybrid RN shell, frontend-guide's shell slot holds **only the bridge contract**, and app-guide owns the native screen patterns — if both guides write the same section they diverge |
 | An existing generated copy | Compare stamps as in Step 7 — on detecting a manual edit, do not overwrite; present a diff |
 
 ### The three files you must read on an axis that has a pack
@@ -181,10 +190,17 @@ The two things you must always hand the generating subagent:
 **Slots split by the product form (`deliveryModel`)** — the pack merely holds the slots and **the generator decides**
 **whether each is filled or left empty.** Nailing form-specific content into the pack as prose turns it into wrong guidance in every other combination.
 
-| frontend-guide slot | `web` | `web`+`pwa` | `hybrid` | `native` |
+| frontend-guide slot | `web` | `web`+`pwa` | `hybrid` | `cross-platform` · `native` |
 | --- | --- | --- | --- | --- |
-| Offline · install | Empty | Service worker · manifest · offline cache · install prompt · update strategy | Owned by the shell | No axis pack applies — generate everything |
-| Shell boundary | Empty | Empty | Shell wiring · native bridge boundary · deep links · store review · forced update | — |
+| Offline · install | Empty | Service worker · manifest · offline cache · install prompt · update strategy | Owned by the shell | With no web screen axis there is no frontend-guide at all — app-guide |
+| Shell boundary | Empty | Empty | `capacitor`: shell wiring · native bridge boundary · deep links · store review · forced update / `rn-*`: **only the web side of the bridge contract** (the rest is app-guide) | — |
+
+| app-guide slot | `hybrid` + `rn-webview` | `hybrid` + `rn-native-screens` | `cross-platform` · `native` |
+| --- | --- | --- | --- |
+| Screens · navigation | A single webview container | Transition rules between native screens ↔ webview screens | The whole app |
+| Bridge contract | App-side receipt · origin verification | The same + the path by which native screens read web state | Empty |
+| Permissions · device features | Push · permissions | Push · permissions · maps · camera · location | The whole app |
+| Release | Store + what OTA can cover | The same | The same (Flutter · Swift · Kotlin have no OTA) |
 
 | backend-guide slot | `clientKind: browser` | `clientKind: app` |
 | --- | --- | --- |
@@ -232,6 +248,9 @@ So the main session fills in `assets/wire-contract.template.md` (the 5-item form
 **file** and pastes **the full file verbatim into both sides** rather than summarizing. Step 4's `--pair`
 compares both against that same file, so the text handed over and the text checked must be the same. Even when generating only one side,
 if the counterpart already exists, read it and fill in the same form (skip only when there is none).
+**app-guide receives the same contract file** — the app is a client calling the same API too. For a hybrid
+RN shell, add one more section to the contract file for **web ↔ native bridge messages** and paste it into both frontend-guide and
+app-guide (`--pair` compares only frontend and backend, so this section is checked by the Step 5 audit).
 
 ### Step 3-1: Generation delegation — three layers, parallel by coupling cluster
 
@@ -301,7 +320,7 @@ Generation discipline cannot block wrongly confident knowledge — the model doe
 ## Step 7: Stamp and report
 
 - Record the generation stamp in each SKILL.md (the skeleton's format — attach it only to generated artifacts)
-- Report to the user: the 2 (or 1) generated skills · the resource count · **every gate WARN and the reason for**
+- Report to the user: the generated skills (whichever of frontend · backend · app were generated) · the resource count · **every gate WARN and the reason for**
   **each REVIEW verdict** · **the audit results and what was repaired** · **the list of empty slots** (if any) · "auto-triggers from the next session on"
 - On a regeneration request: compare the stamp's stack= value against the new combination and report which dimensions changed;
   if a manual edit is detected, show a diff of the edited part and get the user's confirmation

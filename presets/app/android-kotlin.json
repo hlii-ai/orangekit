@@ -1,0 +1,26 @@
+{
+  "axis": "app",
+  "name": "android-kotlin",
+  "displayName": "Android native (Kotlin + Jetpack Compose)",
+  "description": "Kotlin + Jetpack Compose + Coroutines/Flow + Hilt + Gradle Kotlin DSL. An Android-only native app.",
+  "fits": ["native"],
+  "techStack": {
+    "app": {
+      "framework": "Jetpack Compose",
+      "language": "Kotlin",
+      "packageManager": "gradle",
+      "platforms": ["android"],
+      "commands": {
+        "build": "./gradlew assembleDebug",
+        "test": "./gradlew testDebugUnitTest",
+        "lint": "./gradlew lint"
+      },
+      "sourceDir": "android",
+      "additionalStack": ["Jetpack Compose", "Kotlin Coroutines + Flow", "Hilt", "Retrofit", "Room"]
+    }
+  },
+  "notes": {
+    "platformBoundary": "Tokens go in Android Keystore-backed storage — SharedPreferences is plaintext. Runtime permissions and manifest declarations come as a pair",
+    "release": "Store review is the only release path. Old app versions keep running, so API version negotiation is required"
+  }
+}

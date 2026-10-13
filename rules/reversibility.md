@@ -3,11 +3,15 @@ paths:
   - "src/**"
   - "app/**"
   - "packages/**"
+  - "apps/**"
+  - "services/**"
+  - "ios/**"
+  - "android/**"
   - "supabase/**"
   - "**/migrations/**"
   - "dev/active/**"
 ---
-<!-- orangekit-rule-version: 3.28.0 -->
+<!-- orangekit-rule-version: 3.32.0 -->
 
 # The Work Axis — reversibility
 

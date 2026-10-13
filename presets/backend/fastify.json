@@ -1,0 +1,31 @@
+{
+  "axis": "backend",
+  "name": "fastify",
+  "displayName": "Fastify API server (Fastify + Drizzle)",
+  "description": "A self-operated Fastify API server — Fastify 5 + PostgreSQL + Drizzle ORM + the Zod type provider. Plugin encapsulation sets the structure.",
+  "techStack": {
+    "backend": {
+      "backendType": "cloud-server",
+      "cloudProvider": null,
+      "database": "PostgreSQL",
+      "dataAccess": "Drizzle ORM",
+      "auth": "",
+      "framework": "Fastify",
+      "language": "TypeScript",
+      "packageManager": "npm",
+      "commands": {
+        "build": "npm run build",
+        "test": "npm test",
+        "lint": "npm run lint"
+      },
+      "sourceDir": "src"
+    },
+    "additionalStack": ["Fastify 5", "Drizzle ORM", "Zod (fastify-type-provider-zod)", "Vitest"]
+  },
+  "notes": {
+    "securityBoundary": "The application layer is the only boundary — the DB is reached over a trusted connection, so nothing leans on row-level policy. The trap specific to this axis is **plugin encapsulation**: attach a route outside the plugin context that registered the `onRequest` auth hook and that route never receives the hook. The authentication method (self-issued JWT · session · external IdP) is undecided, so it is a question to confirm",
+    "serverCodeLocation": "The API server in this repository. Even when the frontend axis has a server runtime (Next.js, etc.), API ownership sits here",
+    "toolchain": "The language and package manager are often the same as the frontend's, so monorepos are common. A single Zod schema doubles as request validation, response serialization, and the shared contract",
+    "variants": "There is no prebuilt pack — the guide takes the generation path. Pick Express and backend/node-api owns that shape; NestJS, backend/node-nest; a finished Hono + AWS setup, backend/aws-container"
+  }
+}

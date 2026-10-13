@@ -792,7 +792,7 @@ $c"
   done
 
   # ① A skill name that appeared on a consumer path — a 3-minute verdict.
-  #    Generated output (frontend-guide·backend-guide) is normal, since the consumer's .claude/skills/ is its real home.
+  #    Generated output (frontend-guide·backend-guide·app-guide) is normal, since the consumer's .claude/skills/ is its real home.
   #    A plugin skill **lives in the plugin cache and is never placed in a consumer's .claude/** —
   #    writing that it is there sends the model to read a path that does not exist.
   #    If it is neither, it is a dead reference left behind by a rename or retirement.
@@ -803,11 +803,11 @@ $c"
       [ -z "$_sname" ] && continue
       _pr_chk=$((_pr_chk+1))
       case "$_sname" in
-        frontend-guide|backend-guide) continue ;;   # generated output — normal
+        frontend-guide|backend-guide|app-guide) continue ;;   # generated output — normal
       esac
       if [ -f "skills/$_sname/SKILL.md" ] || [ -f "marketing/skills/$_sname/SKILL.md" ] || [ -f "harness/skills/$_sname/SKILL.md" ]; then
         bad "plugin skill on a consumer path: .claude/skills/$_sname" \
-            "plugin skills live in the cache. Only generated output (frontend-guide·backend-guide) goes in a consumer's .claude/skills/"
+            "plugin skills live in the cache. Only generated output (frontend-guide·backend-guide·app-guide) goes in a consumer's .claude/skills/"
         _pr_bad=$((_pr_bad+1))
       else
         bad "dead skill reference: .claude/skills/$_sname" \
@@ -1046,12 +1046,13 @@ $c"
   # Count the real assets once. The documents being compared grew to three (README · marketplace.json · the anatomy
   # document), and counting separately in each would make **the check itself hold three copies**.
   # Undecidable (no jq · no file) is left as an empty string and only that item is skipped — the three-state discipline.
-  local real_sk real_ru real_fe real_be
+  local real_sk real_ru real_fe real_be real_ap
   local real_nd="" real_ed="" real_hk=""
   real_sk=$(num "$(find skills -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')")
   real_ru=$(num "$({ ls -1 rules/*.md 2>/dev/null || true; } | wc -l | tr -d ' ')")
   real_fe=$(num "$({ ls -1 presets/frontend/*.json 2>/dev/null || true; } | wc -l | tr -d ' ')")
   real_be=$(num "$({ ls -1 presets/backend/*.json 2>/dev/null || true; } | wc -l | tr -d ' ')")
+  real_ap=$(num "$({ ls -1 presets/app/*.json 2>/dev/null || true; } | wc -l | tr -d ' ')")
   # Only the pack count **does not fold absence into 0.** --consumer's cache copy excludes guides/, so counting 0
   # there would flag a normal tree as a false positive — missing and zero are different things (the three-state discipline).
   local real_fp="" real_bp=""
@@ -1100,8 +1101,14 @@ $c"
     # Preset counts per axis. The vue axis really existed in the presets·packs·seams·init menu but never appeared in
     # any of the 3 consumer documents, and the README claimed 4 for frontend. The check had stopped at the neighbouring
     # row of the same table — this is where the path that adds an axis meets the documents (evaluation v5 · E-15).
-    _claim "frontend preset count" "$(grep -oE '2-axis [0-9]+\+[0-9]+' README.md | head -1 | sed -E 's/2-axis ([0-9]+)\+([0-9]+)/\1/')" "$real_fe" "README.md"
-    _claim "backend preset count" "$(grep -oE '2-axis [0-9]+\+[0-9]+' README.md | head -1 | sed -E 's/2-axis ([0-9]+)\+([0-9]+)/\2/')" "$real_be" "README.md"
+    # With three axes (web screens · app · backend) the notation is now '3-axis F+A+B'. _claim passes an empty value as undecidable,
+    # so if the notation and this regex drift apart **the check dies silently** — the 'axis notation missing' failure below catches that
+    local rd_pre
+    rd_pre=$(grep -oE '3-axis [0-9]+\+[0-9]+\+[0-9]+' README.md | head -1)
+    [ -z "$rd_pre" ] && [ -d presets/app ] && bad "README.md: preset axis notation missing — no '3-axis frontend+app+backend' notation, so the count comparison does not run"
+    _claim "frontend preset count" "$(printf '%s' "$rd_pre" | sed -E 's/3-axis ([0-9]+)\+([0-9]+)\+([0-9]+)/\1/')" "$real_fe" "README.md"
+    _claim "app preset count"      "$(printf '%s' "$rd_pre" | sed -E 's/3-axis ([0-9]+)\+([0-9]+)\+([0-9]+)/\2/')" "$real_ap" "README.md"
+    _claim "backend preset count"  "$(printf '%s' "$rd_pre" | sed -E 's/3-axis ([0-9]+)\+([0-9]+)\+([0-9]+)/\3/')" "$real_be" "README.md"
   fi
 
   # marketplace.json is the only description a consumer reads **before installing**. Yet while the comparison
@@ -1111,7 +1118,8 @@ $c"
   if [ -f "$MP" ]; then
     local mp_pack mp_pre
     mp_pack=$(grep -oE 'packs \(frontend [0-9]+ · backend [0-9]+\)' "$MP" 2>/dev/null | head -1)
-    mp_pre=$(grep -oE 'presets \(frontend [0-9]+ · backend [0-9]+\)' "$MP" 2>/dev/null | head -1)
+    mp_pre=$(grep -oE 'presets \(frontend [0-9]+ · app [0-9]+ · backend [0-9]+\)' "$MP" 2>/dev/null | head -1)
+    [ -z "$mp_pre" ] && [ -d presets/app ] && bad "$MP: preset axis notation missing — no 'presets (frontend N · app N · backend N)' notation, so the count comparison does not run"
     [ -n "$real_hk" ] && _claim "hook count" \
       "$(grep -oE '[0-9]+ hooks' "$MP" 2>/dev/null | head -1 | grep -oE '[0-9]+')" "$real_hk" "$MP"
     _claim "skill count" "$(grep -oE '[0-9]+ skills' "$MP" 2>/dev/null | head -1 | grep -oE '[0-9]+')" "$real_sk" "$MP"
@@ -1120,6 +1128,7 @@ $c"
       _claim "backend pack count" "$(printf '%s' "$mp_pack" | grep -oE '[0-9]+' | tail -1)" "$real_bp" "$MP"
     fi
     _claim "frontend preset count" "$(printf '%s' "$mp_pre"  | grep -oE '[0-9]+' | head -1)" "$real_fe" "$MP"
+    _claim "app preset count"      "$(printf '%s' "$mp_pre"  | grep -oE '[0-9]+' | sed -n 2p)" "$real_ap" "$MP"
     _claim "backend preset count" "$(printf '%s' "$mp_pre"  | grep -oE '[0-9]+' | tail -1)" "$real_be" "$MP"
   fi
 
@@ -1329,7 +1338,7 @@ $c"
   }
 
   local pnames snames doc
-  pnames=$({ ls -1 presets/frontend/*.json presets/backend/*.json 2>/dev/null || true; } \
+  pnames=$({ ls -1 presets/frontend/*.json presets/app/*.json presets/backend/*.json 2>/dev/null || true; } \
            | sed -E 's|.*/||; s|\.json$||' | sort -u | tr '\n' ' ')
   snames=$({ ls -1d guides/seams/*/ 2>/dev/null || true; } \
            | sed -E 's|.*/([^/]+)/$|\1|' | sort -u | tr '\n' ' ')
@@ -2452,7 +2461,10 @@ run_consumer() {
   # ⓑ `echo npm run build` is not an execution — passing it on string containment is the v2 stop-guard.
   sec "verification-command recognition (build-gate)"
   local vt="$tmp/verify-transcript.jsonl" vcase vcmd vwant
-  for vcase in "pytest -q|pass" "python -m pytest|pass" "npx tsc --noEmit|pass" "echo npm run build|block" "grep -rn 'pnpm build' README.md|block"; do
+  # The commands the app-axis presets prescribe (flutter analyze · xcodebuild · gradlew) get the same two-sided proof
+  for vcase in "pytest -q|pass" "python -m pytest|pass" "npx tsc --noEmit|pass" "echo npm run build|block" "grep -rn 'pnpm build' README.md|block" \
+               "flutter analyze|pass" "flutter test|pass" "xcodebuild -scheme App test|pass" "./gradlew assembleDebug|pass" \
+               "flutter pub get|block" "echo flutter test|block"; do
     vcmd="${vcase%|*}"; vwant="${vcase##*|}"
     printf '%s\n' "$(jq -nc --arg c "$vcmd" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}')" > "$vt"
     printf 'export const A = () => <div>%s</div>;\n' "$RANDOM" > "$up/src/Card.tsx"
@@ -2470,6 +2482,32 @@ run_consumer() {
         || bad "build-gate: '$vcmd' was counted as an execution" "string containment became grounds for passing — the failure of the v2 stop-guard"
     fi
   done
+
+  # ── Dart change detection — drop it from the extension list and a Flutter session passes with no verification ──
+  # In a repo where **only** .dart changed, check both: no verification → blocked, and flutter test → passes.
+  # Check only one side and both "always block" and "always pass" get through.
+  if command -v jq >/dev/null 2>&1; then
+    local dp="$tmp/proj-dart" dcase dcmd dwant
+    mkdir -p "$dp/lib"
+    printf 'void main() {}\n' > "$dp/lib/main.dart"
+    (cd "$dp" && git init -q && git add -A >/dev/null 2>&1 && git commit -qm init >/dev/null 2>&1)
+    mkdir -p "$dp/.claude/.orangekit"; : > "$dp/.claude/.orangekit/session-baseline.txt"
+    for dcase in "echo hi|block" "flutter test|pass"; do
+      dcmd="${dcase%|*}"; dwant="${dcase##*|}"
+      printf 'void main() { print(%s); }\n' "$RANDOM" > "$dp/lib/main.dart"
+      printf '%s\n' "$(jq -nc --arg c "$dcmd" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}')" > "$vt"
+      out=$(printf '{"stop_hook_active":false,"transcript_path":"%s"}' "$vt" \
+            | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$dp" \
+              bash "$cache/scripts/build-gate.sh" 2>/dev/null) || true
+      if printf '%s' "$out" | grep -q '"continue"[[:space:]]*:[[:space:]]*false'; then
+        [ "$dwant" = "block" ] && ok "build-gate: only .dart changed + no verification → blocked" \
+          || bad "build-gate: .dart changed + '$dcmd', yet blocked" "it does not recognize flutter verification"
+      else
+        [ "$dwant" = "pass" ] && ok "build-gate: .dart changed + '$dcmd' → passes" \
+          || bad "build-gate: passed a session where only .dart changed, with no verification" "dart is missing from the source extension list"
+      fi
+    done
+  fi
 
   # ── response-language reach ───────────────────────────────────────
   # Choosing a language does not end at being written into the config. T0 is hook **output**, not a file,

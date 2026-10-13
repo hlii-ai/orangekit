@@ -22,6 +22,7 @@ cat package.json 2>/dev/null            # framework · packageManager · scripts
 cat pyproject.toml requirements.txt 2>/dev/null
 ls pnpm-lock.yaml yarn.lock package-lock.json bun.lockb uv.lock poetry.lock 2>/dev/null
 ls src app packages services apps 2>/dev/null   # sourceDir · repoTopology
+ls app.json pubspec.yaml ios android Cargo.toml 2>/dev/null   # app axis (Expo · Flutter · native) · Rust backend
 cat tsconfig.json 2>/dev/null | head -20        # importAlias · strict
 git remote get-url origin 2>/dev/null           # vcsPlatform — github.com / gitlab.com
 ```
@@ -85,98 +86,199 @@ most of them, so **ask only about what is left, in batches.** Asking one at a ti
 
 The batching rule is **dependency, not count**. `AskUserQuestion` collects the answers of one call
 **simultaneously**, so an earlier answer that **changes a later question's option list cannot go in
-the same call.** The tool's limits are **4 questions · 4 options**.
+the same call.** The tool's limits are **4 questions · 4 options** (the tool attaches the free-input field separately).
 
 | Call | Questions batched | Why this order |
 | --- | --- | --- |
-| **1st — what are you building** | ① product form ② backend type ③ response language ④ experience level | ① splits the frontend list, ② splits the backend detail list |
-| **2nd — what are you building it with** | ⑤ frontend (filtered by ①) ⑥ backend detail (filtered by ②) ⑦ TS/JS language or PWA ⑧ repo topology | can only be asked once the lists are settled |
-| **3rd — what are you putting it on** (conditional) | ⑨ deployment target (when it is a self-hosted-server framework) ⑩ undecided backend dimensions ⑪ code hosting (only if Step 0 failed to decide — `github` · `gitlab`) ⑫ whatever measurement missed | ⑨ depends on ⑥ |
+| **1st — what are you building** | ① product form ② backend type ③ response language ④ experience level | ① splits the screen questions, ② splits the backend detail |
+| **2nd — which approach** | ⑤ web framework (① = web) or app approach (① = mobile app) ⑥ backend detail (filtered by ②) ⑦ PWA or not (only when ① = web) ⑧ repo topology | can only be asked once the lists are settled |
+| **3rd — built with what** (conditional) | ⑨ the per-approach app question (for hybrid, two: web screens + app shell) ⑩ TypeScript server framework (⑥ = TypeScript) ⑪ deployment target (for a self-hosted server) | ⑨ depends on ⑤, ⑩⑪ depend on ⑥. ⑪ is discarded if ⑩ is `aws-container` — what branches is **whether the question exists**, not a list, so it rides in the same call and its answer is ignored |
+| **4th — what is left** (conditional) | auth method (Step 4.5) · empty dimensions of a custom axis (DB · ORM · commands) · code hosting (when Step 0 failed to decide — `github` · `gitlab`) · whatever measurement missed (name · app directories) | you only know what is empty once the earlier answers are in |
 
 - **When a measured value exists, put it first as the default option** — most of the time the user just confirms and moves on
-- **Do not make the third call if there is nothing to fill.** Pre-built combinations usually finish in two
+- **Do not make the 3rd or 4th call if there is nothing to fill.** Web + BaaS takes 2 calls; hybrid + a self-hosted server takes 3–4
+- If one call would exceed 4 questions, load **the questions that change a list first** and push the rest to the next call
+- **Language (TypeScript/JavaScript) is not asked separately** — it stays at the preset default and is changed in the Step 4.9 confirmation summary
 - Ask only questions whose answers branch. Implementation details like "should we use the pre-built one or generate?" are not asked
 - Ask the first question **in product terms** — "pick a frontend" requires already knowing the answer,
   while "what are you building" is something anyone can answer
 
+### Rules shared by every option list — custom · not sure
+
+**Every stack question has two exits** — for the person whose stack is not on the list, and for the person who cannot judge the list.
+**The one exception is ⑩** — its 4 option slots are filled by real frameworks, so there is no "Not sure" slot. The parent ⑥
+has "Not sure", and at ⑩ writing "recommend" in the custom field takes the same recommendation path.
+
+**Custom** — present the free-input field the tool attaches as "Custom (type it in)".
+
+- If the input matches a pack name or alias, **normalize it to that pack** — "Express" → `node-api`,
+  "NestJS" → `node-nest`, "Hono" → `aws-container`, "vanilla JS" → `vanilla`,
+  "Expo" → `react-native`, "SwiftUI" → `ios-swift`
+- If it does not match, write **`custom`** to `presets.<axis>` and write the entered name as-is into that axis's `framework`
+  (· `language`). **Never invent a preset name** — `presets` values are a schema
+  enum. An invented name (`expo-universal` and the like) is not found by install-guide and drifts onto the generation path,
+  and what the user actually picked disappears from the record
+- A `custom` axis gets its empty dimensions (DB · ORM · commands) in the 4th call — the preset fills nothing in
+
+**Not sure** — when this is picked, slot **just one more question into the next call**: "Get a recommendation" / "Decide later".
+
+- **Get a recommendation** — ask at most 2 of the deciding questions below, then give one recommendation with a one-line reason. The
+  recommendation is confirmed again in the Step 4.9 confirmation summary. Writing "recommend" in the custom field takes the same path
+- **Decide later** — write **`undecided`** to `presets.<axis>`. No guide is built for that axis; it is
+  decided later with `/stack-guide-generator`. If the product form itself is left undecided, do not write `deliveryModel` ·
+  `clientKind`, and set the screen axes (`frontend` · `app`) to `undecided` — fill in the default `web`
+  and browser guidance ships to an app project
+- **If ① is "Mobile app", `clientKind` is settled as `app` even when what follows is undecided** — even with the approach, shell and
+  framework left as "decide later", write `clientKind: "app"`. Leave it empty and the backend guide
+  drifts into the `browser` slots (cookie session · CSRF). How undecided and custom values are recorded is set by the mapping table in Step 2
+
+| Question | Deciding questions (at most 2) | Recommendation |
+| --- | --- | --- |
+| ① product form | Must it be installed from a store? · Does it lean heavily on camera · location · push? | no to both → web · install needed but web screens are enough → mobile app (hybrid) · device features are the core → mobile app (cross-platform) |
+| ⑤ app approach | Do you also ship a web version? · Do you have dedicated developers per platform? | ships web too → hybrid · dedicated per-platform developers and platform-native UX matters → fully native · otherwise → cross-platform |
+| ⑤ web framework | Does search visibility (SEO) matter? | yes → `nextjs` · no → `react-vite` |
+| ⑨ app shell | Are there screens the web cannot build (high-performance maps · burst capture · background location)? | yes → RN shell + native screens · no → Capacitor |
+| ⑨ cross-platform | Does the team use React · TypeScript? | yes → `react-native` · no → `flutter` |
+| ② backend type | Is there someone to run servers and a DB? · Are the server rules complex, like payments · settlement · external integrations? | no one to run it → BaaS (`supabase`) · someone, and complex → self-hosted server · already on AWS with spiky traffic → serverless |
+| ⑥ self-hosted server language | The team's main language? · Is AI · data processing the core? | the same TS as the web → TypeScript (`fastify`) · AI · data → Python (`fastapi`) · performance and memory come first and someone knows Rust → Rust |
+
 ### Step 2: Preset selection (interactive)
 
-A stack is made of a **frontend axis and a backend axis**, with **dimensions** that are not axes layered on top
-(product form · language · deployment target). Axes pick the pack; dimensions turn that pack's **conditional slots** on and off.
+A stack is made of **three axes** — web screens (`frontend`) · app (`app`) · backend (`backend`) — with
+**dimensions** that are not axes layered on top (product form · app shell · language · deployment target). Axes pick the pack;
+dimensions turn that pack's **conditional slots** on and off.
 
 ```
 ① What are you building — this choice sets the lists for the later questions:
-  1. Web           — reached through a browser. No install
-  2. Hybrid app    — one web codebase shipped as both web and a store app (Capacitor, etc.)
-  3. Native family — React Native · Flutter · Swift · Kotlin
-  4. API only      — no user-facing screens
+  1. Web         — reached through a browser. No install
+  2. Mobile app  — an app installed from a store (including hybrid, which puts web screens inside an app)
+  3. API only    — no user-facing screens
+  4. Not sure
 ```
 
-**What this question settles** is not just the frontend list. `deliveryModel` and its derived value
-`clientKind` (`browser` for web, `app` for the other three) split **the slots of the backend and infrastructure
+**What this question settles** is not just the screen list. `deliveryModel` and its derived value
+`clientKind` (`browser` for web, `app` for the rest) split **the slots of the backend and infrastructure
 guides** too — whether the token goes in a cookie or secure storage, whether the idempotent batch ingest,
 push and API version negotiation sections come alive. **It is information that is unreachable unless you ask.**
 
 ```
-② Pick a frontend:            ← ① splits the list
+⑤ What do you build the screens with:   ← ① splits the question itself
 
-  ▸ If ① is "Web" or "Hybrid app":
+  ▸ If ① is "Web" — web framework:
     1. nextjs      — Next.js 15 App Router + React 19 + Tailwind v4 + shadcn/ui + Zustand
     2. react-vite  — React + Vite SPA (no SSR) + Tailwind + React Router + TanStack Query + Zustand
     3. vue         — Vue 3 Composition API + Vite SPA (no SSR) + Tailwind + Vue Router + Pinia
-    4. vanilla     — no framework, standard DOM + ES modules (landing pages · widgets · lightweight sites)
+    4. Not sure
+    (vanilla — standard DOM + ES modules — and any other framework go through custom. A matching name is recognized as its pack)
+    + ⑦ Also ship it as a PWA (installable web) — service worker · offline cache · install prompt
 
-  ▸ If ① is "Native family" — **there is no matching axis pack.** Take the actual technology,
-    record it in `techStack.nativeStack`, and send the frontend axis down the **generation path**:
-    1. React Native   2. Flutter   3. Swift / Kotlin   4. Other (free input)
+  ▸ If ① is "Mobile app" — how do you build the app:
+    1. Hybrid          — most screens are built for the web and put inside an app shell. A web version can ship too
+    2. Cross-platform  — one codebase draws native iOS and Android screens
+    3. Fully native    — iOS (Swift) and Android (Kotlin) are each built separately
+    4. Not sure
 
-  ▸ If ① is "API only" — do not ask. The frontend axis is `none`
+  ▸ If ① is "API only" — do not ask. Every screen axis is `none`
 
-   └ Language: TypeScript (default) / JavaScript — confirmed after the preset is chosen
-   └ If ① is "Web", also confirm PWA (service worker · offline cache · install prompt)
+⑨ (3rd call) one more per app approach:
 
-③ Pick a backend type — **these are not three interchangeable names but three different shapes**:
+  ▸ Hybrid — load both questions into the same call (neither changes the other's list):
+    Web screens:  1. react-vite (recommended)  2. vue  3. nextjs (static-export constraint — see the conflict warning below)  4. Not sure
+    App shell:
+      1. Capacitor                — almost no shell code. Native features are called through plugins
+      2. RN webview shell         — React Native wraps a webview. RN handles only the bridge · push · permissions
+      3. RN shell + native screens — some screens, like maps and camera, are drawn directly in RN
+      4. Not sure
+
+  ▸ Cross-platform:  1. react-native (Expo)  2. flutter  3. Not sure
+                     (Kotlin Multiplatform · .NET MAUI and the like go through custom)
+
+  ▸ Fully native:  1. iOS + Android (native-dual)  2. iOS only (ios-swift)  3. Android only (android-kotlin)  4. Not sure
+                   The default UI toolkits are SwiftUI · Jetpack Compose — for UIKit or the View system, change it in the confirmation summary
+```
+
+**How a choice reaches the config** — this table is canonical. After "Hybrid" is picked, do not ask again "web or
+native?": hybrid is the form that uses **the web screen axis and the app axis together**, and the app
+shell question settles whether the app axis exists.
+
+| Choice | `deliveryModel` | `appShell` | `presets.frontend` | `presets.app` |
+| --- | --- | --- | --- | --- |
+| Web | `web` | — | web framework | `none` |
+| Hybrid + Capacitor | `hybrid` | `capacitor` | web screens | `none` (the frontend-guide shell slot covers it) |
+| Hybrid + RN webview shell | `hybrid` | `rn-webview` | web screens | `react-native` |
+| Hybrid + RN shell + native screens | `hybrid` | `rn-native-screens` | web screens | `react-native` |
+| Cross-platform | `cross-platform` | — | `none` | `react-native` · `flutter` |
+| Fully native | `native` | — | `none` | `ios-swift` · `android-kotlin` · `native-dual` |
+| API only | `api-only` | — | `none` | `none` |
+| Mobile app + approach left undecided | (not written) — **`clientKind` is `app`** | — | `undecided` | `undecided` |
+| Hybrid + shell left undecided | `hybrid` | `""` | web screens | `undecided` |
+| Hybrid + custom shell (Ionic · an in-house WebView, etc.) | `hybrid` | `custom` | web screens | `custom` if the shell has code, otherwise `none` |
+| Cross-platform · native + custom (KMP · .NET MAUI, etc.) | `cross-platform` · `native` | — | `none` | `custom` |
+| Cross-platform · native + left undecided | `cross-platform` · `native` | — | `none` | `undecided` |
+
+- When `presets.app` is not `none`, write a **human-readable summary** into `techStack.nativeStack`
+  (e.g. "Expo React Native — WebView shell + native screens (maps · camera)")
+- If a cross-platform or native product **also has a separate web (an admin screen, etc.)**, fill `presets.frontend` in the
+  confirmation summary — it surfaces when Step 4.7 takes the monorepo's app list
+
+```
+② Pick a backend type — **these are not three interchangeable names but three different shapes**:
   1. BaaS            — the vendor supplies DB, auth and storage together. There is a policy engine in the data layer
   2. Serverless assembly — you compose managed services yourself. **There may be no row-level policy engine**,
                      so the application layer carries more of the checking
   3. Self-hosted server  — you run a resident server. The application layer is the only boundary
-  4. None            — no backend / consuming an external REST API
+  4. None · undecided
 
-  ↳ 1. BaaS — which vendor:
-      1. supabase        — PostgreSQL + RLS + Auth + Storage + Realtime
-      2. firebase        — Firestore + Auth + Storage + Cloud Functions
+⑥ (2nd call) detail:
+  ↳ BaaS — which vendor:
+      1. supabase  — PostgreSQL + RLS + Auth + Storage + Realtime
+      2. firebase  — Firestore + Auth + Storage + Cloud Functions
+      3. Not sure
 
-  ↳ 2. Serverless assembly — the cloud is the runtime model:
+  ↳ Serverless assembly — the cloud is the runtime model:
       1. aws-serverless  — Lambda + API Gateway + DynamoDB + Cognito
       2. gcp-serverless  — Cloud Run/Functions + Firestore + Identity Platform
+      3. Not sure
 
-  ↳ 3. Self-hosted server — pick the framework first:
-      1. aws-container   — Hono + Drizzle · ECS/Fargate + RDS PostgreSQL + Cognito
-                           (a finished product including the AWS infrastructure. On-premises
-                            portability is assumed, so AWS coupling stays in the infrastructure layer only)
-      2. fastapi         — **Python**: FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic
-      3. node-api        — Express 5 + PostgreSQL + Prisma
-      4. node-nest       — NestJS 11 + PostgreSQL + TypeORM 1 + class-validator
-                           (modules, DI and decorators set the structure — it is not a variant of Express)
+  ↳ Self-hosted server — **pick the language first** (it is where the toolchain splits):
+      1. TypeScript  — the framework is picked in the 3rd call
+      2. Python      — fastapi: FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic
+      3. Rust        — rust-axum: Axum + Tokio + SQLx + PostgreSQL
+      4. Not sure
+      (Java · Go · C# and the like go through custom)
 
-      **Only `fastapi` is Python; the other three are TypeScript** — the toolchain splits, so the
-      commands differ from the frontend axis.
+  ↳ None · undecided:
+      1. No backend — a static site, or it only consumes an external REST API → `none`
+      2. Get a recommendation
+      3. Decide later → `undecided`
 
-      ↳ If you picked `fastapi`, `node-api` or `node-nest`, also pick the **deployment target (server setup)**:
-          1. Undecided / cloud-agnostic (default) — the same guide wherever you deploy
-          2. AWS                          — ECS/Fargate · EC2, etc.
-          3. Other (free input)           — GCP · Azure · Vercel · on-premises
-        `aws-container` already settles AWS, so this question is not asked.
+⑩ (3rd call) Self-hosted server · TypeScript — framework:
+      1. fastify        — Fastify 5 + PostgreSQL + Drizzle + Zod
+      2. node-nest      — NestJS 11 + PostgreSQL + TypeORM 1 + class-validator
+                          (modules, DI and decorators set the structure — it is not a variant of Express)
+      3. node-api       — Express 5 + PostgreSQL + Prisma
+      4. aws-container  — Hono + Drizzle · ECS/Fargate + RDS PostgreSQL + Cognito
+                          (a finished product including the AWS infrastructure. AWS coupling stays in the infrastructure layer only)
+      (the options are full — someone who knows only "TypeScript" writes "recommend" in the custom field)
+
+⑪ (3rd call) Deployment target — for a self-hosted server that is not `aws-container`:
+      1. Undecided / cloud-agnostic (default) — the same guide wherever you deploy
+      2. AWS                          — ECS/Fargate · EC2, etc.
+      3. Custom                       — GCP · Azure · Vercel · on-premises
 ```
 
-**Record the product form in `techStack.deliveryModel`** (`web` · `hybrid` · `native` · `api-only`).
-For "Web" also fill `techStack.pwa`; for "Native family" fill `techStack.nativeStack`.
+**`fastapi` is Python and `rust-axum` is Rust** — the toolchain splits from the web screen axis, so take per-axis commands
+separately (Step 4). `fastify` and `rust-axum` have no pre-built pack, so their guides take the generation path —
+they are on the list **because they are common choices, not because they have packs.**
+
+**Record the product form in `techStack.deliveryModel`** (`web` · `hybrid` · `cross-platform` · `native` · `api-only`).
+For "Web" also fill `techStack.pwa`; for "Hybrid" fill `techStack.appShell`.
 And **write the derived value into the config alongside it**:
 
 > `clientKind = (deliveryModel === 'web') ? 'browser' : 'app'`
 
 If each pack re-derives it on its own the descriptions diverge, so **decide it in one place and let
-the packs read only this value.** Hybrid and native are all the same from the backend's point of
+the packs read only this value.** Hybrid, cross-platform and native are all the same from the backend's point of
 view — not "a browser talking to a server" but **"an app talking to an API"**.
 
 | Slot | `browser` | `app` |
@@ -189,7 +291,7 @@ view — not "a browser talking to a server" but **"an app talking to an API"**.
 **An empty slot is the normal path.** A web project's backend guide having no push section is not a
 defect; it is the dimension working correctly.
 
-> **Conflict warning — "Hybrid app" × `nextjs`**: a Capacitor shell carries static assets, so
+> **Conflict warning — "Hybrid" × `nextjs`**: an app shell carries static assets, so
 > `output: 'export'` is forced and **Server Actions and Route Handlers cannot be used.** When this
 > combination comes up, tell the user and offer the choice of ⓐ switching to `react-vite` or
 > ⓑ using Next.js as a static export while moving the server features to the backend axis. **Without
@@ -213,28 +315,36 @@ type-standard slot, product form splits the offline, shell, auth-transport and p
 **a pack itself must hold for any combination of dimensions, and specialization happens at generation time.**
 Nail dimension-specific content into a pack as prose and that pack tilts toward one form and becomes wrong guidance for every other combination.
 
-> **Why two axes**: guide content is not a function of one axis but **a function of the combination**.
+> **Why several axes**: guide content is not a function of one axis but **a function of the combination**.
 > The same Supabase paired with Next.js centers on Route Handlers and Server Actions; paired with a
-> React+Vite SPA it centers on Edge Functions and direct browser calls — **an entirely different
-> guide**. Both axes must be settled before a guide that accounts for each of them can be made.
+> React+Vite SPA it centers on Edge Functions and direct browser calls — **an entirely different guide**.
+> **The app axis is separate from the web screen axis** because, as with a hybrid RN shell, web screens and app code
+> **live in one product** — put them on one axis and one of the two vanishes from the record. The app axis has no
+> pre-built packs (something is pre-built only when it can be registered as an audit target) — it always takes the generation path.
 
-`frontend: none` is the result of choosing "API only" in ① — it is a consequence of the product
-form, not an option on the frontend axis, so it is not asked in ②. The combination
-`frontend: none` + `backend: none` corresponds to the former `blank` preset.
+`frontend: none` is the result of choosing "API only" in ① or of building only a cross-platform or native app —
+it is a consequence of the product form, not an option on the web screen axis, so it is not asked in ⑤. A combination
+where the screen axes and the backend are all `none` corresponds to the former `blank` preset.
 
 ### Step 3: Load preset defaults (merge)
 
-Read three files and merge them in this order (later overrides earlier):
+Read four files and merge them in this order (later overrides earlier). **If an axis value is `none` · `custom` · `undecided`,
+that axis has no file** — skip it without reading:
 
 1. `${CLAUDE_PLUGIN_ROOT}/presets/base.json` — shared domains · security patterns
 2. `${CLAUDE_PLUGIN_ROOT}/presets/frontend/<choice>.json`
-3. `${CLAUDE_PLUGIN_ROOT}/presets/backend/<choice>.json`
+3. `${CLAUDE_PLUGIN_ROOT}/presets/app/<choice>.json` — fills `techStack.app`
+4. `${CLAUDE_PLUGIN_ROOT}/presets/backend/<choice>.json`
 
 Merge rules:
 
 - `additionalStack` is **accumulated**, not overwritten
-- `domains.sourceDir` prefers the frontend axis's value. If the frontend is `none`, use the backend
-  axis's `sourceDir`. If both axes exist and the values differ, confirm with the user
+- `native-dual` has two codebases — the preset `sourceDir` is `ios`, and `android` is taken alongside it in Step 4.7
+  and **both** go into the Step 7.5 card `paths:`
+- `domains.sourceDir` takes the first value present in the order web screen axis → app axis → backend axis.
+  If two or more exist and the values differ, confirm with the user — in a monorepo the Step 4.7 app directories are the answer
+- If the app preset's `fits` does not include the chosen app approach (e.g. `flutter` for a hybrid shell), point out that
+  combination and have the user pick again — for a shell, only the RN family uses an app-axis pack
 - Each preset's `notes` is not written into the config — in Step 9.5 it is **passed to the guide
   generation agent as combination context** (the basis for making a guide that accounts for both axes)
 
@@ -267,10 +377,12 @@ Ask the user for the following (show the preset default where one exists):
 6. **Source directory** (confirm the result of the Step 3 merge rules)
 7. **Shared package path** (required for `monorepo` and `msa` — see Step 4.7. Skipped for `single`)
 
-**Combinations with two toolchains** (for example react-vite + fastapi — TypeScript/npm and Python/uv) have
-different commands per axis. In that case take the per-axis commands separately and confirm the
-**project-level commands** (`techStack.commands`) on their own — build-gate and health-check read those values, so they must be filled.
-In a monorepo the project-level command is often a root script that runs both axes together.
+**With two or more axes, take commands per axis** — even with the same toolchain (TypeScript web + TypeScript API),
+different directories mean different commands. Combinations whose toolchains split (react-vite + fastapi, + rust-axum,
++ flutter, etc.) all the more so. Then confirm the **project-level commands** (`techStack.commands`)
+on their own — build-gate and health-check read those values, so they must be filled.
+In a monorepo the project-level command is often a root script that runs every axis together. If the project-level command
+runs only one axis, **build-gate never verifies the other axes even once** — note that fact in the confirmation summary.
 
 ### Step 4.5: Fill the backend's undecided dimensions
 
@@ -285,7 +397,11 @@ the chosen backend preset left empty:
 | `node-nest` | backendType · database · framework (NestJS 11) · ORM (TypeORM 1) · validation (class-validator) | **auth method**. Whether the guard reads a session cookie or a bearer token is a function of the frontend axis |
 | `aws-container` | defaults for every dimension | nothing — show and confirm. Changing the defaults (RDS PostgreSQL · Drizzle · Cognito) leaves the pre-built set and takes the generation path |
 | `aws-serverless` · `gcp-serverless` | defaults for every dimension | any dimension where a different service is used (e.g. DynamoDB→RDS) |
+| `fastify` | backendType · database · framework (Fastify 5) · ORM (Drizzle) | **auth method**. There is no pre-built pack — generation path |
+| `rust-axum` | backendType · database · framework (Axum) · data access (SQLx) | **auth method**. There is no pre-built pack — generation path |
 | `firebase` | every dimension | nothing — show and confirm |
+| `custom` | the entered framework name | **DB · data access (ORM) · auth method · commands · language** — the preset fills nothing in |
+| `undecided` | — | nothing. Note in the confirmation summary that it is undecided |
 | `none` | — | if an external API is used, its auth method (where the token is kept is the security point) |
 
 If a request comes up to switch to a combination outside the presets (MongoDB · Prisma · Cognito, etc.), take
@@ -320,6 +436,9 @@ If it is hard to choose — is there code right now that two or more places use?
   Without that path Step 7.5 cannot fill the structure card's `paths:`, and an empty `paths:`
   means that card is never loaded over shared code again
 - The result is used for `domains.repoTopology` in Step 5 and for the structure card in Step 7.5
+- **For a `monorepo` or `msa` with two or more axes, take a directory per axis** — web (`apps/web`) · app (`apps/mobile`) ·
+  API (`apps/api`), say. Each becomes that axis's `sourceDir`, and **all** of them go into the Step 7.5 card `paths:`.
+  Take only one and the structure card never loads over the other axes' code
 
 > **Why the options carry explanations** — with only a default and no basis for judgement the user
 > just presses the default, and a one-app project starts out carrying an empty `packages/`.
@@ -328,6 +447,29 @@ If it is hard to choose — is there code right now that two or more places use?
 >
 > And what structure protects is **only up to the review requirement**. What actually tells you
 > "I fixed A and B broke" is B's tests; structure only makes it possible to run those tests independently.
+
+### Step 4.9: Confirmation summary — show it once before writing any file
+
+When the interview ends, **show the values to be recorded in a single table and get confirmation.** Files are written after that.
+Without this step, values produced by measurement, inference or normalization become the config without ever passing the user's eyes.
+
+```
+Confirmation summary — recording this as-is:
+  Product form   hybrid (app shell: RN shell + native screens)      clientKind = app
+  Web screens    react-vite   · TypeScript · npm · apps/web
+  App            react-native · TypeScript · npm · apps/mobile      → guide generation target
+  Backend        fastify      · PostgreSQL · Drizzle · Auth0 (custom) · AWS · apps/api
+  Project cmds   build: npm run build -ws   test: npm test -ws   lint: npm run lint -ws
+  Repo           monorepo · shared packages/
+  Source         ✎ user choice  ⓜ measured  ⓟ preset default  ⓡ recommended — marked on every row
+Tell me if anything needs fixing. Otherwise I will create the files.
+```
+
+- **Mark the source on every row** — only when it is visible where values the user did not pick (measured · preset · recommended)
+  came from can a wrong one be spotted. In particular, **a value inferred from reading a design document is marked as inferred, not ⓜ**
+- **Changes to defaults such as language (TypeScript/JavaScript) and UI toolkit are taken here** — they are not asked separately
+- Say so for a `custom` or `undecided` axis — it means the guide is a generation target or deferred
+- When a correction comes in, fix only that value and show the table again. Do not restart the interview
 
 ### Step 5–6: Create orangekit.config.json · CLAUDE.md
 
@@ -346,8 +488,8 @@ Cards installed:
 | File | Load condition |
 | --- | --- |
 | `workflow-routing.md` | **every session, unconditionally** (no `paths`) — task routing P0–P6 + reference freshness |
-| `code-change.md` | editing `src/**` `app/**` `packages/**` `lib/**` |
-| `security.md` | editing `src/**` `app/**` `packages/**` `lib/**` |
+| `code-change.md` | editing `src/**` `app/**` `packages/**` `lib/**` `apps/**` `services/**` `ios/**` `android/**` |
+| `security.md` | editing `src/**` `app/**` `packages/**` `lib/**` `apps/**` `services/**` `ios/**` `android/**` |
 | `reversibility.md` | editing source · migrations · workspace |
 | `harness-change.md` | editing `.claude/**` `scripts/**` `hooks/**` |
 | `lessons.md` | editing source · `.claude/**` · `scripts/**` · `dev/docs/**` |
@@ -426,7 +568,8 @@ Files created:
 Guides (copy the `status:` line from Step 9.5 verbatim — do not report a half as finished):
   ✅ .claude/skills/<axis>-guide      — skill complete (complete)
   ⏳ .claude/skills/<axis>-guide/     — resources only · awaiting the seam (resources)
-  ⏳ <axis>                           — needs generating (generate)
+  ⏳ <axis>                           — needs generating (generate) — the app axis (app-guide) is always here
+  ·  <axis>                           — not chosen (undecided) — guide deferred
 
 Verification:
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh"
