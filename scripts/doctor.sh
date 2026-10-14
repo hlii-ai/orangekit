@@ -2420,6 +2420,33 @@ run_consumer() {
     ok "build-gate: undecidable → no block"
   fi
 
+  # session-brief — does it survive a guide with only resources assembled (no SKILL.md)?
+  # That is a normal intermediate state, yet an empty-input grep in the version comparison killed the hook
+  # under pipefail and every later notice (unfinished work, rule cards) vanished (consumer field run 2026-10-14).
+  # Check exit 0 **and** that a later section's notice still arrives.
+  local gp="$tmp/proj-resources-only"
+  _consumer_project "resources-only" "$gp" commit config
+  mkdir -p "$cache/guides/frontend/fx" "$gp/.claude/skills/frontend-guide/resources" "$gp/.orangekit"
+  printf '{"axis":"frontend","name":"fx","packVersion":"9.9.9","pkgs":["react@19"]}\n' > "$cache/guides/frontend/fx/pack.json"
+  printf '{"pack":"frontend/fx","packVersion":"0.0.1"}\n' > "$gp/.claude/skills/frontend-guide/assembly.json"
+  printf '{"status":"pending","combo":"fx+none","need":["seam:frontend"]}\n' > "$gp/.orangekit/guide-job.json"
+  mkdir -p "$cache/guides/backend/fy" "$gp/.claude/skills/backend-guide/resources"
+  printf '{"axis":"backend","name":"fy","packVersion":"4.4.4","pkgs":["zod@4"]}\n' > "$cache/guides/backend/fy/pack.json"
+  printf '{"pack":"backend/fy","packVersion":"4.4.4"}\n' > "$gp/.claude/skills/backend-guide/assembly.json"
+  code=0
+  out=$(printf '{}' | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$gp" \
+        bash "$cache/scripts/session-brief.sh" 2>/dev/null) || code=$?
+  rm -rf "$cache/guides"
+  if [ "$code" -ne 0 ]; then
+    bad "session-brief: exit $code on a guide with only resources assembled" "an empty-input grep killed the hook under pipefail — every later notice vanishes"
+  elif ! printf '%s' "$out" | grep -q 'guide generation unfinished'; then
+    bad "session-brief: the unfinished-guide notice did not appear" "it was cut off before reaching the later section"
+  elif printf '%s' "$out" | grep -q 'backend-guide('; then
+    bad "session-brief: a fix notice appeared for a guide whose pack version is unchanged" "it compares with the plugin version — compare with the same pack's current packVersion"
+  else
+    ok "session-brief: guide with only resources assembled → exit 0, unfinished notice arrives"
+  fi
+
   # The UI render notice — **it is a notice, not a block.** Prove both.
   # Synthesize a session where the build ran but there is no trace of a render check.
   sec "UI render notice (non-blocking)"

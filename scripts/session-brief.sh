@@ -207,7 +207,10 @@ PLUG_VER=$({ grep -m1 -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+\.[0
   "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true; } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
 
 orangekit_majors() {  # stdin: "pkgs=a@1 b@2 ..." → sorted "a@1 b@2"
-  grep -oE '[@A-Za-z0-9._/-]+@[0-9]+' 2>/dev/null | sort -u | tr '\n' ' '
+  # On no match (empty input included) grep exits 1 — pipefail plus the ERR trap kills the whole hook.
+  # A guide with only resources assembled (no SKILL.md) is a normal intermediate state, and exactly then
+  # the input is empty, so every later notice (unfinished work, rule cards) vanished. The || true guard is required.
+  { grep -oE '[@A-Za-z0-9._/-]+@[0-9]+' 2>/dev/null || true; } | sort -u | tr '\n' ' '
 }
 
 if [ -n "${PLUG_VER:-}" ]; then
@@ -216,10 +219,13 @@ if [ -n "${PLUG_VER:-}" ]; then
     [ -f "$AJ" ] || continue
     GD=$(dirname "$AJ"); GN=$(basename "$GD")
     PKV=$({ grep -m1 -oE '"packVersion"[[:space:]]*:[[:space:]]*"[0-9.]+"' "$AJ" 2>/dev/null || true; } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
-    [ -n "${PKV:-}" ] && [ "$PKV" = "$PLUG_VER" ] && continue     # up to date — silent
     PACK=$({ grep -m1 -oE '"pack"[[:space:]]*:[[:space:]]*"[^"]+"' "$AJ" 2>/dev/null || true; } | sed -E 's/.*"([^"]+)"$/\1/')
     PJ="$PLUGIN_ROOT/guides/$PACK/pack.json"
     [ -f "$PJ" ] || continue
+    # Compare the installed pack version with **the same pack's current packVersion** — compared with the plugin version
+    # the numbering schemes differ, so it always differed and "there are guide fixes" showed every session for guides with nothing to fix
+    CUR=$({ grep -m1 -oE '"packVersion"[[:space:]]*:[[:space:]]*"[0-9.]+"' "$PJ" 2>/dev/null || true; } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+    [ -n "${PKV:-}" ] && [ "$PKV" = "${CUR:-}" ] && continue
     HAVE=$({ grep -m1 -oE 'pkgs=[^>]*' "$GD/SKILL.md" 2>/dev/null || true; } | orangekit_majors)
     WANT=$({ grep -oE '"[@A-Za-z0-9._/-]+@[0-9.]+"' "$PJ" 2>/dev/null | tr -d '"' || true; } | orangekit_majors)
     if [ -n "$HAVE" ] && [ -n "$WANT" ] && [ "$HAVE" != "$WANT" ]; then
