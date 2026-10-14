@@ -440,6 +440,9 @@ except Exception: print('null')" 2>/dev/null || printf 'null')
     printf '  "state": { "frontend": "%s", "backend": "%s", "app": "%s" },\n' "$FE_STATE" "$BE_STATE" "$APP_STATE"
     printf '  "packs": { "frontend": %s, "backend": %s, "app": null },\n' "$fpack" "$bpack"
     printf '  "notes": %s,\n' "$notes"
+    # Audit round counter — stack-guide-generator increments it before launching audits and stops at 2.
+    # Why it lives in a file: so the counter does not reset to 0 when a cut-off session is picked up (prevents endless re-audits)
+    printf '  "auditRound": 0,\n'
     printf '  "createdAt": "%s"\n}\n' "$TODAY"
   } > "$job"
   printf '    recorded: %s — the session brief of the next session reports it\n' "${job#"$PROJECT_ROOT"/}"

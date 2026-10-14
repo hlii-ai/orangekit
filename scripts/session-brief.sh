@@ -297,6 +297,19 @@ if [ -f "$GJ" ]; then
   esac
 fi
 
+# Is the audit and repair workspace left over — the user does not know large temporary files (npm installs) remain on their disk.
+# If generation is in progress (running · pending · interrupted) it is material to pick up, so just report it; otherwise say it can be deleted
+SCR="$ORANGEKIT_ROOT/.orangekit/scratch"
+if [ -d "$SCR" ]; then
+  SCR_SIZE=$({ du -sh "$SCR" 2>/dev/null || true; } | awk '{print $1}')
+  case "${GJ_STATUS:-}" in
+    pending|running|interrupted)
+      printf -- '- guide audit and repair workspace `.orangekit/scratch/` (%s) — deleted automatically when generation finishes\n' "${SCR_SIZE:-?}" ;;
+    *)
+      printf -- '- leftover guide workspace `.orangekit/scratch/` (%s) — not in use. Delete it with `rm -rf .orangekit/scratch`\n' "${SCR_SIZE:-?}" ;;
+  esac
+fi
+
 # ── 3.5 Nudge for an unconfigured project (the earliest interactive contact after install) ───
 if [ ! -f "$ORANGEKIT_ROOT/orangekit.config.json" ]; then
   printf -- '- unconfigured project — pick the tech stack (backend and DB included) with `/orangekit-init` and a stack-matched guide is generated\n'

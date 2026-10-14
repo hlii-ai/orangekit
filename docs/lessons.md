@@ -1,5 +1,20 @@
 # Lessons
 
+## [category: skill] With no cap, model or location set for audit and repair, a re-audit loop and disk residue followed
+
+- date: 2026-10-14
+- situation: While generating guides in a consumer project (OrangeTopia), the model launched 5 second-round audits on its own after the
+  repair had finished. Each audit inherited the main model and spent 45k~100k tokens within its first minute. Audit A actually
+  installed and bundled the whole app and ran 59 mutants. 11 working folders (including a separate npm cache per audit) were left
+  at the drive root. The user pointed out the excess time and tokens, the risk of a loop, and large folders appearing on their own
+  disk without their knowing.
+- mistake: The spec said only "run the gate again after repairing" and set none of: a ban on re-auditing · a round cap · subagent models ·
+  a work location · when to delete · an execution scope. The repair criterion "medium and low are the user's call" either created questions
+  or let the model just fix them. With a principle (generator ≠ verifier) and no budget, the model applies the principle without end.
+- lesson: A spec that launches subagents writes **a budget alongside the principle** — a round cap (with the counter in a file outside the session),
+  a model per stage, the number run concurrently, an execution scope cap, a work location and when it is deleted. And filter repairs by impact
+  grade. Do not ask about what will not be fixed; record it.
+
 ## [category: skill] With no recording rule for stacks outside the choices, init invented preset names
 
 - date: 2026-10-13

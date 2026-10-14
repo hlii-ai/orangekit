@@ -1,13 +1,15 @@
 # Independent adversarial audit prompt (used in Step 5)
 
 **Launch three audits in parallel.** Give all three the common preamble below and swap only the "assigned axis".
+**Model · rounds · work location are set by "Audit and repair budget" in `SKILL.md`** — `sonnet` for A and C,
+`haiku` for B, at most 2 rounds, and working directories only under `.orangekit/scratch/`.
 Fill in the `<...>` and hand it over as is. **The auditor does not see the generation conversation** — the audit is independent
 only if they read the artifacts and judge from those alone.
 
 | Audit | Assigned axis | Unique input |
 | --- | --- | --- |
 | **A. Execution** | Whatever in 4 (security) · 3 (cut surfaces) can be confirmed by running it | The `pack-smoke.sh --keep` working directory · `vector-report.tsv` |
-| **B. Version claims** | The version claims in 1 (accuracy) | The TSV produced by `guide-gate.sh --claims-out`. **Over 40 entries, split evenly and launch 2~3 B audits** |
+| **B. Version claims** | The version claims in 1 (accuracy) | The TSV produced by `guide-gate.sh --claims-out`. **Split in 2 only when there are more than 80 entries** |
 | **C. Cross-file** | 2 (self-contradiction) · 5 (slot contracts) · 3 (cut surfaces) exhaustively · policy ↔ prose | The full pack and guide text · `policies.md` · `ledger.md` · A's execution report |
 
 **C owns exhaustive reading.** A and B receive only narrow inputs, so only C can perform the cut-surface method of
@@ -23,10 +25,12 @@ fall wholly into B — splitting loses nothing.
 loses nothing — in the node-api measurement B was the critical path at 15 minutes 46 seconds, and aws-serverless had 76 entries.
 
 ```bash
-bash ${CLAUDE_SKILL_DIR}/scripts/guide-gate.sh --pack <pack> --claims-out /tmp/claims.tsv
-# Over 40 entries split in 2, over 100 split in 3. `split -n l/2` **does not work on macOS**
-# (it is a GNU extension) — count the lines and split with `-l`
-n=$(wc -l < /tmp/claims.tsv); split -l $(( (n + 1) / 2 )) /tmp/claims.tsv /tmp/claims-
+mkdir -p .orangekit/scratch
+bash ${CLAUDE_SKILL_DIR}/scripts/guide-gate.sh --pack <pack> --claims-out .orangekit/scratch/claims.tsv
+# Split in 2 only over 80 entries — split further and the fixed cost each audit carries (loading context) outweighs the gain.
+# `split -n l/2` **does not work on macOS** (it is a GNU extension) — count the lines and split with `-l`
+n=$(wc -l < .orangekit/scratch/claims.tsv)
+[ "$n" -gt 80 ] && split -l $(( (n + 1) / 2 )) .orangekit/scratch/claims.tsv .orangekit/scratch/claims-
 ```
 
 **Do not split A or C.** A is an execution sharing one working directory, and C's value is exhaustiveness
@@ -71,7 +75,9 @@ L1 authoring had this discipline from the start ("save first, verify later" in `
 two of them had already finished their execution verification and yet **left not one line** — because the report
 came only once, at the end.
 
-- Create the output file first (`<scratch>/audit-<pack>-<A|B|C>.md`) and write **the TSV rows you have settled** as you go
+- Create the output file first (`.orangekit/scratch/audit-<A|B|C>-<axis>/report.md`) and write **the TSV rows you have settled** as you go.
+  Create working directories only under it too — never outside the project · at the drive root · in `/tmp`.
+  Share a single npm cache, `npm_config_cache=.orangekit/scratch/npm-cache`
 - It is fine if it is incomplete. **A partly filled file beats nothing at all**
 - At the end, emit that file's content as the final report verbatim — do not produce two copies
 
@@ -139,6 +145,11 @@ to confirm that both a definition and a call exist — reading narrows the candi
 - Concepts mentioned by name with no method (saying "use X" with no example)
 - Traces where a reference to something deleted in one file remains in another
 
+**Execution scope cap (audit A)** — up to type-checking · linting · running the security vectors on the guide's code fences.
+Mutation testing · bundling (`expo export`, etc.) · devices or simulators · assembling the whole app are **not done** —
+if one looks necessary, write it under "What you left unchecked" as "needs on-device check". The purpose of this stage is to
+decide whether the guide may be installed, not to finish the app.
+
 **4. Security (audit A)** — verify **every** claim about authentication, authorization, and secrets.
 **Do not read; run.** Run yourself the classes of vector in `assets/security-vectors.md` that `pack-smoke.sh` could not
 run automatically (path normalization · token comparison · escaping · authorization decisions).
@@ -171,7 +182,9 @@ file<TAB>line<TAB>severity<TAB>clusterId<TAB>one-line summary<TAB>how to reconfi
 - `how to reconfirm` is **something the main session can run as written** — `grep -n '...' <file>`,
   `node -e '...'`, a test command. It lets the reconfirmation principle 6 demands finish on the spot.
   If the only evidence is "you will see if you read it", do not raise that finding
-- Severity is `critical|high|medium|low`. Attach confidence in front of the summary as `[confirmed]` · `[suspected]`
+- Severity is `critical|high|medium|low`. Attach confidence in front of the summary as `[confirmed]` · `[suspected]`.
+  The criteria are the severity table in `SKILL.md` Step 6 — **only `critical` · `high` get repaired; `medium` · `low` are only recorded.**
+  So emit at most 10 `medium` · `low` items combined, and leave their `how to reconfirm` as `-`
 
 1. **The defect TSV** (the format above) + append each item's **recommended repair direction** at the end of the same line
 2. **A slot contract fulfilment table** — fulfilled / partial / unfulfilled per required slot + the location
@@ -187,3 +200,19 @@ file<TAB>line<TAB>severity<TAB>clusterId<TAB>one-line summary<TAB>how to reconfi
    > This item is the entire input to the pipeline's **L0 re-review gate**. Measured, a contract frozen before
    > the norm was established repeated the same critical defect (`firebase`), while where the norm already existed
    > recurrence was 0. Buried in prose, the main session does not recognize it as a norm
+
+---
+
+## Round 2 — regression audit (1 · `haiku`)
+
+Launch it **once**, only when round 1 repaired something. Do not audit everything again — look only at defects the repair
+newly created. There are no audits after this.
+
+You are the regression audit agent. You look only at the difference before and after the repair.
+
+- **Input**: the full output of `diff -ru .orangekit/scratch/pre-repair/<axis>-guide .claude/skills/<axis>-guide` +
+  the round 1 defect TSV (what the repair was meant to fix) + the gate output after the repair
+- **Look at**: ① was the defect it meant to fix actually fixed ② did a repaired line create a **new** compile error · security defect ·
+  contract mismatch ③ did the repair break a reference in another file (`grep` the changed names)
+- **Do not look at**: anything outside the diff · style · the `medium` · `low` items round 1 decided only to record
+- **Return**: the TSV format above, **`critical` only**. If there are none, the single line "no regression"

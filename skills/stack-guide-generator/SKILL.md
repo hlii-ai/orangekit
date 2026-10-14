@@ -45,6 +45,7 @@ cat .orangekit/guide-job.json 2>/dev/null
 | `need` | What to build. The vocabulary below maps 1:1 onto the rows of the Step 2 branch table |
 | `packs` | Paths of the assembled packs. That axis is an "axis that has a pack", so read the three files in Step 2 |
 | `app` | The app axis value (`presets.app`). If it is not `none`, `app-guide` is a generation target |
+| `auditRound` | How many audit rounds have been launched so far. **At 2, launch no more audits** ("Audit and repair budget") |
 | `notes` | The axis preset notes (serverCode · securityBoundary · policyEngine · language · appNotes) **＋ dimensions that are not axes** (deliveryModel · clientKind · pwa · appShell · nativeStack). The entire input for combination dependencies and conditional slot decisions |
 
 | `need` item | Meaning | What to build |
@@ -261,12 +262,59 @@ app-guide (`--pair` compares only frontend and backend, so this section is check
 The generator also runs the same gate before returning, but **the report that it ran is itself a self-report** (principle 5).
 **Read `assets/verification-gate.md` and follow it exactly.**
 
+## Audit and repair budget — 2 rounds · lighter models · a fixed work location
+
+Generation **sets** quality; audit and repair **confirm** it. If confirming costs more than generating, the order has been
+inverted. Measured (a consumer project, 2026-10-14): after the repair the model launched 5 second-round audits on its own,
+each audit spent 45k~100k tokens within its first minute, and 11 working folders were left at the **drive root**.
+That is what happens when the spec sets no cap, no model and no location. The four below are **caps, not options**.
+
+**① At most 2 rounds.**
+
+| Round | Audit | What gets repaired |
+| --- | --- | --- |
+| 1 | A · B · C (all of Step 5) | `critical` · `high` |
+| 2 | **One regression audit** — it looks only at the diff of what round 1 fixed (`assets/audit-prompt.md` "Round 2") | `critical` only |
+| End | **None** — do not launch audits again | — |
+
+- **Before** launching an audit, increment `auditRound` in `.orangekit/guide-job.json` by 1. If the session is cut off and
+  picked up again, keep counting from this value — **at 2, launch no more audits**
+- If round 1 fixed nothing, skip round 2
+- A `critical` still left after round 2 **does not block the install** — write it in a "Known defects" section at the very top
+  of the hub (so a model reading the guide does not copy that pattern) and put it on the first line of the completion report
+- Gate FAILs are fixed inside the repair rounds as well. If it is still FAIL after round 2, that axis goes down to
+  `.orangekit/failed-guides/` under `install-guide.sh`'s existing rule and is reported — the loop does not
+  run again
+
+**② Run audit and repair on lighter models.** Set it with the `model` argument of the `Agent` tool. In an environment where
+that model is unavailable, drop the argument and inherit.
+
+| Stage | `model` | Why |
+| --- | --- | --- |
+| Generation (L0 · L1 · L2) | not set (the main model) | This is the stage that sets guide quality — saving here grows the repair load |
+| Audit A (execution) · C (cross-file · security) | `sonnet` | It involves security judgement |
+| Audit B (version claims) | `haiku` | A line-by-line true/false lookup |
+| Repair | `sonnet` | The findings are already concrete in the TSV, so it is execution more than judgement |
+| Round 2 regression audit | `haiku` | It looks only at the diff |
+
+When the generator and the auditor are different models, principle 5 (generator ≠ verifier) actually gets stronger.
+
+**③ The work location is `.orangekit/scratch/` and nowhere else.** Every directory audit and repair creates goes under
+`.orangekit/scratch/<purpose>-<axis>/` (e.g. `audit-A-frontend` · `repair-backend`).
+**Never create them outside the project · at the drive root · in `/tmp`.** Do not give each audit its own npm cache;
+share a single `npm_config_cache=.orangekit/scratch/npm-cache`. init put `.orangekit/` in gitignore,
+so it is not committed, and Step 7 deletes `.orangekit/scratch/` wholesale.
+
+**④ At most 3 run concurrently.** The audit stage's subagents are the three, A · B · C. Only B is split in 2, and only when the version
+claims **exceed 80** — never further.
+
 ## Step 5: Independent adversarial audit (principle 5)
 
 Passing the machine gate does not settle the install. What the machine cannot catch — inaccurate guidance, rule conflicts between the hub
 and a resource, holes in a security judgement — needs a layer equivalent to human eyes.
 
-Fill in the template in `assets/audit-prompt.md` and launch **three audits in parallel**.
+Fill in the template in `assets/audit-prompt.md` and launch **three audits in parallel**. Model, work location and rounds follow
+the "Audit and repair budget" above.
 Do not give the auditors the generation conversation context — the audit is independent only if they read the artifacts alone.
 
 **Why three-way**: measured, one audit read all 1,946 lines exhaustively and took 20 minutes. The three paths that actually
@@ -275,8 +323,8 @@ and the 5 false version claims fall wholly into B.
 
 | Audit | Input | Responsibility |
 | --- | --- | --- |
-| **A. Execution** | The working directory of `pack-smoke.sh --online --keep` + `vector-report.tsv` + the pack | Security · cut surfaces, **whatever can be confirmed by running it**. It starts from the report, so it does not build a scratch project from nothing. If `tsc` is **still** skipped (offline), filling that in is A's first job |
-| **B. Version claims** | The TSV produced by `--claims-out` | The version-claim part of accuracy. Rule each line true / false / unverifiable. **Over 40 entries, split evenly and launch 2~3 B audits** (`n=$(wc -l < claims.tsv); split -l $(( (n+1)/2 ))` — `-n l/2` is GNU-only and fails on macOS) — the entries are independent of each other, making this the only audit that loses nothing when split |
+| **A. Execution** | The working directory of `pack-smoke.sh --online --keep` + `vector-report.tsv` + the pack | Security · cut surfaces, **whatever can be confirmed by running it**. It starts from the report, so it does not build a scratch project from nothing. If `tsc` is **still** skipped (offline), filling that in is A's first job. **Scope cap**: up to type-checking · linting · running the security vectors on the guide's code fences — no mutation testing · bundling (`expo export`, etc.) · devices or simulators · assembling the whole app; only mark it "needs on-device check" |
+| **B. Version claims** | The TSV produced by `--claims-out` | The version-claim part of accuracy. Rule each line true / false / unverifiable. **Split in 2 only when there are more than 80 entries** (`n=$(wc -l < claims.tsv); split -l $(( (n+1)/2 ))` — `-n l/2` is GNU-only and fails on macOS) — the entries are independent of each other, making this the only audit that loses nothing when split |
 | **C. Cross-file** | The full pack text + `policies.md` + `ledger.md` | Self-contradiction · slot contracts · ghost symbols · **mismatch between what a policy declares and what a resource actually does** (the measured 26-case class) · vocabulary and wording consistency |
 
 **Do not split A or C.** A is an execution sharing one working directory, and C's value is exhaustiveness
@@ -311,17 +359,26 @@ Generation discipline cannot block wrongly confident knowledge — the model doe
    ruled that "what dominates the wall clock is not volume but **the number of verification round trips**"
 1. Run each finding's `how to reconfirm` exactly as written and **confirm it yourself**. A finding that does not confirm is not
    repaired; leave that fact in the report
-2. Repair only confirmed defects (critical and high are mandatory; medium and low are the user's call).
+2. Of the confirmed defects, repair **only those with impact**. For petty repairs the cost of audit and re-verification exceeds the gain:
+
+   | Severity | Criterion | Handling |
+   | --- | --- | --- |
+   | `critical` | A security defect (auth · tokens · redirects · injection · secret exposure) · guide code that does not compile or run · a wire-contract mismatch between the two guides | Repaired in rounds 1 and 2 |
+   | `high` | A wrong API or version claim that breaks when followed · guidance that contradicts a policy | Repaired in round 1 only |
+   | `medium` · `low` | Wording consistency · example enrichment · a missing reference note · gate WARN/REVIEW | **Not repaired.** Record each as one line under "Known defects", and do not ask the user |
+
+   **Before repairing, copy the target guide to `.orangekit/scratch/pre-repair/`** — it is the input (diff) of the round 2 regression audit.
    **The ledger already assigned file ownership, so grouping by clusterId means there are no write conflicts** —
    send all of a cluster's findings together in **one** `SendMessage` per cluster, concurrently
-3. After repairing, **run Step 4 again** — a repair creating new defects is a common failure mode
-4. If a critical defect cannot be repaired, do not install; get the user's decision
+3. After repairing, **run Step 4 again** — a repair creating new defects is a common failure mode.
+   **Re-launching audits is not this step** — the only re-audit is the single round 2 regression audit of the "Audit and repair budget"
+4. A `critical` still left after round 2 does not block the install — put it in the "Known defects" section at the top of the hub and on the first line of the completion report
 
 ## Step 7: Stamp and report
 
 - Record the generation stamp in each SKILL.md (the skeleton's format — attach it only to generated artifacts)
 - Report to the user: the generated skills (whichever of frontend · backend · app were generated) · the resource count · **every gate WARN and the reason for**
-  **each REVIEW verdict** · **the audit results and what was repaired** · **the list of empty slots** (if any) · "auto-triggers from the next session on"
+  **each REVIEW verdict** · **the audit results and what was repaired** (including the number of rounds) · **known defects** (a remaining `critical` goes on the first line) · **the list of empty slots** (if any) · "auto-triggers from the next session on"
 - On a regeneration request: compare the stamp's stack= value against the new combination and report which dimensions changed;
   if a manual edit is detected, show a diff of the edited part and get the user's confirmation
 
@@ -335,11 +392,19 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-guide.sh" --save-seam "<combo>"
 
 # 2) Close the job. If the file remains, session-brief keeps reporting it as unfinished
 rm -f .orangekit/guide-job.json
+
+# 3) Clean up the audit and repair workspace — left behind, the next generation mistakes stale artifacts for material
+rm -rf .orangekit/scratch
 ```
 
 If you did not finish, do not delete it; leave the reason — it is the basis for the next session to pick it up
-(`status` to `failed`, and one sentence in `reason` saying what was blocked and why).
+(`status` to `failed`, and one sentence in `reason` saying what was blocked and why). **Delete `.orangekit/scratch/` in this case too** —
+`failed` is a finished state, and the user does not know large temporary files are being left on their disk. The basis for picking
+it up is `guide-job.json` and the installed guides, not scratch. Scratch is left only when the session was
+**cut off midway** (`running`), and then `session-brief` reports its size and the delete command.
 
+> **Do not put a seam with a known `critical` left in the cache** — install it, but do not hand it down to the next project.
+>
 > **Do not put an unverified artifact in the cache.** Every later project on that combination inherits the same defect
 > and the cache becomes an amplifier of defects. Call `--save-seam` only after the audit passes.
 
