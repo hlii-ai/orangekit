@@ -4,7 +4,7 @@
   "displayName": "OrangeKit Claude Code Devkit",
   "description": "AI Native Dev Harness — reversibility-axis workflow + self-testing hooks + graph instrumentation",
   "author": {
-    "name": "gyeong"
+    "name": "OrangeKit"
   },
   "license": "MIT",
   "repository": "https://github.com/hlii-ai/orangekit",

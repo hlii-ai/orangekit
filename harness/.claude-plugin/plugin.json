@@ -4,7 +4,7 @@
   "displayName": "OrangeKit Harness Dev Kit",
   "description": "Harness authoring only — a full 8-axis evaluation of the graph engine. Installed only by the people who build this plugin",
   "author": {
-    "name": "gyeong"
+    "name": "OrangeKit"
   },
   "license": "MIT",
   "repository": "https://github.com/hlii-ai/orangekit",
