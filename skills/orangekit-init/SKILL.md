@@ -462,14 +462,31 @@ Confirmation summary — recording this as-is:
   Project cmds   build: npm run build -ws   test: npm test -ws   lint: npm run lint -ws
   Repo           monorepo · shared packages/
   Source         ✎ user choice  ⓜ measured  ⓟ preset default  ⓡ recommended — marked on every row
-Tell me if anything needs fixing. Otherwise I will create the files.
 ```
 
 - **Mark the source on every row** — only when it is visible where values the user did not pick (measured · preset · recommended)
   came from can a wrong one be spotted. In particular, **a value inferred from reading a design document is marked as inferred, not ⓜ**
 - **Changes to defaults such as language (TypeScript/JavaScript) and UI toolkit are taken here** — they are not asked separately
 - Say so for a `custom` or `undecided` axis — it means the guide is a generation target or deferred
-- When a correction comes in, fix only that value and show the table again. Do not restart the interview
+
+**Right after showing the table, ask with `AskUserQuestion` — do not ask in text and end the turn.**
+Ending with "tell me if anything needs fixing" leaves the user waiting without knowing what to type
+to move on. A single choice must split proceeding from editing:
+
+```
+Question: Create the files with this configuration?
+  1. Create (recommended) — write orangekit.config.json · CLAUDE.md · rule cards as shown above
+  2. Edit                 — pick what to change
+```
+
+- **On "Create", go straight to Step 5.** Do not confirm again
+- **On "Edit", ask once more with the same tool** — take the items to change as a multi-select:
+  `Product form · screens · app` / `Backend (type · framework · DB · auth · deploy)` /
+  `Commands · directories · repo structure` / free input (any other value). Re-ask only the questions
+  for the chosen items (never restart the interview), fix the values, then **show the table again and
+  return to the confirmation question above**
+- If the free input already carries the change (e.g. "backend auth should be Auth0"), fix just that value and return to the table
+- This confirmation does not count toward the interview call budget (calls 1–4) — it is the only gate before files are written
 
 ### Step 5–6: Create orangekit.config.json · CLAUDE.md
 
