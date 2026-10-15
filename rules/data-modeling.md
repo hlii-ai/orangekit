@@ -7,7 +7,7 @@ paths:
   - "drizzle/**"
   - "dev/docs/database/**"
 ---
-<!-- orangekit-rule-version: 3.25.0 -->
+<!-- orangekit-rule-version: 3.32.3 -->
 
 # Data Modeling Card
 
@@ -157,6 +157,7 @@ Mandatory checks when creating a new table:
 - [ ] Tables that require business history → create the `_{table}_history` history table at the same time (→ `change-history.md`)
 - [ ] When applying Soft Delete: a `deleted_at` column + a partial index + the RLS condition updated (→ `deletion-strategy.md`)
 - [ ] When idempotency is needed: an `idempotency_key` UNIQUE column + TTL cleanup (→ `idempotency.md`)
+- [ ] Personal or sensitive columns: a retention period and what enforces it (job · TTL) + a per-subject erasure path (subject FK `ON DELETE CASCADE` or a documented bulk delete). If undecided, record the reason for indefinite retention in the table definition (→ `deletion-strategy.md`)
 
 ---
 

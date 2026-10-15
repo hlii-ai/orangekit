@@ -70,7 +70,7 @@ Detection signals: debug mode in production · default credentials · stack trac
 directory listing · overly broad CORS (`*` + credentials) · security headers not set.
 
 - [ ] Debug and verbose errors are off in the production build (the output norms are in `security.md` "output security")
-- [ ] No default accounts or default passwords remain
+- [ ] No default accounts or default passwords remain (behavior on empty settings: Step 2)
 - [ ] CORS `origin` is an allowlist. `*` and `credentials: true` are not used together
 - [ ] Security headers: `Content-Security-Policy` · `X-Content-Type-Options: nosniff` ·
       `Strict-Transport-Security` · `Referrer-Policy` · framing blocked
