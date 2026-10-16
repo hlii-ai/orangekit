@@ -1040,7 +1040,7 @@ _pkg_has_product() { # $1=name list file $2=token
 _kg_owner_pack() {   # $1 manifest  $2 symbol
   local j="$1" sym="$2" axis pk pj
   case "$j" in */seam.json) ;; *) return 0;; esac
-  for axis in frontend backend; do
+  for axis in frontend backend app; do
     pk=$(grep -oE "\"${axis}Pack\"[[:space:]]*:[[:space:]]*\"[^\"]+\"" "$j" | sed -E 's|.*/||; s|"$||')
     [ -n "$pk" ] || continue
     pj="$PLUGIN_GUIDES/$axis/$pk/pack.json"
@@ -1098,7 +1098,8 @@ check_pack_meta() {
   nm=$(grep -m1 -oE '"name"[[:space:]]*:[[:space:]]*"[^"]+"' "$j" | sed -E 's/.*"([^"]+)"$/\1/')
   ax=$(grep -m1 -oE '"axis"[[:space:]]*:[[:space:]]*"[^"]+"' "$j" | sed -E 's/.*"([^"]+)"$/\1/')
   [ "$nm" = "$(basename "$P")" ] && ok "name = directory name ($nm)" || bad "pack.json name '$nm' ≠ directory '$(basename "$P")'"
-  case "$ax" in frontend|backend) ok "axis = $ax";; *) bad "axis is neither frontend nor backend: '$ax'";; esac
+  # The app axis follows the same pack contract as the web screen axis — only the axis name differs, the checks are the same
+  case "$ax" in frontend|backend|app) ok "axis = $ax";; *) bad "axis is not frontend/backend/app: '$ax'";; esac
 
   # resources[] ↔ real files, both set differences
   grep -oE '"file"[[:space:]]*:[[:space:]]*"[^"]+"' "$j" | sed -E 's/.*"([^"]+)"$/\1/' | sort -u > "$TMP/pjres.txt"
@@ -1879,6 +1880,7 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/envclass/fxpack2"     0 "an env schema declared as class fields is accepted"
   _fx_assert_pack "$fx/pk/multisym/fxpack2"     0 "the second symbol of a row also counts as entered in the ledger (hub ghost false positive)"
   _fx_assert_pack "$fx/pk/tpllit/fxpack2"       0 "a word in template literal text is not symbol use"
+  _fx_assert_pack "$fx/pk/appaxis/fxpack2"      0 "an app-axis (axis: app) pack is accepted"
 
   sec "positive pack fixtures (must be blocked)"
   _fx_assert_pack "$fx/pk/polnoex/fxpack2"   1 "no policy proof-example column"
@@ -1902,6 +1904,7 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/jstypedefgone/fxpack2" 1 "when the @typedef really is missing it is still caught"
   _fx_assert_pack "$fx/pk/fvscopebad/fxpack2"   1 "a real competing product (express) is still caught as a contradiction"
   _fx_assert_pack "$fx/pk/envclassbad/fxpack2"  1 "an env key absent from the class is still caught"
+  _fx_assert_pack "$fx/pk/badaxis/fxpack2"      1 "an unknown axis name is still caught"
 
   [ "$REGRESS" -eq 0 ] && { sec "regression corpus"; skip_note; }
 
@@ -1926,7 +1929,7 @@ run_shipped_corpus() {
     return 0
   fi
   local d n=0 code
-  for d in "$PLUGIN_GUIDES"/frontend/*/ "$PLUGIN_GUIDES"/backend/*/; do
+  for d in "$PLUGIN_GUIDES"/frontend/*/ "$PLUGIN_GUIDES"/backend/*/ "$PLUGIN_GUIDES"/app/*/; do
     [ -f "$d/PACK.md" ] || continue
     n=$((n+1))
     code=0; bash "$0" --pack "${d%/}" >/dev/null 2>&1 || code=$?
@@ -1961,7 +1964,7 @@ check_seam_slots() {   # $1 seam directory (guides/seams/<combination>)
 
   # ① seam.json declaration ↔ real files (the same two-way set difference as check_pack_meta)
   grep -oE '"file"[[:space:]]*:[[:space:]]*"[^"]+"' "$sj" | sed -E 's/.*"([^"]+)"$/\1/' | sort -u > "$TMP/sjres.txt"
-  for axis in frontend backend; do
+  for axis in frontend backend app; do
     ls "$S/$axis"/resources/*.md 2>/dev/null | while read -r f; do basename "$f"; done
   done | sort -u > "$TMP/sjreal.txt"
   local smiss sghost
@@ -1975,7 +1978,7 @@ check_seam_slots() {   # $1 seam directory (guides/seams/<combination>)
 
   # ② the axis pack's seamSlots ↔ the real files of that axis
   local pk pj sdiff
-  for axis in frontend backend; do
+  for axis in frontend backend app; do
     [ -d "$S/$axis/resources" ] || continue
     pk=$(grep -oE "\"${axis}Pack\"[[:space:]]*:[[:space:]]*\"[^\"]+\"" "$sj" | sed -E 's|.*/||; s|"$||')
     [ -n "$pk" ] || { warn "seam $combo/$axis — could not read the pack reference"; continue; }
@@ -2285,7 +2288,7 @@ FXPP
 }
 FXPJ
 
-  for m in polnoex polbadex polrealex secorigin secprefix secok secrefer ledgerbad reqexport fvbad vocab dupfence noproof noshape badarity noimport reqnosig polnohdr jsonfence polbadfile ghostres jstypedef jstypedefgone secintercept fvscope fvscopebad envclass envclassbad multisym tpllit; do
+  for m in polnoex polbadex polrealex secorigin secprefix secok secrefer ledgerbad reqexport fvbad vocab dupfence noproof noshape badarity noimport reqnosig polnohdr jsonfence polbadfile ghostres jstypedef jstypedefgone secintercept fvscope fvscopebad envclass envclassbad multisym tpllit appaxis badaxis; do
     mkdir -p "$fx/pk/$m" && cp -R "$b" "$fx/pk/$m/" || return 1
   done
   # A fixture that adds c.md must carry it in pack.json too, or it is not blocked by the intended check.
@@ -2295,6 +2298,10 @@ FXPJ
     sed -i.bak 's#{ "file": "b.md", "nav": "Boot" }#{ "file": "b.md", "nav": "Boot" },\
     { "file": "c.md", "nav": "Return path" }#' "$fx/pk/$v/fxpack2/pack.json" && rm -f "$fx/pk/$v/fxpack2/pack.json.bak"
   done
+
+  # App axis — the pack contract is the same as the web screen axis, only the axis name differs. Exactly three names must be accepted
+  sed -i.bak 's#"axis": "backend"#"axis": "app"#' "$fx/pk/appaxis/fxpack2/pack.json" && rm -f "$fx/pk/appaxis/fxpack2/pack.json.bak"
+  sed -i.bak 's#"axis": "backend"#"axis": "mobile"#' "$fx/pk/badaxis/fxpack2/pack.json" && rm -f "$fx/pk/badaxis/fxpack2/pack.json.bak"
 
   # ⑯ a scoped package is not mistaken for a competing product (measured on node-nest — a false positive)
   # `@nestjs/platform-express` is Nest's default HTTP adapter, not a choice of Express.

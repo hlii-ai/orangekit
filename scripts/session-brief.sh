@@ -234,7 +234,7 @@ if [ -n "${PLUG_VER:-}" ]; then
       FIXES="$FIXES $GN(v$PKV)"     # a fix within the same premise — it has to reach
     fi
   done
-  [ -n "$FIXES" ] && printf -- '- There are guide fixes under the same stack premise (plugin v%s ↔ installed%s) — `bash "%s/scripts/install-guide.sh" --frontend <pack> --backend <pack>`\n' \
+  [ -n "$FIXES" ] && printf -- '- There are guide fixes under the same stack premise (plugin v%s ↔ installed%s) — `bash "%s/scripts/install-guide.sh" --frontend <pack> --backend <pack> [--app <app>]`\n' \
     "$PLUG_VER" "$FIXES" "$PLUGIN_ROOT"
   [ -n "$PINNED" ] && printf -- '- %s: the plugin pack has moved to a different stack major — **not updating**. Move it across with `/stack-guide-generator` when you raise the dependency\n' \
     "$(printf '%s' "$PINNED" | sed 's/^ //')"

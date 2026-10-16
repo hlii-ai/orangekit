@@ -915,7 +915,7 @@ $c"
   if [ -d guides ]; then
     sec "axis guide packs"
     local pk pn pmiss=0 pold=0 pcount=0 pstale=""
-    for pk in guides/frontend/*/ guides/backend/*/; do
+    for pk in guides/frontend/*/ guides/backend/*/ guides/app/*/; do
       [ -d "$pk" ] || continue
       pcount=$((pcount+1)); pn=${pk%/}; pn=${pn#guides/}
       for req in PACK.md ledger.md policies.md pack.json; do
@@ -945,7 +945,7 @@ $c"
       while IFS= read -r ref; do
         [ -z "$ref" ] && continue
         [ -d "guides/$ref" ] || { bad "seam $(basename "$(dirname "$sm")"): pack $ref missing"; smiss=$((smiss+1)); }
-      done < <({ grep -oE '"(frontend|backend)Pack"[[:space:]]*:[[:space:]]*"[^"]+"' "$sm" 2>/dev/null || true; } | sed -E 's/.*"([^"]+)"$/\1/')
+      done < <({ grep -oE '"(frontend|backend|app)Pack"[[:space:]]*:[[:space:]]*"[^"]+"' "$sm" 2>/dev/null || true; } | sed -E 's/.*"([^"]+)"$/\1/')
     done
     [ "$smiss" -eq 0 ] && ok "seam pack references exist"
   fi
@@ -1055,10 +1055,12 @@ $c"
   real_ap=$(num "$({ ls -1 presets/app/*.json 2>/dev/null || true; } | wc -l | tr -d ' ')")
   # Only the pack count **does not fold absence into 0.** --consumer's cache copy excludes guides/, so counting 0
   # there would flag a normal tree as a false positive — missing and zero are different things (the three-state discipline).
-  local real_fp="" real_bp=""
+  local real_fp="" real_bp="" real_apk=""
   if [ -d guides/frontend ] && [ -d guides/backend ]; then
     real_fp=$(num "$(find guides/frontend -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')")
     real_bp=$(num "$(find guides/backend -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')")
+    # The app axis arrived later — no directory means 0 packs (that guides/ exists is already established)
+    real_apk=$(num "$(find guides/app -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')")
   fi
   if command -v jq >/dev/null 2>&1 && [ -f workflow.graph.json ]; then
     real_nd=$(num "$(jq -r '.nodes|length' workflow.graph.json 2>/dev/null)")
@@ -1117,7 +1119,7 @@ $c"
   local MP=".claude-plugin/marketplace.json"
   if [ -f "$MP" ]; then
     local mp_pack mp_pre
-    mp_pack=$(grep -oE 'packs \(frontend [0-9]+ · backend [0-9]+\)' "$MP" 2>/dev/null | head -1)
+    mp_pack=$(grep -oE 'packs \(frontend [0-9]+( · app [0-9]+)? · backend [0-9]+\)' "$MP" 2>/dev/null | head -1)
     mp_pre=$(grep -oE 'presets \(frontend [0-9]+ · app [0-9]+ · backend [0-9]+\)' "$MP" 2>/dev/null | head -1)
     [ -z "$mp_pre" ] && [ -d presets/app ] && bad "$MP: preset axis notation missing — no 'presets (frontend N · app N · backend N)' notation, so the count comparison does not run"
     [ -n "$real_hk" ] && _claim "hook count" \
@@ -1126,6 +1128,8 @@ $c"
     if [ -n "$real_fp" ]; then
       _claim "frontend pack count" "$(printf '%s' "$mp_pack" | grep -oE '[0-9]+' | head -1)" "$real_fp" "$MP"
       _claim "backend pack count" "$(printf '%s' "$mp_pack" | grep -oE '[0-9]+' | tail -1)" "$real_bp" "$MP"
+      # With 0 app packs, no notation is correct. With 1 or more and no notation, the pre-install description is false
+      _claim "app pack count" "$(printf '%s' "$mp_pack" | { grep -oE 'app [0-9]+' || echo 'app 0'; } | grep -oE '[0-9]+')" "$real_apk" "$MP"
     fi
     _claim "frontend preset count" "$(printf '%s' "$mp_pre"  | grep -oE '[0-9]+' | head -1)" "$real_fe" "$MP"
     _claim "app preset count"      "$(printf '%s' "$mp_pre"  | grep -oE '[0-9]+' | sed -n 2p)" "$real_ap" "$MP"
@@ -2990,7 +2994,7 @@ run_inventory() {
 
   sec "axis guide packs (${C_D}verified=pack verification date · pkgs=number of packages used as the freshness baseline${C_0})"
   local pk pj
-  for pk in guides/frontend/*/ guides/backend/*/; do
+  for pk in guides/frontend/*/ guides/backend/*/ guides/app/*/; do
     [ -f "$pk/pack.json" ] || continue
     pj="$pk/pack.json"
     printf "  %-28s %3s files %6s lines  v%-7s verified=%s pkgs=%s\n" "${pk#guides/}" \

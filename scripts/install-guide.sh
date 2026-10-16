@@ -3,7 +3,7 @@
 #
 # This is the delivery path after the prebuilt unit dropped from "combination" down to "axis". Only the part that
 # genuinely depends on the combination is left as a seam, and 2 axis packs + the seam fold into two skills:
-#   .claude/skills/{frontend,backend}-guide/{SKILL.md, resources/*.md, assembly.json}
+#   .claude/skills/{frontend,backend,app}-guide/{SKILL.md, resources/*.md, assembly.json}
 # **SKILL.md only appears when a seam exists** — without one, a resources-only install is the normal intermediate state.
 #
 # **Every verdict is made here.** Whether the pack is usable · whether a seam exists · what is left ·
@@ -16,8 +16,8 @@
 #
 #   --frontend react-vite     uses guides/frontend/react-vite
 #   --backend  supabase       uses guides/backend/supabase
-#   --app      react-native   the app axis (presets/app/). **There are no prebuilt packs, so it is always a generation target**
-#                             — nothing is assembled; it is only recorded as "app" in guide-job.json's need
+#   --app      react-native   uses guides/app/react-native. If the pack is missing or unfinished, it is recorded in need
+#                             as "app" (full generation), exactly like the web screen axis
 #
 #   The axis value `custom` (user-defined) has no pack, so it is a generation target; `undecided` (not chosen) is
 #   skipped like `none` — no guide is built by guesswork for an axis that is still undecided
@@ -39,9 +39,14 @@
 # other axis keeps assembling — one missing axis is no reason to throw away the other axis's assembly.
 #
 # Seam cache — built once per combination:
-#   ~/.claude/orangekit/seam-cache/<combo>@<plugin-version>/{frontend,backend}/
+#   ~/.claude/orangekit/seam-cache/<combo>@<plugin-version>/{frontend,backend,app.<app>.<shape>}/
 #   Even with no prebuilt seam, the second project on the same combination assembles without generating.
 #   A seam rots on the major version of both axes, so the cache is split by plugin version.
+#   **The app seam is not determined by the combination alone** — even for the same react-native, the screen·bridge
+#   sections differ depending on whether it is a shell (rn-webview · rn-native-screens) or the app itself (cross-platform).
+#   So the app slot's name carries the app value together with the shape (appShell, else deliveryModel). The shape is
+#   read from --notes (else guide-job.json's notes), and **if it cannot be read, the app slot does not use the cache**
+#   — folding "cannot tell" into some arbitrary shape would hand over a seam for a different shape
 #
 # Ownership is split (the same structure as install-rules.sh's T1 card ↔ project card):
 #   pack files → plugin-owned. Updates are judged by the orangekit-pack stamp
@@ -167,20 +172,48 @@ pack_missing() { # $1=pack dir
   return 0
 }
 
+# ── Cache slot name ───────────────────────────────────────────────────
+# Web screen·backend use the axis name as-is. The app uses `app.<app>.<shape>` — if the shape cannot be read it
+# emits an empty string, and the caller treats that as "no cache" (the header's "the app seam is not determined by the combination alone").
+# Where the shape comes from: the --notes file → the existing guide-job.json's notes. appShell if present, else deliveryModel.
+app_shape() {
+  local src="" j="$PROJECT_ROOT/.orangekit/guide-job.json"
+  if [ -n "$NOTES" ] && [ -f "$NOTES" ]; then src="$NOTES"; elif [ -f "$j" ]; then src="$j"; fi
+  [ -n "$src" ] || return 0
+  python3 -c "
+import json,re,sys
+try: d=json.load(open(sys.argv[1]))
+except Exception: sys.exit(0)
+if 'notes' in d and isinstance(d.get('notes'),dict): d=d['notes']
+v=(d.get('appShell') or d.get('deliveryModel') or '') if isinstance(d,dict) else ''
+v=str(v).strip()
+# A placeholder (<only when hybrid>) or an empty value is not a shape
+print(v if re.fullmatch(r'[a-z0-9-]+', v) else '')" "$src" 2>/dev/null || true
+  return 0
+}
+cache_slot() { # $1=axis
+  if [ "$1" != app ]; then printf '%s' "$1"; return 0; fi
+  local sh; sh=$(app_shape)
+  [ -n "$sh" ] && printf 'app.%s.%s' "$APP" "$sh"
+  return 0
+}
+
 # ── Assembling one axis ───────────────────────────────────────────────
 # Leaves AXIS_STATE: complete (through SKILL.md) · resources (waiting for a seam) · generate (no pack, or unfinished)
 #                    · pinned (left untouched because the stack premise is pinned)
-assemble() { # $1=frontend|backend  $2=pack name
+assemble() { # $1=frontend|backend|app  $2=pack name
   local axis="$1" pack="$2"
   local packdir="$G/$axis/$pack"
   local dst="$PROJECT_ROOT/.claude/skills/$axis-guide"
-  local seamdir="" seamsrc=""
+  local seamdir="" seamsrc="" cslot
   AXIS_STATE=generate
-  if [ -n "$SEAM" ] && [ -d "$G/seams/$SEAM/$axis" ]; then
+  cslot=$(cache_slot "$axis")
+  if [ -n "$SEAM" ] && [ "$axis" != app ] && [ -d "$G/seams/$SEAM/$axis" ]; then
+    # Prebuilt seams exist only for the web screen·backend axes — app seams split by shape and are reused only through the cache
     seamdir="$G/seams/$SEAM/$axis"; seamsrc="prebuilt/$SEAM"
-  elif [ "$NO_CACHE" -eq 0 ] && [ -d "$CACHE_ROOT/${FE:-none}+${BE:-none}@$PLUGIN_VER/$axis" ]; then
+  elif [ "$NO_CACHE" -eq 0 ] && [ -n "$cslot" ] && [ -d "$CACHE_ROOT/${FE:-none}+${BE:-none}@$PLUGIN_VER/$cslot" ]; then
     # Cache hit — this combination was built once already and passed its audit
-    seamdir="$CACHE_ROOT/${FE:-none}+${BE:-none}@$PLUGIN_VER/$axis"; seamsrc="cache/${FE:-none}+${BE:-none}@$PLUGIN_VER"
+    seamdir="$CACHE_ROOT/${FE:-none}+${BE:-none}@$PLUGIN_VER/$cslot"; seamsrc="cache/${FE:-none}+${BE:-none}@$PLUGIN_VER"
   fi
 
   # A missing or unfinished pack is not a failure but **the generation path**. Cutting off here throws away the other axis's assembly too
@@ -344,23 +377,33 @@ save_seam() {
   local combo="$1" axis src n=0
   local dir="$CACHE_ROOT/$combo@$PLUGIN_VER"   # referring to an earlier variable in the same local statement is caught by set -u
   [ "$NO_CACHE" -eq 0 ] || { printf '  --no-cache given — not putting it into the cache\n'; return 0; }
-  for axis in frontend backend; do
+  # The app value is read from --app, else from guide-job.json's app — together with the shape it becomes the cache slot name
+  if [ -z "$APP" ] && [ -f "$PROJECT_ROOT/.orangekit/guide-job.json" ]; then
+    APP=$({ grep -m1 -oE '"app"[[:space:]]*:[[:space:]]*"[^"]+"' "$PROJECT_ROOT/.orangekit/guide-job.json" || true; } | sed -E 's/.*"([^"]+)"$/\1/')
+  fi
+  local slot
+  for axis in frontend backend app; do
     src="$PROJECT_ROOT/.claude/skills/$axis-guide"
     [ -d "$src/resources" ] || continue
+    slot=$(cache_slot "$axis")
+    if [ -z "$slot" ]; then
+      printf '  [app-guide]  could not read the shape (appShell·deliveryModel), so not putting it into the cache — pass --notes and it goes in\n'
+      continue
+    fi
     # Pack-owned files are not put into the cache — the plugin already has them, and
     # putting them in would hide a pack update behind the cache so it never arrives
     local packfiles=""
     [ -f "$src/assembly.json" ] && packfiles=$(grep -oE '"packFiles"[^]]*\]' "$src/assembly.json" | grep -oE '"[^"]+\.md"' | tr -d '"' | tr '\n' ' ')
-    [ "$DRY" -eq 0 ] && mkdir -p "$dir/$axis/resources"
+    [ "$DRY" -eq 0 ] && mkdir -p "$dir/$slot/resources"
     local f base
     for f in "$src/resources"/*.md; do
       [ -f "$f" ] || continue
       base=$(basename "$f")
       case " $packfiles " in *" $base "*) continue;; esac
-      [ "$DRY" -eq 0 ] && cp "$f" "$dir/$axis/resources/$base"
+      [ "$DRY" -eq 0 ] && cp "$f" "$dir/$slot/resources/$base"
       n=$((n+1))
     done
-    [ -f "$src/SKILL.md" ] && [ "$DRY" -eq 0 ] && cp "$src/SKILL.md" "$dir/$axis/HUB.md"
+    [ -f "$src/SKILL.md" ] && [ "$DRY" -eq 0 ] && cp "$src/SKILL.md" "$dir/$slot/HUB.md"
   done
   if [ "$n" -eq 0 ]; then
     printf 'FATAL: no seam files to put into the cache (%s)\n' "$combo" >&2; exit 1
@@ -405,7 +448,10 @@ write_job() {
     generate)  need="$need \"backend\"" ;;
     resources) need="$need \"seam:backend\"" ;;
   esac
-  [ "$APP_STATE" = generate ] && need="$need \"app\""
+  case "$APP_STATE" in
+    generate)  need="$need \"app\"" ;;
+    resources) need="$need \"seam:app\"" ;;
+  esac
   need="${need# }"; need="${need// /, }"
   if [ -z "$need" ]; then
     if [ -f "$job" ]; then
@@ -417,9 +463,10 @@ write_job() {
   printf '\n  left to do: %s\n' "$need"
   [ "$DRY" -eq 1 ] && { printf '    (--dry-run — not writing .orangekit/guide-job.json)\n'; return 0; }
   # Only an assembled axis leaves a pack name — for a generation-target axis, having no pack is the information
-  local fpack=null bpack=null
+  local fpack=null bpack=null apack=null
   case "$FE_STATE" in complete|resources|pinned) fpack="\"frontend/$FE\"" ;; esac
   case "$BE_STATE" in complete|resources|pinned) bpack="\"backend/$BE\"" ;; esac
+  case "$APP_STATE" in complete|resources|pinned) apack="\"app/$APP\"" ;; esac
 
   # Only a caller that reads the preset knows the notes. On a re-call with no --notes, the existing value is carried over
   # — it has to be read before the file is opened (the redirect below empties it first)
@@ -438,7 +485,7 @@ except Exception: print('null')" 2>/dev/null || printf 'null')
     printf '  "need": [%s],\n' "$need"
     printf '  "app": "%s",\n' "${APP:-none}"
     printf '  "state": { "frontend": "%s", "backend": "%s", "app": "%s" },\n' "$FE_STATE" "$BE_STATE" "$APP_STATE"
-    printf '  "packs": { "frontend": %s, "backend": %s, "app": null },\n' "$fpack" "$bpack"
+    printf '  "packs": { "frontend": %s, "backend": %s, "app": %s },\n' "$fpack" "$bpack" "$apack"
     printf '  "notes": %s,\n' "$notes"
     # Audit round counter — stack-guide-generator increments it before launching audits and stops at 2.
     # Why it lives in a file: so the counter does not reset to 0 when a cut-off session is picked up (prevents endless re-audits)
@@ -511,6 +558,50 @@ run_self_test() {
     printf '  ✗ the app axis is missing from guide-job.json need\n'; fail=$((fail+1))
   fi
 
+  # ── App axis pack · app seam cache ──────────────────────────────────
+  # An app pack must be assembled by the same path as the web screen axis — if it is not, there was no point building the pack.
+  # The cache **must split by shape**: even on the same combination, the seam for a shell (rn-webview) and for the app
+  # itself (cross-platform) differ. If a project of a different shape receives the cache, wrong screen·bridge guidance gets installed.
+  mkdir -p "$t/guides/app/fxapp/resources"
+  printf '<!-- orangekit-pack: app/fxapp v1.0.0 verified 2026-01-01 zod@4 -->\n\n# fxapp axis pack\n' > "$t/guides/app/fxapp/PACK.md"
+  printf '{\n  "axis": "app",\n  "name": "fxapp",\n  "pkgs": ["zod@4"],\n  "resources": [ { "file": "nav.md", "nav": "Screens" } ]\n}\n' > "$t/guides/app/fxapp/pack.json"
+  printf '<!-- orangekit-pack: app/fxapp v1.0.0 -->\n\n# Screens\n' > "$t/guides/app/fxapp/resources/nav.md"
+  local cache="$t/cache" ast
+  _app() { # $1=notes file|"" $2..=extra args → the app state on stdout
+    local nf="$1"; shift
+    rm -rf "$proj"; mkdir -p "$proj"
+    out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" ORANGEKIT_SEAM_CACHE="$cache" \
+          bash "$0" --app fxapp --no-freshness ${nf:+--notes "$nf"} "$@" 2>&1) || true
+    printf '%s' "$out" | sed -nE 's/.*state: .*app=([a-z]+).*/\1/p' | head -1
+  }
+  # Turn the verdict into a value so a failed `[` under set -e does not cut the script off and vanish without a "✗"
+  _is() { if "$@" >/dev/null 2>&1; then printf 0; else printf 1; fi; }
+  _chk() { # $1=condition (0/1) $2=label
+    if [ "$1" -eq 0 ]; then printf '  ✓ %s\n' "$2"; pass=$((pass+1)); else printf '  ✗ %s\n' "$2"; fail=$((fail+1)); fi
+  }
+  printf '{ "deliveryModel": "hybrid", "appShell": "rn-native-screens" }\n' > "$t/notes-ns.json"
+  printf '{ "deliveryModel": "cross-platform", "appShell": "" }\n' > "$t/notes-cp.json"
+
+  ast=$(_app "$t/notes-ns.json")
+  _chk "$(_is [ "$ast" = resources ])" "a complete app pack is assembled (no seam, so resources) → ${ast:-none}"
+  _chk "$(_is grep -q '"need": \["seam:app"\]' "$proj/.orangekit/guide-job.json" 2>/dev/null)" "waiting for the app seam is recorded as need = [\"seam:app\"]"
+
+  # Place a hub·seam as if generation had finished and load them into the cache → the next project of the same shape is complete
+  mkdir -p "$proj/.claude/skills/app-guide/resources"
+  printf -- '---\nname: app-guide\ndescription: x\n---\n# Hub\n' > "$proj/.claude/skills/app-guide/SKILL.md"
+  printf '# App seam\n' > "$proj/.claude/skills/app-guide/resources/api-client.md"
+  CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" ORANGEKIT_SEAM_CACHE="$cache" \
+    bash "$0" --save-seam none+none >/dev/null 2>&1 || true
+  _chk "$(_is [ -f "$cache/none+none@0.0.0/app.fxapp.rn-native-screens/resources/api-client.md" ])" "the app seam is loaded into a per-shape slot (app.<app>.<shape>) (app·shape read from guide-job.json)"
+  _chk "$(_is [ ! -f "$cache/none+none@0.0.0/app.fxapp.rn-native-screens/resources/nav.md" ])" "pack-owned files are not put into the cache"
+
+  ast=$(_app "$t/notes-ns.json")
+  _chk "$(_is [ "$ast" = complete ])" "the next project of the same shape is completed from the cache → ${ast:-none}"
+  ast=$(_app "$t/notes-cp.json")
+  _chk "$(_is [ "$ast" = resources ])" "a different shape does not receive the cache (cross-platform ≠ rn-native-screens) → ${ast:-none}"
+  ast=$(_app "")
+  _chk "$(_is [ "$ast" = resources ])" "an unknown shape does not receive the cache (\"cannot tell\" is not folded into some shape) → ${ast:-none}"
+
   # ── Gate FAIL → quarantine ──────────────────────────────────────────
   # **This branch moves the user's installation.** Without a fixture for the code that moves it,
   # "alive" cannot be told apart from "working". A seam that makes the gate fail is built to see
@@ -553,11 +644,7 @@ printf 'Guide assembly\n  plugin:  %s\n  project: %s\n\n' "$G" "$PROJECT_ROOT/.c
 _axis_on() { [ -n "$1" ] && [ "$1" != none ] && [ "$1" != undecided ]; }
 if _axis_on "$FE"; then assemble frontend "$FE"; FE_STATE="$AXIS_STATE"; fi
 if _axis_on "$BE"; then assemble backend  "$BE"; BE_STATE="$AXIS_STATE"; fi
-# The app axis has no prebuilt packs — there is nothing to assemble, so it is a generation target straight away
-if _axis_on "$APP"; then
-  printf '  [app-guide]  no prebuilt pack (%s) — recorded as a full generation target\n' "$APP"
-  APP_STATE=generate
-fi
+if _axis_on "$APP"; then assemble app "$APP"; APP_STATE="$AXIS_STATE"; fi
 printf '\n  new %d · updated %d · kept %d\n' "$installed" "$updated" "$skipped"
 
 gate_failed=0
@@ -569,6 +656,9 @@ elif [ "$GATE" -eq 1 ]; then
   fi
   if [ "$BE_STATE" = complete ]; then
     if ! run_gate backend;  then BE_STATE=generate; gate_failed=1; fi
+  fi
+  if [ "$APP_STATE" = complete ]; then
+    if ! run_gate app;      then APP_STATE=generate; gate_failed=1; fi
   fi
 fi
 

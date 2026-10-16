@@ -44,15 +44,15 @@ cat .orangekit/guide-job.json 2>/dev/null
 | `combo` | The confirmed combination. **Do not** ask the axis questions of Step 1 |
 | `need` | What to build. The vocabulary below maps 1:1 onto the rows of the Step 2 branch table |
 | `packs` | Paths of the assembled packs. That axis is an "axis that has a pack", so read the three files in Step 2 |
-| `app` | The app axis value (`presets.app`). If it is not `none`, `app-guide` is a generation target |
+| `app` | The app axis value (`presets.app`). If it is not `none`, `app-guide` is a target — if a pack exists, its path is carried in `packs.app` |
 | `auditRound` | How many audit rounds have been launched so far. **At 2, launch no more audits** ("Audit and repair budget") |
 | `notes` | The axis preset notes (serverCode · securityBoundary · policyEngine · language · appNotes) **＋ dimensions that are not axes** (deliveryModel · clientKind · pwa · appShell · nativeStack). The entire input for combination dependencies and conditional slot decisions |
 
 | `need` item | Meaning | What to build |
 | --- | --- | --- |
-| `seam:frontend` · `seam:backend` | The packs are assembled and only the seam is missing | That axis's seam + hub (3 files per axis) |
+| `seam:frontend` · `seam:backend` · `seam:app` | The packs are assembled and only the seam is missing | That axis's seam + hub (as many as the axis's `seamSlots`) |
 | `frontend` · `backend` | There is no pack, or it is unfinished (including `custom`) | That axis in full (hub + every resource) |
-| `app` | The app axis — it has no prebuilt packs | `.claude/skills/app-guide/` in full. The input is `techStack.app` + the notes in `presets/app/<name>.json` (for `custom`, the entered framework) |
+| `app` | The app pack is missing or unfinished (including `custom`) | `.claude/skills/app-guide/` in full. The input is `techStack.app` + the notes in `presets/app/<name>.json` (for `custom`, the entered framework) |
 
 **Write `status` as `running` when you start.** If the session dies, that state remains and
 the `session-brief` hook reports it to the next session — the device that keeps 20 minutes from vanishing silently.
@@ -79,7 +79,7 @@ have not taken each other into account (see combination dependencies below).
 | --- | --- | --- |
 | **Product form** | web · hybrid · cross-platform · native · API-only | **Fix this first** — it splits the screen axes, and the derived value `clientKind` splits the backend-guide slots. If `techStack.deliveryModel` exists it is already fixed |
 | Web screens | Next.js · React+Vite · SvelteKit · none | `none` when only a cross-platform or native app is built |
-| App | React Native · Flutter · Swift · Kotlin · none | `techStack.presets.app`. A hybrid has it only when `appShell` is the RN family. There are no packs, so `app-guide` is always generated in full |
+| App | React Native · Flutter · Swift · Kotlin · none | `techStack.presets.app`. A hybrid has it only when `appShell` is the RN family. If a `guides/app/<name>/` pack exists, it is assembled and only the seam is built |
 | Backend type | BaaS (Supabase · Firebase) · self-built on cloud · framework built-in | If `techStack.presets.backend` exists it is **already fixed** — do not ask again. If this skill is invoked standalone and there is no preset, this is a required question |
 | Cloud/hosting | AWS · GCP · Azure · Vercel · self-hosted | Required when self-built is chosen |
 | DB | PostgreSQL · MySQL · MongoDB · DynamoDB | For BaaS, infer automatically and only confirm; for self-built, a required question |
@@ -98,7 +98,7 @@ Record the confirmed combination in `techStack.backend` of `orangekit.config.jso
 9 backend), and most of a guide's content is a function of one axis alone. So **build only what is missing.**
 
 ```bash
-ls "${CLAUDE_PLUGIN_ROOT}/guides/frontend/" "${CLAUDE_PLUGIN_ROOT}/guides/backend/"
+ls "${CLAUDE_PLUGIN_ROOT}/guides/frontend/" "${CLAUDE_PLUGIN_ROOT}/guides/backend/" "${CLAUDE_PLUGIN_ROOT}/guides/app/" 2>/dev/null
 ls "${CLAUDE_PLUGIN_ROOT}/guides/seams/"
 # If a pack exists, check whether it is still right today — meaningful **only on a first install**
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/guide-freshness.sh" --pack "${CLAUDE_PLUGIN_ROOT}/guides/<axis>/<pack>"
@@ -152,7 +152,7 @@ If `fixesVariants` is `{}` that is a declaration that no variant is nailed down,
 | Backend `none` (static/SPA + external API) | frontend side only (including API client patterns) |
 | Both axes `none` | Do nothing (only app-guide if there is an app axis) |
 | An axis is `undecided` | Do not build that axis — a guide for an undecided stack is not written by guesswork |
-| There is an app axis | Generate `app-guide` in full. For a hybrid RN shell, frontend-guide's shell slot holds **only the bridge contract**, and app-guide owns the native screen patterns — if both guides write the same section they diverge |
+| There is an app axis | If an app pack exists, assemble it + **generate only the app seam**; otherwise generate `app-guide` in full. The app seam is a function of the shape (`appShell`·`deliveryModel`), so the cache splits by shape too. For a hybrid RN shell, frontend-guide's shell slot holds **only the bridge contract**, and app-guide owns the native screen patterns — if both guides write the same section they diverge |
 | An existing generated copy | Compare stamps as in Step 7 — on detecting a manual edit, do not overwrite; present a diff |
 
 ### The three files you must read on an axis that has a pack
@@ -388,6 +388,7 @@ Close it **only after 0 gate FAILs and a finished audit and repair.** There is a
 
 ```bash
 # 1) Load the audited seam into the cache — the next project on the same combination generates nothing
+#    The app seam goes in too. The app value and shape are read from guide-job.json (app · notes), so this comes before 2)
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-guide.sh" --save-seam "<combo>"
 
 # 2) Close the job. If the file remains, session-brief keeps reporting it as unfinished

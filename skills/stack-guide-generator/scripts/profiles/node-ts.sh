@@ -111,7 +111,12 @@ CLS
   while IFS=$'\t' read -r v u msg; do
     case "$v" in
       FILE) ;;
-      UNSUP) case "$msg" in *"not supported in strip-only mode"*) promoted=$((promoted+1)) ;; *) continue ;; esac ;;
+      # **JSX (.tsx·.jsx) is moved too.** The stripper just cannot erase it; tsc (`jsx: preserve`) still judges it —
+      # leave it out and whole screen·component files are **never type-checked once** and stay green (measured on the
+      # react-native pack — a miss: ScreenStates.tsx · _layout.tsx). SFCs (.vue·.svelte) tsc cannot read, so they stay out.
+      UNSUP) case "$u" in *.tsx|*.jsx) promoted=$((promoted+1)) ;; *)
+               case "$msg" in *"not supported in strip-only mode"*) promoted=$((promoted+1)) ;; *) continue ;; esac ;;
+             esac ;;
       *) continue ;;
     esac
     dst=$(awk -F'\t' -v u="$u" '$1==u {print $2}' "$OUT/.units.tsv")

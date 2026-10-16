@@ -295,7 +295,9 @@ make_stubs() {
         *.js)  target="${target%.js}.ts" ;;
         *.mjs) target="${target%.mjs}.mts" ;;
         *.ts|*.tsx|*.mts) ;;
-        *) target="$target.ts" ;;
+        # An extensionless import is not only `.ts` — components ship as `.tsx`. Resolving to `.ts` alone
+        # misjudges the `ScreenStates.tsx` the pack really shipped as an orphan (measured on the react-native pack — a false positive)
+        *) if cut -f2 "$OUT/.units.tsv" | grep -qxF "$target.tsx"; then target="$target.tsx"; else target="$target.ts"; fi ;;
       esac
     fi
     # **If it is a stub we made, do not skip it — append only the missing names.** Skipping on mere existence
@@ -327,13 +329,16 @@ make_stubs() {
     local isjs=0; case "$target" in *.js|*.mjs|*.jsx) isjs=1 ;; esac
     printf '%s\n' "$names" | tr ',' '\n' | sed -E 's/^[[:space:]]*//; s/[[:space:]]*$//; s/^type[[:space:]]+//; s/[[:space:]]+as[[:space:]]+.*//' \
       | grep -E '^[A-Za-z_][A-Za-z0-9_]*$' | sort -u | while read -r nm; do
-          grep -qE "^export const $nm[ =:]" "$OUT/$target" && continue
+          grep -qE "^export (declare )?const $nm[ =:]" "$OUT/$target" && continue
           if [ "$isjs" -eq 1 ]; then
             printf '/** @typedef {any} %s */\n' "$nm"
             printf 'export const %s = /** @type {any} */ (undefined);\n' "$nm"
           else
+            # Leaving the value slot as a bare `any` means `x instanceof Stub` cannot narrow `unknown`, so
+            # correct code that branches on a seam class (ApiError) falls over with TS18046 (measured on the react-native
+            # pack — a false positive). Give it a signature that supports construction, calls, JSX and member access
             printf 'export type %s = any;\n' "$nm"
-            printf 'export const %s: any = undefined as any;\n' "$nm"
+            printf 'export declare const %s: (new <T = any>(...args: any[]) => any) & (<T = any>(...args: any[]) => any) & { [k: string]: any };\n' "$nm"
           fi >> "$OUT/$target"
         done
   done < "$OUT/.imports.txt"
@@ -920,6 +925,55 @@ FXDECO
     bad "there are no decorators yet experimentalDecorators was turned on" "a detection that is unconditionally true separates nothing"
   fi
 
+
+  # ── JSX whole files · extensionless .tsx imports · instanceof stubs (measured on the react-native pack) ──
+  # All three are "premises of the verdict" — tsc is absent offline, so we assert the premise, not the result.
+  #   (a) Does a .tsx whole file land in the real tree? If not, screens·components are outside the typecheck (a miss)
+  #   (b) Does `@/components/Badge` resolve to the Badge.tsx the pack shipped? Resolving to .ts alone misjudges it as an orphan (a false positive)
+  #   (c) Does the seam stub carry a construct signature? With a bare any, `e instanceof ApiError` cannot
+  #     narrow unknown and correct code falls over with TS18046 (a false positive)
+  mkdir -p "$fx/jsx/resources" || { bad "failed to create the JSX fixture"; return; }
+  printf '<!-- orangekit-pack: app/fx v0 -->\n# fx pack\n' > "$fx/jsx/PACK.md"
+  printf '{ "axis": "app", "name": "fx", "pkgs": ["typescript@6"] }\n' > "$fx/jsx/pack.json"
+  printf '## requires\n\n| symbol | kind | shape | reason |\n| --- | --- | --- | --- |\n| `ApiError` | project | error class | seam |\n' > "$fx/jsx/ledger.md"
+  cat > "$fx/jsx/resources/a.md" <<'FXJSX'
+# Screen
+
+<!-- file: src/components/Badge.tsx -->
+```tsx
+export function Badge({ label }: { label: string }) {
+  return <span>{label}</span>;
+}
+```
+
+<!-- file: src/lib/msg.ts -->
+```ts
+import { ApiError } from '@/api/http';
+import { Badge } from '@/components/Badge';
+
+export const shown = Badge;
+export function msg(e: unknown): string {
+  if (e instanceof ApiError) return String(e.code);
+  return 'x';
+}
+```
+FXJSX
+  code=0; out=$(bash "$0" --pack "$fx/jsx" --no-vectors --keep --out "$fx/out-jsx" 2>&1) || code=$?
+  if [ -f "$fx/out-jsx/src/components/Badge.tsx" ]; then
+    ok "a JSX whole file lands in the real tree (screens·components do not leak out of the typecheck)"
+  else
+    bad "the JSX whole file is not in the real tree" "it was restored but not placed in the typecheck target tree — even with tsc it is never checked"
+  fi
+  if grep -q 'Badge' "$fx/out-jsx/.orphan.txt" 2>/dev/null; then
+    bad "an extensionless import misjudged a shipped .tsx as an orphan" "$(tr '\n' ';' < "$fx/out-jsx/.orphan.txt")"
+  else
+    ok "an extensionless import resolves to the .tsx the pack shipped (no orphan misjudgment)"
+  fi
+  if grep -qE '^export declare const ApiError: \(new ' "$fx/out-jsx/src/api/http.ts" 2>/dev/null; then
+    ok "the seam stub carries a construct signature (instanceof narrows unknown)"
+  else
+    bad "the seam stub is a bare any" "$(grep ApiError "$fx/out-jsx/src/api/http.ts" 2>/dev/null | tr '\n' ';') — the instanceof branch falls over with TS18046"
+  fi
 
   code=0; out=$(bash "$0" --pack "$fx/js-stub" --no-vectors --keep --out "$fx/out-jsstub" 2>&1) || code=$?
   local stub="$fx/out-jsstub/src/store/create.js"
