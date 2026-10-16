@@ -73,7 +73,7 @@ The backend comes in **three shapes** — these are not peer entries that differ
 | `fastapi` | own server | **Python** · FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic + pytest | the application layer is the only boundary |
 | `node-api` | own server | Express 5 + PostgreSQL + Prisma + Zod | the application layer is the only boundary |
 | `node-nest` | own server | NestJS 11 + PostgreSQL + TypeORM 1 + class-validator | the application layer is the only boundary. An **array `where` means OR**, so ownership must be repeated on every branch |
-| `fastify` | own server | Fastify 5 + PostgreSQL + Drizzle + Zod — **no pre-built pack** | the application layer is the only boundary. The auth hook applies **only inside the plugin context that registered it** |
+| `fastify` | own server | Fastify 5 + PostgreSQL + Drizzle + Zod | the application layer is the only boundary. The auth hook applies **only inside the plugin context that registered it** |
 | `rust-axum` | own server | **Rust** · Axum + Tokio + SQLx + PostgreSQL — **no pre-built pack** | the application layer is the only boundary. Check the auth layer's scope (`route_layer`) on every router |
 | `none` | — | no backend / consuming an external REST API | where the external API token is stored is the danger point |
 
@@ -93,8 +93,10 @@ descriptions creates a false sense of safety, so this value is always passed at 
 | `android-kotlin` | Kotlin + Jetpack Compose + Coroutines + Hilt | native (Android only) |
 | `native-dual` | iOS (Swift) + Android (Kotlin), two codebases | native (both) |
 
-**The app axis has no pre-built packs** — something is pre-built only when it can be registered as an audit target,
-so `app-guide` always takes the generation path. A preset supplies only defaults (framework · commands · directories) and combination context (notes).
+**The only app axis pack is `react-native`** — something is pre-built only when it can be registered as an audit target.
+`react-native` assembles its pack and generates only the seam (API client · auth · complete example, plus the bridge for a hybrid shell).
+The app seam is a function of the shape (`appShell`·`deliveryModel`), so the cache splits by shape too. For the other app values,
+all of `app-guide` takes the generation path. A preset supplies only defaults (framework · commands · directories) and combination context (notes).
 
 ## Custom · undecided
 
@@ -135,9 +137,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-guide.sh" \
 | `none` × `none` | nothing (Core skills only) | — |
 
 The axis packs currently held are **4 frontend** (`nextjs` · `react-vite` · `vue` · `vanilla`) and
-**8 backend** (`supabase` · `firebase` · `aws-serverless` · `aws-container` ·
-`gcp-serverless` · `fastapi` · `node-api` · `node-nest`), with 3 pre-built seam pairs.
-With these 12, **44 of the 45 choices receive at least one axis as a finished product** —
+**9 backend** (`supabase` · `firebase` · `aws-serverless` · `aws-container` ·
+`gcp-serverless` · `fastapi` · `node-api` · `node-nest` · `fastify`), with 3 pre-built seam pairs.
+With these 13, **44 of the 45 choices receive at least one axis as a finished product** —
 the only one that receives nothing is `none` × `none`.
 
 **init does not wait for the guide.** If generation is needed it leaves a job in `.orangekit/guide-job.json`

@@ -955,10 +955,14 @@ native takes the after-the-fact cleanup and the skill takes only the expiry trac
 
 ### Why guides are a `guides/` axis pack rather than a skill
 
-Frontend 4 × backend 8 = 32 combinations. **Take the combination as the pre-built unit and you have to make 32,
+Frontend 4 × backend 9 = 36 combinations. **Take the combination as the pre-built unit and you have to make 36,
 most of which nobody will use.** So the pre-built unit is taken as the **axis** —
-4 frontend packs + 8 backend packs + only the 3 frequently used seam pairs are made, and the remaining combinations are
+4 frontend packs + 9 backend packs + only the 3 frequently used seam pairs are made, and the remaining combinations are
 **assembled** by `install-guide.sh` or **generated** by `stack-guide-generator`.
+
+The app axis works on the same principle — there is one `react-native` pack and only the app seam is generated. But the app seam
+is a function not only of the combination but of the **shape** (`appShell`·`deliveryModel`), so it is not pre-built; instead the cache
+slots are split by shape and reused (`cache_slot` in `install-guide.sh`).
 
 There is a separate reason for not making the name a skill. Plugin skills coexist as `orangekit-product:name` and project
 skills as `name`. Keep the guide only as the project's `frontend-guide` and keep the plugin side as a pack rather

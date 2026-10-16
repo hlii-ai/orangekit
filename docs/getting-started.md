@@ -107,7 +107,7 @@ Presets are chosen on three axes — web screens, app and backend. Any axis can 
 | `fastapi` | **Python** · FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic (self-hosted) |
 | `node-api` | Express 5 + PostgreSQL + Prisma (self-hosted) |
 | `node-nest` | NestJS 11 + PostgreSQL + TypeORM 1 + class-validator (self-hosted) |
-| `fastify` | Fastify 5 + PostgreSQL + Drizzle + Zod (self-hosted · no pre-built guide) |
+| `fastify` | Fastify 5 + PostgreSQL + Drizzle + Zod (self-hosted) |
 | `rust-axum` | **Rust** · Axum + Tokio + SQLx + PostgreSQL (self-hosted · no pre-built guide) |
 | `none` | No backend / external REST API |
 
@@ -119,7 +119,7 @@ Presets are chosen on three axes — web screens, app and backend. Any axis can 
 | `android-kotlin` | Kotlin + Jetpack Compose + Hilt | native (Android only) |
 | `native-dual` | iOS (Swift) + Android (Kotlin) | native (both) |
 
-The app axis has no pre-built guide packs — its `app-guide` is always generated.
+The app axis has one pre-built pack, `react-native` — its `app-guide` is assembled from the pack and only the combination-specific seam is generated. Other app values generate the whole `app-guide`.
 
 The **combination** decides the guides. Three combinations ship pre-built guides —
 `nextjs` × `supabase`, `react-vite` × `aws-container` and `vue` × `node-api` — and every

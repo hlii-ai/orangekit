@@ -268,8 +268,8 @@ shell question settles whether the app axis exists.
 ```
 
 **`fastapi` is Python and `rust-axum` is Rust** — the toolchain splits from the web screen axis, so take per-axis commands
-separately (Step 4). `fastify` and `rust-axum` have no pre-built pack, so their guides take the generation path —
-they are on the list **because they are common choices, not because they have packs.**
+separately (Step 4). `rust-axum` has no pre-built pack, so its guide takes the generation path —
+it is on the list **because it is a common choice, not because it has a pack.**
 
 **Record the product form in `techStack.deliveryModel`** (`web` · `hybrid` · `cross-platform` · `native` · `api-only`).
 For "Web" also fill `techStack.pwa`; for "Hybrid" fill `techStack.appShell`.
@@ -319,8 +319,8 @@ Nail dimension-specific content into a pack as prose and that pack tilts toward 
 > The same Supabase paired with Next.js centers on Route Handlers and Server Actions; paired with a
 > React+Vite SPA it centers on Edge Functions and direct browser calls — **an entirely different guide**.
 > **The app axis is separate from the web screen axis** because, as with a hybrid RN shell, web screens and app code
-> **live in one product** — put them on one axis and one of the two vanishes from the record. The app axis has no
-> pre-built packs (something is pre-built only when it can be registered as an audit target) — it always takes the generation path.
+> **live in one product** — put them on one axis and one of the two vanishes from the record. The only app axis pack is
+> `react-native` (something is pre-built only when it can be registered as an audit target) — the other app values take the generation path.
 
 `frontend: none` is the result of choosing "API only" in ① or of building only a cross-platform or native app —
 it is a consequence of the product form, not an option on the web screen axis, so it is not asked in ⑤. A combination
@@ -397,7 +397,7 @@ the chosen backend preset left empty:
 | `node-nest` | backendType · database · framework (NestJS 11) · ORM (TypeORM 1) · validation (class-validator) | **auth method**. Whether the guard reads a session cookie or a bearer token is a function of the frontend axis |
 | `aws-container` | defaults for every dimension | nothing — show and confirm. Changing the defaults (RDS PostgreSQL · Drizzle · Cognito) leaves the pre-built set and takes the generation path |
 | `aws-serverless` · `gcp-serverless` | defaults for every dimension | any dimension where a different service is used (e.g. DynamoDB→RDS) |
-| `fastify` | backendType · database · framework (Fastify 5) · ORM (Drizzle) | **auth method**. There is no pre-built pack — generation path |
+| `fastify` | backendType · database · framework (Fastify 5) · ORM (Drizzle) | **auth method**. The pack pins the framework and ORM — a different ORM such as Prisma takes the generation path |
 | `rust-axum` | backendType · database · framework (Axum) · data access (SQLx) | **auth method**. There is no pre-built pack — generation path |
 | `firebase` | every dimension | nothing — show and confirm |
 | `custom` | the entered framework name | **DB · data access (ORM) · auth method · commands · language** — the preset fills nothing in |
@@ -585,7 +585,7 @@ Files created:
 Guides (copy the `status:` line from Step 9.5 verbatim — do not report a half as finished):
   ✅ .claude/skills/<axis>-guide      — skill complete (complete)
   ⏳ .claude/skills/<axis>-guide/     — resources only · awaiting the seam (resources)
-  ⏳ <axis>                           — needs generating (generate) — the app axis (app-guide) is always here
+  ⏳ <axis>                           — needs generating (generate) — app values with no pack (flutter etc.) land here
   ·  <axis>                           — not chosen (undecided) — guide deferred
 
 Verification:

@@ -180,8 +180,9 @@ picks the stack, and `/codebase-survey` **updates cards that already exist to ma
 
 Invoke `/stack-guide-generator`. Combinations not in the presets (AWS, MongoDB, SvelteKit and so on) work too.
 
-The guides are pre-built **by axis, not by combination** — 4 frontend axes × 8 backend axes. Instead of making
-32 combinations in advance, the axes are assembled. That is why a new combination comes out immediately.
+The guides are pre-built **by axis, not by combination** — 4 frontend axes × 9 backend axes. Instead of making
+36 combinations in advance, the axes are assembled. That is why a new combination comes out immediately.
+The app axis has a `react-native` pack, so an RN app (including a hybrid shell) generates only the seam that fits its combination.
 
 ---
 

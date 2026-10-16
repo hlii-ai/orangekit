@@ -1,0 +1,52 @@
+{
+  "axis": "app",
+  "name": "react-native",
+  "displayName": "Expo SDK 57 + React Native 0.86 (Expo Router)",
+  "packVersion": "1.0.0",
+  "verified": "2026-10-15",
+  "extractedFrom": "Newly created — the first pack on the app axis. Versions were confirmed from expo@57.0.29's bundledNativeModules.json and expo-template-default@sdk-57",
+
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/tasks",
+    "note": "Every pack and seam uses the same example domain. The app is also a client calling the same API, so it uses the same vocabulary as the web screen axis"
+  },
+
+  "fixesVariants": {
+    "router": "expo-router",
+    "store": "zustand",
+    "query": "@tanstack/react-query"
+  },
+  "fixesVariantsNote": "The Expo managed workflow + Expo Router are premises of the whole pack (file routes · Stack.Protected · config plugins). Do not assemble it for a project that chose bare React Native with a hand-built React Navigation setup, Redux, or SWR",
+
+  "pkgs": [
+    "expo@57", "react@19", "react-native@0.86", "typescript@6", "@types/react@19",
+    "expo-router@57", "expo-secure-store@57", "expo-crypto@57", "expo-linking@57",
+    "expo-constants@57", "expo-location@57", "expo-camera@57", "expo-notifications@57",
+    "expo-updates@57", "react-native-webview@13", "react-native-safe-area-context@5",
+    "@tanstack/react-query@5", "zustand@5",
+    "@react-native-async-storage/async-storage@2", "@react-native-community/netinfo@12",
+    "jest-expo@57", "@react-native/jest-preset@0.86", "jest@29", "@types/jest@29", "@testing-library/react-native@14"
+  ],
+
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+
+  "resources": [
+    { "file": "navigation.md",              "nav": "Adding a screen · layouts (Stack/Tabs) · protected routes (Stack.Protected) · receiving deep links and validating paths · screen error boundaries" },
+    { "file": "screens-and-states.md",      "nav": "The loading·empty·error states of a data screen · pull to refresh · list performance (FlatList) · keyboard·safe area" },
+    { "file": "data-and-offline.md",        "nav": "QueryClient for RN (focus·online managers) · idempotency keys · the offline mutation queue (outbox) and resending" },
+    { "file": "secure-storage.md",          "nav": "Storing tokens (expo-secure-store) · what must not go in a plaintext store · what to wipe on sign-out" },
+    { "file": "permissions-and-devices.md", "nav": "Pairing runtime permissions with config plugin declarations · the denied·permanently-denied flow · location · camera · push token issuance" },
+    { "file": "webview.md",                 "nav": "Showing web content in a WebView · validating message origins · restricting navigation · the scope of injected scripts" },
+    { "file": "config-and-testing.md",      "nav": "The only module that reads environment values (EXPO_PUBLIC_*) · tsconfig path aliases · jest-expo + Testing Library screen tests · mocking native modules" },
+    { "file": "release-and-updates.md",     "nav": "EAS Build profiles · what can and cannot ship over OTA (EAS Update) · runtimeVersion · the forced-update decision" }
+  ],
+
+  "seamSlots": ["api-client", "auth-and-session", "complete-example"],
+  "seamSlotsNote": "When the shape (appShell) is rn-webview·rn-native-screens the seam creates one more file, shell-bridge.md — the web ↔ native message schema is a function of the web screen axis and the shape, so it cannot live in the pack. For cross-platform it is not created",
+
+  "knownGaps": []
+}

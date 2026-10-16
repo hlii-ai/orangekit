@@ -11,7 +11,7 @@ This repository is **the source of a Claude Code plugin**. It is not a consumer 
 | What you want to know | Where |
 | --- | --- |
 | **what to do when this happens** (procedures · runbooks) | **this document** |
-| **why** this device looks like this (design rationale) | [harness-anatomy.md](harness-anatomy.md) — 1,225 lines |
+| **why** this device looks like this (design rationale) | [harness-anatomy.md](harness-anatomy.md) — 1,229 lines |
 | the **norms** for fixing the harness (what to obey) | `rules/harness-change.md` — a T1 card |
 | what Claude Code **guarantees** (the platform contract) | [platform-contract.md](platform-contract.md) |
 | is anything **actually out of line right now** | `scripts/doctor.sh` — a machine decision |

@@ -271,7 +271,7 @@
                 "undecided",
                 "none"
               ],
-              "description": "presets/app/<name>.json — there are no prebuilt guide packs, so this always takes the generation path. none for hybrid+capacitor · web · api-only"
+              "description": "presets/app/<name>.json — if a guides/app/<name>/ pack exists (react-native) it is assembled and only the seam is generated; otherwise it takes the generation path. none for hybrid+capacitor · web · api-only"
             }
           },
           "required": [
