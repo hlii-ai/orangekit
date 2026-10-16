@@ -2,7 +2,7 @@
 
 AI Native Dev Harness for Claude Code — reversibility-axis workflow, self-testing hooks, graph instrumentation.
 
-![version](https://img.shields.io/badge/version-1.1.3-blue)
+![version](https://img.shields.io/badge/version-1.2.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## What it is
@@ -234,7 +234,7 @@ regenerate with `/stack-guide-generator`.
 | `react-vite` × `aws-container` | React+Vite SPA + ECS/Fargate + RDS PostgreSQL + Drizzle | Uses the pre-built version |
 | `vue` × `node-api` | Vue 3 SPA + Express 5 + PostgreSQL + Prisma | Uses the pre-built version |
 | `none` × `none` | Custom | No guide (Core only) |
-| Every other combination | The combination of the axes (including the app axis · `fastify` · `rust-axum` · custom) | Guide is **generated** (verification loop included) |
+| Every other combination | The combination of the axes (including the app axis · `rust-axum` · custom) | Guide is **generated** (verification loop included) — the app axis `react-native` assembles its pack and generates only the seam |
 
 ## Project Override — precedence for the user's assets
 
