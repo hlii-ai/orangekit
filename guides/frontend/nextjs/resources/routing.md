@@ -99,7 +99,7 @@ export async function AppHeader() {
     <header className="flex h-14 items-center justify-between border-b px-4">
       <Link href="/" className="font-semibold">Tasks</Link>
       {user ? (
-        <UserMenu email={user.email ?? ''} />                {/* pass only serializable values */}
+        <UserMenu email={user.email ?? ''} /* pass only serializable values */ />
       ) : (
         <Button asChild size="sm"><Link href="/login">Log in</Link></Button>
       )}
