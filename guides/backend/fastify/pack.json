@@ -1,0 +1,138 @@
+{
+  "axis": "backend",
+  "name": "fastify",
+  "displayName": "Fastify API server (Fastify 5 + Drizzle + PostgreSQL)",
+  "packVersion": "3.33.0",
+  "verified": "2026-10-15",
+  "extractedFrom": "Newly created — a scratch reference implementation (Fastify 5.12.7 · drizzle-orm 0.45.4 · embedded PostgreSQL 18.4) was built and run first, and its files were then moved into the fences. No other pack was opened, not even as a format reference (only assets/pack-resource-template.md was used)",
+  "backendType": "cloud-server",
+  "dataLayerPolicyEngine": false,
+  "policyEngineNote": "There is no row-level policy engine. The application connects to the DB over a trusted connection, so **a missing ownership filter is a data leak outright**. On top of that this axis has a second trap, **plugin encapsulation** — set the auth hook on a sibling plugin and it does not reach the routes, so a 200 goes out without auth (confirmed by running it). Carrying the BaaS axis's 'RLS is the backup, so the application check is defense in depth' narrative over to this axis produces exactly the opposite instruction — a value that must be passed on when generating the seam",
+  "symbolSurface": true,
+  "exampleDomain": {
+    "entity": "Task",
+    "collection": "tasks",
+    "route": "/api/tasks",
+    "displayLabel": "Task",
+    "note": "Every pack and seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from these values and the gate blocks any divergence"
+  },
+  "fixesVariants": {
+    "framework": "fastify",
+    "orm": "drizzle"
+  },
+  "fixesVariantsNote": "The handler shape (Fastify 5 plugin encapsulation · route schema · type provider) and the query shape (the Drizzle query builder + drizzle-kit migrations) are the premise of the entire pack body. For a project that picked Express, backend/node-api owns that shape; for NestJS, backend/node-nest; for the Hono + AWS turnkey stack, backend/aws-container. A project using Prisma with Fastify would get wrong instructions from this pack — that is the generation path",
+  "pkgs": [
+    "fastify@5",
+    "fastify-plugin@5",
+    "fastify-type-provider-zod@7",
+    "zod@4",
+    "drizzle-orm@0.45",
+    "drizzle-kit@0.31",
+    "pg@8",
+    "@types/pg@8",
+    "typescript@5",
+    "tsx@4",
+    "vitest@3",
+    "@types/node@24"
+  ],
+  "pkgsNote": "vitest is pinned to 3 — 5.0.4 (vite 8 · rolldown) failed at startup because an npm optional-dependency defect left it unable to find its native binding (measured 2026-10-15). The fastify-plugin 6 line (6.0.0 = 2026-06-09, 6.0.1 = 2026-10-10) has not been verified in combination with Fastify 5 — pinned to 5. pino is owned by fastify (10.x) — the pack's code never imports pino directly",
+  "runtime": {
+    "postgresql": "16",
+    "node": "22"
+  },
+  "runtimeNote": "These are server runtime versions, not npm dependencies. Put them in pkgs and `npm i` fetches the wrong package. The reference implementation ran on PostgreSQL 18.4 (embedded-postgres) and Node 24.7 — the SQL and features the pack uses are the same from 16 up",
+  "hubFragments": "PACK.md",
+  "ledger": "ledger.md",
+  "policies": "policies.md",
+  "resources": [
+    {
+      "file": "project-structure.md",
+      "nav": "plugin encapsulation (how far hooks · error handlers · decorators reach) · buildApp assembly order · where fastify-plugin belongs · layer boundaries (routes → services → db) · listen binding"
+    },
+    {
+      "file": "data-access.md",
+      "nav": "Drizzle client singleton · table definition · ownership condition · affected row count (returning · rowCount) · cursor pagination · transactions · drizzle-kit migrations"
+    },
+    {
+      "file": "input-validation.md",
+      "nav": "Zod type provider wiring · route schema (body · querystring · params · response) · how the response schema filters fields · partial updates · environment variable schema and boot-time failure"
+    },
+    {
+      "file": "error-handling.md",
+      "nav": "domain code → status table · normalizing Fastify validation errors (err.validation) · FST_ERR_CTP_* mapping · reading the SQLSTATE from a DrizzleQueryError's cause · no leaking SQL or bound values into responses and logs"
+    },
+    {
+      "file": "testing.md",
+      "nav": "Vitest setup · app.inject route tests · integration tests against a real DB · the _test DB guard · 4 ownership pairs (read · list · update · delete) · auth tests over every registered route · the mutation table"
+    },
+    {
+      "file": "operations.md",
+      "nav": "running with tsx · graceful shutdown (drain → grace period → close → pool end) · health checks (live/ready) · logger options and redact · connection pool sizing · migration deploy order · EC2 and container binding"
+    }
+  ],
+  "seamSlots": [
+    "api-endpoints",
+    "auth-boundaries",
+    "complete-example"
+  ],
+  "seamSlotNotes": {
+    "api-endpoints": "Route plugin (`tasksRoutes`) shape + request/response envelope + emitting the error envelope (`errorHandler`). The envelope is a function of the wire contract, so the combination decides it, not the axis",
+    "auth-boundaries": "how the token is verified (self-issued JWT · session · external IdP) · **which encapsulation context** the `requireAuth` hook is set in · roles/scopes · login and logout flow. **The authentication method is not a function of the axis** — whether the frontend axis has a server runtime is what decides between a session cookie and a bearer token",
+    "complete-example": "a pass through migration → table → query → service → route plugin → inject test"
+  },
+  "clusters": [
+    {
+      "id": "C1",
+      "pilot": true,
+      "files": [
+        "input-validation.md",
+        "error-handling.md"
+      ],
+      "why": "The shape of the validation error a route schema throws (err.validation · validationContext) and fieldErrors, which turns it into field errors, are functions of each other. Both files know that unknown keys arrive with instancePath '/'"
+    },
+    {
+      "id": "C2",
+      "files": [
+        "data-access.md",
+        "project-structure.md"
+      ],
+      "why": "Ownership of the db singleton and the wiring in buildApp are the same decision (it stays a module rather than being carried as a decorator). The layering discipline 'the data layer knows nothing about HTTP' also spans both files"
+    },
+    {
+      "id": "C3",
+      "files": [
+        "testing.md",
+        "operations.md"
+      ],
+      "why": "They share the process lifetime (boot · shutdown · pool · health checks). Close the pool in onClose and tests break when they build the app several times — the two files see the same decision from opposite sides"
+    }
+  ],
+  "clustersNote": "This was serial authoring that built the reference implementation first, so the clusters were not used as units of parallel work (the same approach as node-nest). They are kept as a record of the coupling — when repairing, look at both files of the same cluster together",
+  "knownGaps": [
+    {
+      "what": "propagating the request correlation ID to downstream calls",
+      "where": "resources/operations.md",
+      "detail": "We confirmed only that Fastify puts req.id on req.log. The AsyncLocalStorage wiring that passes that ID on to external HTTP calls and queues was not run, so it was left empty — 'an empty slot beats wrong content'"
+    },
+    {
+      "what": "migration contention across multiple instances",
+      "where": "resources/operations.md",
+      "detail": "The basis for the instruction 'run migrations once, as a step separate from the deploy' is principle, not observation. There is no measurement of running drizzle-kit migrate from two processes at once"
+    },
+    {
+      "what": "TypeScript 7",
+      "where": "pack.json pkgs",
+      "detail": "npm latest is 7.0.2, but we pinned typescript@5. The other packs and the pack-smoke profile assume 5, and this pack's tsconfig (moduleResolution bundler) was not run on 7"
+    },
+    {
+      "what": "FASTIFY_CODES is not exhaustive",
+      "where": "resources/error-handling.md",
+      "detail": "Only the four FST_ERR_CTP_* codes we observed are mapped. Other request-stage 4xx errors, such as a bad Content-Length or URL encoding, fall through toAppError to a 500 INTERNAL — we could not enumerate them by running (raised by audit C)"
+    },
+    {
+      "what": "production build output (dist)",
+      "where": "resources/operations.md",
+      "detail": "Execution is pinned to tsx (development and production alike, boot confirmed by running). Because of top-level await and extensionless imports, the tsc output cannot be run directly with node, and the bundling path is not covered (raised by audit C)"
+    }
+  ]
+}
