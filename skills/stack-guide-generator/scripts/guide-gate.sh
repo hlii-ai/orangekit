@@ -427,10 +427,27 @@ check_leak() {
   # (`--forbid next` ↔ `nextCursor`) — and the --pair mode of this same gate requires that field, so
   # the two checks would demand opposites. A library leak shows up as an import path or a dotted call,
   # and -w catches both of those (`@prisma/client`·`prisma.user`).
-  local kw hits n=0
-  for kw in $(printf '%s' "$FORBID" | tr ',' ' '); do
+  #
+  # When a product name is **also an ordinary English word** (`express`·`next`·`nest`), a word in prose is
+  # mistaken for a leak (measured: "cannot express"). For those names only, code lines are matched
+  # case-insensitively and prose only by the product spelling (capitalized — `Express`). Every other name
+  # is still matched as is, because a lowercase command in prose (`prisma migrate`) is a leak too.
+  local kw hits n=0 cap
+  for kw in $(printf '%s' "$FORBID" | tr ',' '\n'); do
+    kw=$(printf '%s' "$kw" | tr -d ' ')   # accept "a, b" too — a leftover leading space means that keyword never matches
     [ -z "$kw" ] && continue
-    hits=$(grep -rniwF "$kw" $(guide_files "$G") 2>/dev/null | head -3 | cut -c1-110 | tr '\n' ';')
+    case "$(printf '%s' "$kw" | tr 'A-Z' 'a-z')" in
+      express|next|nest|remix|solid|astro)
+        # The product spelling in prose. next·nest collide with a sentence's first word ("Next, …"), so only the official spelling counts
+        case "$(printf '%s' "$kw" | tr 'A-Z' 'a-z')" in
+          next) cap="Next.js" ;; nest) cap="NestJS" ;;
+          *)    cap="$(printf '%s' "${kw:0:1}" | tr 'a-z' 'A-Z')${kw:1}" ;;
+        esac
+        hits=$({ codelines $(guide_files "$G") 2>/dev/null | awk -F'\t' '{print $1":"$2":"$3}' | grep -iwF -- "$kw"
+                 grep -rnwF -- "$cap" $(guide_files "$G") 2>/dev/null; } | head -3 | cut -c1-110 | tr '\n' ';')
+        ;;
+      *) hits=$(grep -rniwF "$kw" $(guide_files "$G") 2>/dev/null | head -3 | cut -c1-110 | tr '\n' ';') ;;
+    esac
     if [ -n "$hits" ]; then bad "stack keyword '$kw' appears although it is not in the fixed combination" "$hits"; n=$((n+1)); fi
   done
   [ "$n" -eq 0 ] && ok "no forbidden keyword leaks"
@@ -511,7 +528,7 @@ check_ledger() {
     if ! _has_def "$rf" "$sym"; then
       bad "the definition of ledger entry '$sym' is not in $(basename "$rf")" "the ledger is a contract — add the definition or delete the row"; n_def=$((n_def+1))
     fi
-    for c in $(printf '%s' "$cons" | tr ',' ' '); do
+    for c in $(printf '%s' "$cons" | tr ',' '\n'); do
       c=$(printf '%s' "$c" | tr -d ' `')
       [ -z "$c" ] || [ "$c" = "—" ] || [ "$c" = "-" ] && continue
       cf=$(_resolve "$G" "$c")
@@ -621,7 +638,8 @@ check_policies() {
       case "$except" in ""|"—"|"-") ;; *)
         case ",$(printf '%s' "$except" | tr -d ' '),"  in *",$base,"*) continue;; esac ;;
       esac
-      targets="$targets $f"
+      targets="$targets
+$f"
     done
     [ -z "$targets" ] && { rev "policy '$id' has 0 target files" "scope=$scope except=$except — check the scope"; continue; }
 
@@ -680,7 +698,8 @@ _policy_targets() {
     case "$except" in ""|"—"|"-") ;; *)
       case ",$(printf '%s' "$except" | tr -d ' ')," in *",$base,"*) continue;; esac ;;
     esac
-    out="$out $f"
+    out="$out
+$f"
   done
   printf '%s' "$out"
 }
@@ -1156,7 +1175,7 @@ VARTBL
     # Which product is the declared value
     mine=""; grp=""
     while IFS=$'\t' read -r g prod toks; do
-      for t in $(printf '%s' "$toks" | tr ',' ' '); do
+      for t in $(printf '%s' "$toks" | tr ',' '\n'); do
         case "$lval" in *"$t"*) mine="$prod"; grp="$g";; esac
         [ "$lval" = "$prod" ] && { mine="$prod"; grp="$g"; }
       done
@@ -1170,7 +1189,7 @@ VARTBL
     while IFS=$'\t' read -r g prod toks; do
       [ "$g" = "$grp" ] || continue
       [ "$prod" = "$mine" ] && continue
-      for t in $(printf '%s' "$toks" | tr ',' ' '); do
+      for t in $(printf '%s' "$toks" | tr ',' '\n'); do
         if _pkg_has_product "$TMP/pkgnames.txt" "$t"; then
           bad "fixesVariants.$dim = '$val' yet pkgs carries the competing product '$t'" "the declaration contradicts reality — the assembly-time cross-check passes falsely"
           hit=$((hit+1))
@@ -1212,7 +1231,7 @@ check_pack_ledger() {
   while IFS=$'\t' read -r syms deff shape; do
     [ -z "$syms" ] && continue
     case "$shape" in ""|"—"|"-") noshape=$((noshape+1)); shape="";; esac
-    for s in $(printf '%s' "$syms" | tr -d ' ' | tr '`' ' ' | tr '·' ' '); do
+    for s in $(printf '%s' "$syms" | tr -d ' ' | tr '`' ' ' | tr '·' ' ' | tr ' ' '\n'); do
       [ -z "$s" ] && continue
       printf '%s\t%s\t%s\n' "$s" "$deff" "$shape" >> "$TMP/prov.tsv"
     done
@@ -1649,6 +1668,57 @@ check_hub_contract() {
   return 0
 }
 
+# ── the standard wire contract (guides/contracts/) ──────────────────
+# Each pack defining its own contract is why every combination had to generate a seam — the mere difference of
+# calling the same thing `UNAUTHORIZED` or `UNAUTHENTICATED` was enough to split the API client.
+# So an HTTP pack names one canonical contract through pack.json `wireContract`, and the gate checks ① that the
+# named contract exists and its edition matches ② that no rival code is written in a code fence (FAIL) ③ that the pack
+# covers its own side's contract tokens. ③ is a WARN until the seam slots move into the pack — for now the seam owns
+# the envelope and the code table, so their absence from the pack alone is normal.
+CONTRACT_RIVALS='UNAUTHORIZED|BAD_REQUEST|THROTTLED|VALIDATION_ERROR|INTERNAL_ERROR'
+check_pack_contract() {
+  local P="$1" j="$1/pack.json"
+  sec "standard wire contract (wireContract)"
+  [ -f "$j" ] || return 0
+  local wc; wc=$(grep -m1 -oE '"wireContract"[[:space:]]*:[[:space:]]*"[^"]*"' "$j" | sed -E 's/.*"([^"]*)"$/\1/')
+  if [ -z "$wc" ]; then
+    bad "no wireContract declaration" "an HTTP pack states \"http-standard@<edition>\"; a pack with no HTTP boundary (BaaS and the like) states \"none\""
+    return 0
+  fi
+  [ "$wc" = "none" ] && { ok "wireContract = none (no HTTP boundary — follows the combination seam's contract)"; return 0; }
+
+  local cname="${wc%@*}" cver="${wc##*@}" cf
+  cf="$PLUGIN_GUIDES/contracts/$cname.md"
+  case "$wc" in *@*) ;; *) bad "malformed wireContract: '$wc'" "the form is \"<name>@<edition>\" — e.g. http-standard@1"; return 0;; esac
+  [ -f "$cf" ] || { bad "wireContract names a contract that does not exist: $wc" "$cf is missing"; return 0; }
+  local hv; hv=$(grep -m1 -oE "orangekit-wire-contract: $cname v[0-9]+" "$cf" | grep -oE '[0-9]+$')
+  [ "$hv" = "$cver" ] && ok "wireContract = $wc (matches the canonical edition)" \
+    || { bad "wireContract edition mismatch: pack $cver ≠ canonical ${hv:-?}" "if the canonical contract moved up, bring the pack to the new edition and then raise the declaration"; return 0; }
+
+  # ② rival codes — only those written as string literals count. A constant name such as `HTTP_401_UNAUTHORIZED`
+  # or a "do not use this" explanation in prose is not a contract violation
+  local rv; rv=$(grep -oE "[\"'\`]($CONTRACT_RIVALS)[\"'\`]" "$TMP/code.txt" 2>/dev/null | tr -d "\"'\`" | sort -u | tr '\n' ' ')
+  [ -n "$(printf '%s' "$rv" | tr -d ' ')" ] \
+    && bad "code uses a rival error code the canonical contract does not have: $rv" "switch to the codes in canonical §4 (e.g. UNAUTHORIZED → UNAUTHENTICATED, BAD_REQUEST → VALIDATION_FAILED, THROTTLED → RATE_LIMITED)" \
+    || ok "no rival error codes"
+
+  # ③ this side's contract tokens (the same extraction rule as pair)
+  local ax side; ax=$(grep -m1 -oE '"axis"[[:space:]]*:[[:space:]]*"[^"]+"' "$j" | sed -E 's/.*"([^"]+)"$/\1/')
+  [ "$ax" = "backend" ] && side='^(both|backend)$' || side='^(both|frontend)$'
+  local NOISE='^([A-Z]|string|number|boolean|object|null|true|false|undefined|unknown|never|any|void|json|JSON|Date|Promise|Record|Array|GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$'
+  { contract_rows_tagged "$cf" | awk -F'\t' -v re="$side" '$1 ~ re {print $2}' \
+      | grep -oE '`[^`]+`' | tr -d '`' | grep -oE '[A-Za-z_][A-Za-z0-9_]*'
+  } | grep -vE "$NOISE" | sort -u > "$TMP/ctok.txt"
+  local t miss="" n=0
+  while read -r t; do
+    [ -z "$t" ] && continue
+    grep -rqw -- "$t" $(guide_files "$P") 2>/dev/null || { miss="$miss $t"; n=$((n+1)); }
+  done < "$TMP/ctok.txt"
+  [ "$n" -eq 0 ] && ok "all $(num "$(wc -l < "$TMP/ctok.txt")") contract tokens appear" \
+    || warn "${n} contract tokens missing from the pack:$miss" "normal while the seam still owns the envelope and code table — raise it to FAIL once the slots move into the pack"
+  return 0
+}
+
 run_pack() {
   local P="$1"
   printf "\n${C_D}guide-gate --pack${C_0}  %s\n" "$P"
@@ -1663,6 +1733,7 @@ run_pack() {
   cut -f3 "$TMP/code.tsv" > "$TMP/code.txt"
 
   check_pack_meta "$P"
+  check_pack_contract "$P"
   check_known_gaps "$P" "$P/pack.json"
   check_budget "$P"
   check_fences "$P"
@@ -1849,6 +1920,8 @@ run_self_test() {
   _fx_assert "$fx/section/sample-backend-guide"   1 "required section missing"        --generated
   _fx_assert "$fx/nostamp/sample-backend-guide"   1 "generation stamp missing"      --generated
   _fx_assert "$fx/leak/sample-backend-guide"      1 "cross-leak keyword"      --generated --forbid prisma
+  _fx_assert "$fx/leakword/sample-backend-guide"  0 "an ordinary English word (cannot express) is not a leak" --generated --forbid express
+  _fx_assert "$fx/leakcap/sample-backend-guide"   1 "the product spelling (Express) is still a leak" --generated --forbid express
   _fx_assert "$fx/clean/sample-backend-guide"     1 "package manager mismatch"  --generated --pm pnpm
   _fx_assert "$fx/clean/sample-backend-guide"     1 "ledger mismatch (consumer absent)" --generated --ledger "$fx/clean/ledger-bad.md"
   _fx_assert "$fx/clean/sample-backend-guide"     1 "symbol not entered in the ledger"      --generated --ledger "$fx/clean/ledger-short.md"
@@ -1881,6 +1954,7 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/multisym/fxpack2"     0 "the second symbol of a row also counts as entered in the ledger (hub ghost false positive)"
   _fx_assert_pack "$fx/pk/tpllit/fxpack2"       0 "a word in template literal text is not symbol use"
   _fx_assert_pack "$fx/pk/appaxis/fxpack2"      0 "an app-axis (axis: app) pack is accepted"
+  _fx_assert_pack "$fx/pk/wcok/fxpack2"         0 "naming the standard contract with tokens absent is a WARN, not a FAIL"
 
   sec "positive pack fixtures (must be blocked)"
   _fx_assert_pack "$fx/pk/polnoex/fxpack2"   1 "no policy proof-example column"
@@ -1905,6 +1979,13 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/fvscopebad/fxpack2"   1 "a real competing product (express) is still caught as a contradiction"
   _fx_assert_pack "$fx/pk/envclassbad/fxpack2"  1 "an env key absent from the class is still caught"
   _fx_assert_pack "$fx/pk/badaxis/fxpack2"      1 "an unknown axis name is still caught"
+  _fx_assert_pack "$fx/pk/wcmissing/fxpack2"    1 "no wireContract declaration"
+  _fx_assert_pack "$fx/pk/wcbadver/fxpack2"     1 "the wireContract edition differs from the canonical one"
+  _fx_assert_pack "$fx/pk/wcrival/fxpack2"      1 "a rival error code the canonical contract does not have (UNAUTHORIZED)"
+  # A space in the path — common in a project folder name (`My Projects`) or a Windows user home. If the file list
+  # is split at spaces, the gate **reads 0 files and passes everything** (it does not FAIL, it goes blind)
+  mkdir -p "$fx/pk/sp ace" && cp -R "$fx/pk/noimport" "$fx/pk/sp ace/" \
+    && _fx_assert_pack "$fx/pk/sp ace/noimport/fxpack2" 1 "a defect is caught even with a space in the path (the file list is not split)"
 
   [ "$REGRESS" -eq 0 ] && { sec "regression corpus"; skip_note; }
 
@@ -2171,6 +2252,7 @@ FXPYP
   "name": "fxpypack",
   "registry": "pypi",
   "exampleDomain": { "entity": "Task", "collection": "tasks" },
+  "wireContract": "none",
   "fixesVariants": {},
   "pkgs": ["pydantic@2"],
   "resources": [
@@ -2279,6 +2361,7 @@ FXPP
   "axis": "backend",
   "name": "fxpack2",
   "exampleDomain": { "entity": "Task", "collection": "tasks" },
+  "wireContract": "none",
   "fixesVariants": { "orm": "prisma" },
   "pkgs": ["zod@4", "prisma@6"],
   "resources": [
@@ -2288,7 +2371,7 @@ FXPP
 }
 FXPJ
 
-  for m in polnoex polbadex polrealex secorigin secprefix secok secrefer ledgerbad reqexport fvbad vocab dupfence noproof noshape badarity noimport reqnosig polnohdr jsonfence polbadfile ghostres jstypedef jstypedefgone secintercept fvscope fvscopebad envclass envclassbad multisym tpllit appaxis badaxis; do
+  for m in polnoex polbadex polrealex secorigin secprefix secok secrefer ledgerbad reqexport fvbad vocab dupfence noproof noshape badarity noimport reqnosig polnohdr jsonfence polbadfile ghostres jstypedef jstypedefgone secintercept fvscope fvscopebad envclass envclassbad multisym tpllit appaxis badaxis wcok wcmissing wcbadver wcrival; do
     mkdir -p "$fx/pk/$m" && cp -R "$b" "$fx/pk/$m/" || return 1
   done
   # A fixture that adds c.md must carry it in pack.json too, or it is not blocked by the intended check.
@@ -2302,6 +2385,18 @@ FXPJ
   # App axis — the pack contract is the same as the web screen axis, only the axis name differs. Exactly three names must be accepted
   sed -i.bak 's#"axis": "backend"#"axis": "app"#' "$fx/pk/appaxis/fxpack2/pack.json" && rm -f "$fx/pk/appaxis/fxpack2/pack.json.bak"
   sed -i.bak 's#"axis": "backend"#"axis": "mobile"#' "$fx/pk/badaxis/fxpack2/pack.json" && rm -f "$fx/pk/badaxis/fxpack2/pack.json.bak"
+
+  # The standard wire contract — naming, edition, rival codes. The canonical contract is read from the real file (guides/contracts/)
+  local wj
+  for v in wcok wcrival; do
+    wj="$fx/pk/$v/fxpack2/pack.json"
+    sed -i.bak 's#"wireContract": "none"#"wireContract": "http-standard@1"#' "$wj" && rm -f "$wj.bak"
+  done
+  wj="$fx/pk/wcbadver/fxpack2/pack.json"
+  sed -i.bak 's#"wireContract": "none"#"wireContract": "http-standard@9"#' "$wj" && rm -f "$wj.bak"
+  wj="$fx/pk/wcmissing/fxpack2/pack.json"
+  sed -i.bak '/"wireContract"/d' "$wj" && rm -f "$wj.bak"
+  printf '\n```ts\nconst AUTH_CODE = %s\n```\n' "'UNAUTHORIZED'" >> "$fx/pk/wcrival/fxpack2/resources/b.md"
 
   # ⑯ a scoped package is not mistaken for a competing product (measured on node-nest — a false positive)
   # `@nestjs/platform-express` is Nest's default HTTP adapter, not a choice of Express.
@@ -2778,6 +2873,10 @@ FXL3
   sed -i.bak 's/^## Common Imports$/The default import bundle:/' "$fx/section/sample-backend-guide/SKILL.md" && rm -f "$fx/section/sample-backend-guide/SKILL.md.bak"
   sed -i.bak '/orangekit-guide: generated/d' "$fx/nostamp/sample-backend-guide/SKILL.md" && rm -f "$fx/nostamp/sample-backend-guide/SKILL.md.bak"
   printf '\nRun the migration with prisma migrate.\n' >> "$fx/leak/sample-backend-guide/resources/f.md"
+  mkdir -p "$fx/leakword" "$fx/leakcap"
+  cp -R "$fx/clean/sample-backend-guide" "$fx/leakword/" && cp -R "$fx/clean/sample-backend-guide" "$fx/leakcap/"
+  printf '\nThe type system cannot express this invariant, so the test pins it.\n' >> "$fx/leakword/sample-backend-guide/resources/f.md"
+  printf '\nMiddleware order is the same as in Express.\n' >> "$fx/leakcap/sample-backend-guide/resources/f.md"
 
   # ── pack/seam fixtures (the new surface that appeared in v3.12.0) ──
   # Shipping the axis pack and the seam separately creates two new classes of defect:
@@ -2840,6 +2939,11 @@ FXPOLE
 MODE=""; GUIDE=""; LEDGER=""; FORBID=""; PM=""; GENERATED=0
 CONTRACT=""; FE=""; BE=""; ASSEMBLY=""; CLAIMS_OUT=""; PACK_LEDGER_NAME="ledger.md"; PACK_POLICIES_NAME="policies.md"
 REGRESS=0
+# Word splitting happens **only at newlines and tabs**. There are more than 20 places that expand a file list
+# (`$(guide_files …)` · `$FILES`) unquoted, and with the default IFS a space in the path (`My Projects` · a Windows user home)
+# split it, so the gate read 0 files and **passed everything** (measured: reported 0 version claims · no tests).
+# Loops that built a space-separated list were switched to newlines — new loops do not use space-separated lists either.
+IFS=$'\n\t'
 PLUGIN_GUIDES="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}/guides"
 
 [ $# -eq 0 ] && { printf "no arguments (see --help)\n" >&2; exit 2; }

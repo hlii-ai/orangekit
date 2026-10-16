@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-serverless v3.13.0 -->
+<!-- orangekit-pack: backend/aws-serverless v3.34.0 -->
 # Error handling — gathering every failure into one table
 
 The domain code → HTTP status mapping table (`ERROR_STATUS`) · DynamoDB exception detection · `ZodError` normalization
@@ -19,11 +19,11 @@ decision starts not from "what failed" but from "**what was asked for**".
 | the subject is right but the role is insufficient | `FORBIDDEN` | 403 | no |
 | there is no item I own · **it is someone else's item** | `NOT_FOUND` | 404 | no |
 | an attempt to create something that already exists | `CONFLICT` | 409 | no |
-| DynamoDB throttled | `THROTTLED` | 429 | **yes** |
+| DynamoDB throttled | `RATE_LIMITED` | 429 | **yes** |
 | everything else | `INTERNAL` | 500 | the caller's call |
 
 Three things to read out of the table. **Use `FORBIDDEN` only for an insufficient role** — answer someone else's item with a
-403 and an unauthorized user sweeps ids to enumerate which resources exist. **Only `THROTTLED` is a retry target**
+403 and an unauthorized user sweeps ids to enumerate which resources exist. **Only `RATE_LIMITED` (a DynamoDB throttle) is a retry target**
 — API Gateway does not retry Lambda, so a client that received the 429 sending it again is the
 only recovery path. **`INTERNAL`'s message is a fixed phrase** and the cause is left only in the log.
 
@@ -41,7 +41,7 @@ export const ERROR_STATUS: Record<string, number> = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
-  THROTTLED: 429,
+  RATE_LIMITED: 429,
   INTERNAL: 500,
 };
 
@@ -103,7 +103,7 @@ export function toAppError(e: unknown): AppError {
     return new AppError('CONFLICT', 'the resource state does not match the condition');
   }
   if (isThroughputExceeded(e)) {
-    return new AppError('THROTTLED', 'try again in a moment');
+    return new AppError('RATE_LIMITED', 'try again in a moment');
   }
   if (isInvalidRequest(e)) {
     return new AppError('VALIDATION_FAILED', 'the request shape is not valid');

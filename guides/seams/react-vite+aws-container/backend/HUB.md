@@ -101,7 +101,7 @@ The request body · query · path parameters are all `unknown`. Only the parsed 
 
 ```ts
 // ✅ only the parsed value goes to the service
-const body = await jsonBody(c, CreateTaskInput)   // throws the 422 envelope on failure
+const body = await jsonBody(c, CreateTaskInput)   // throws the 400 envelope on failure
 const task = await createTask(user.sub, body)
 
 // ❌ a cast is not validation — it blocks nothing at runtime
@@ -165,7 +165,7 @@ if (task.ownerId !== user.sub) throw new AppError(403, 'FORBIDDEN', 'Not your ta
 ```
 
 A token verification failure does not distinguish the reason either — expiry · signature mismatch · issuer mismatch all get the same
-401 `UNAUTHORIZED` envelope. 403 is used only on the **non-ownership axis** (admin-only and the like).
+401 `UNAUTHENTICATED` envelope. 403 is used only on the **non-ownership axis** (admin-only and the like).
 
 ### 5. A mutation checks the number of affected rows
 
@@ -234,12 +234,11 @@ import { AppError } from '@/http/errors'
 | Situation | Code | Envelope `error.code` |
 | --- | --- | --- |
 | read succeeded / created / deleted | 200 / 201 / 204 | — |
-| JSON cannot be parsed, malformed query | 400 | `BAD_REQUEST` |
-| token missing · expired · signature mismatch (reason not distinguished) | 401 | `UNAUTHORIZED` |
+| schema validation failed, JSON cannot be parsed, malformed query | 400 | `VALIDATION_FAILED` |
+| token missing · expired · signature mismatch (reason not distinguished) | 401 | `UNAUTHENTICATED` |
 | authenticated but insufficient role · scope (not ownership) | 403 | `FORBIDDEN` |
 | resource absent **or** unauthorized access | 404 | `NOT_FOUND` |
 | unique constraint violation, state conflict | 409 | `CONFLICT` |
-| schema validation failed (well-formed but violates a rule) | 422 | `VALIDATION_FAILED` |
 | unexpected exception (do not expose the internal message) | 500 | `INTERNAL` |
 
 **Anti-Patterns**

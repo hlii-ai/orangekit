@@ -1,4 +1,4 @@
-<!-- orangekit-seam: react-vite+aws-container/backend v3.12.0 -->
+<!-- orangekit-seam: react-vite+aws-container/backend v3.34.0 -->
 # Authentication and permissions (OIDC/JWKS + application-layer ownership)
 
 Cognito is only the **token issuer**. The backend does standard OIDC verification only, so swapping the issuer for Keycloak
@@ -32,7 +32,7 @@ export type AuthUser = { sub: string; email?: string; groups: string[] }
 export type TokenVerifier = (token: string) => Promise<AuthUser>
 
 // the reason for failure is not distinguished — expiry · signature mismatch · issuer mismatch all get the same response
-const unauthorized = () => new AppError(401, 'UNAUTHORIZED', 'Authentication required')
+const unauthorized = () => new AppError(401, 'UNAUTHENTICATED', 'Authentication required')
 
 export const makeJwksVerifier = (keys: JWTVerifyGetKey): TokenVerifier => async (token) => {
   const { payload } = await jwtVerify(token, keys, {
@@ -193,7 +193,7 @@ authRoutes.get('/login-url', (c) => {
 // the callback hands state back — the return path only appears if the signature matches
 authRoutes.get('/return-path', (c) => {
   const claims = verifyState(c.req.query('state'))
-  if (!claims) throw new AppError(400, 'BAD_REQUEST', 'The state is not valid')
+  if (!claims) throw new AppError(400, 'VALIDATION_FAILED', 'The state is not valid')
   return c.json({ data: { returnTo: claims.returnTo } })
 })
 ```

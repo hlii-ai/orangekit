@@ -1,5 +1,29 @@
 # Lessons
 
+## [category: tooling] With a space in the path the gate did not FAIL — it went blind
+
+- date: 2026-10-16
+- situation: A consumer ran init in a folder with a space in its name (Windows), and the generation agent spent time
+  chasing a gate malfunction. Reproducing it, the same pack **passed** in a path with a space with "no version claims", "no test code"
+  and "0 complete files" — 24 places that expanded `$(guide_files …)` unquoted split the path and read 0 files.
+- mistake: Many checks report "0 targets" as a normal result (not applicable), so a state in which the input had vanished
+  could not be told apart from a pass. Every fixture ran only in a temporary path with no spaces.
+- lesson: A shell script that handles file lists pins IFS to newline and tab, and **keeps a space-in-path fixture
+  in its self-test** — that fixture must pick a defect that "looks like a pass when there are 0 targets" (a missing procurement and the like) to prove
+  that it blocks. Pick an arbitrary defect and it FAILs for some other reason even in the blind state, which proves nothing (measured).
+
+## [category: skill] Without a scope cap on a generation delegation, the generator widens "checking" on its own
+
+- date: 2026-10-16
+- situation: In a consumer project (react-vite + fastify + RN), a single seam-generation agent spent 62 minutes and 340k tokens.
+  The delegation prompt asked it to install and run `tsc`, and the backend generator went on to run an embedded PostgreSQL · vitest ·
+  mutations. On top of that, while writing the L0 contract the main session invented `todo/doing/done` states and an `updatedAt` that
+  the packs do not have, and one more repair round ran.
+- mistake: The spec named the owners of execution verification (the main session's pack-smoke · audit A) but never told the
+  generator what it does "not do". The example domain, too, pinned only the names and not the fields.
+- lesson: A delegation spec writes **what not to do** alongside what to do (the cap in rule 6 of generation-delegation.md).
+  Values the contract does not pin get filled in by the generator — keep the example domain's fields and values in the canonical source (contracts/http-standard.md §0).
+
 ## [category: skill] With no cap, model or location set for audit and repair, a re-audit loop and disk residue followed
 
 - date: 2026-10-14

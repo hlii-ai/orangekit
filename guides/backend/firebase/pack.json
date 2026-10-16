@@ -21,6 +21,8 @@
     "note": "Every pack and seam uses the same example domain. From this value L0 issues the vocabulary policy (`vocab-task`) so the gate blocks divergence"
   },
 
+  "wireContract": "none",
+
   "fixesVariants": { "database": "firestore", "runtime": "cloud-functions-v2" },
   "fixesVariantsNote": "The document model (collections, subcollections, composite indexes) and the function shape (2nd gen `onCall`/`onRequest`, `defineSecret`/`defineString` parameters) are the premise of the entire pack body. For a project that chooses the Realtime Database the query model is not a variant of Firestore but a different system, and 1st gen functions have a different configuration, region and concurrency model",
 

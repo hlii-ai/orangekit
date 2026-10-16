@@ -1,4 +1,4 @@
-<!-- orangekit-seam: react-vite+aws-container/frontend v3.12.0 -->
+<!-- orangekit-seam: react-vite+aws-container/frontend v3.34.0 -->
 # Data Fetching (REST API + TanStack Query v5)
 
 An SPA has no server runtime. All data is an HTTP call to a REST API you operate yourself, and
@@ -20,7 +20,7 @@ component → query/mutation hook → endpoint function → http client → API
 
 - Pagination is **cursor**-based. `limit`/`cursor` on the request, `nextCursor` on the response (`null` means the last page).
   Neither `total` nor `page` **exists** — a total-count or page-number UI cannot be built against this backend
-- `details` arrives **on 422 only** and its value is a **string array per field** (`{ "title": ["at least 2 characters"] }`)
+- `details` arrives **on `VALIDATION_FAILED` only** and its value is a **string array per field** (`{ "title": ["at least 2 characters"] }`)
 - The screen branches on `code` (`status` is for logging). **Unauthorized access arrives as 404** (so existence does not leak) —
   403 is used only for an insufficient role or scope
 
@@ -33,16 +33,16 @@ import { refreshOnce, handleSessionExpired } from '@/auth/session';
 
 /** 1:1 with the backend error code table + client-only codes. The single axis for screen branching */
 export type ApiErrorCode =
-  | 'BAD_REQUEST' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT'
-  | 'VALIDATION_FAILED' | 'PAYLOAD_TOO_LARGE' | 'INTERNAL'    // ← values the server sends
+  | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT'
+  | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'RATE_LIMITED' | 'INTERNAL' // ← values the server sends
   | 'NETWORK_ERROR' | 'TIMEOUT' | 'BAD_SHAPE';                // ← values the client makes
 
-/** The shape of `details` on a 422: field name → array of messages */
+/** The shape of `details` on a `VALIDATION_FAILED`: field name → array of messages */
 export type FieldErrors = Record<string, string[]>;
 export type Page<T> = { items: T[]; nextCursor: string | null };
 
 export class ApiError extends Error {
-  readonly details?: FieldErrors;   // the per-field messages of a 422
+  readonly details?: FieldErrors;   // the per-field messages of a VALIDATION_FAILED
   readonly requestId?: string;      // shown on the error screen — the only thread back to the server log
   constructor(readonly status: number, readonly code: ApiErrorCode, message: string,
               opts: { details?: FieldErrors; requestId?: string } = {}) {

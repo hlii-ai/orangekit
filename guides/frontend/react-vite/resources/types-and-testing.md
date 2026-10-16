@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.12.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.34.0 -->
 # TypeScript Standards · Frontend Testing
 
 ## Table of contents
@@ -169,7 +169,7 @@ export const handlers = [
   }),
   // Failure cases are overridden with server.use() inside that one test only
   // HttpResponse.json({ error: { code: 'VALIDATION_FAILED', message: '...',
-  //   details: { title: ['At least 2 characters'] } }, requestId: 'req_1' }, { status: 422 })
+  //   details: { title: ['At least 2 characters'] } }, requestId: 'req_1' }, { status: 400 })
 ];
 ```
 

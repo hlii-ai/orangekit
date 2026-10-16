@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.12.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.34.0 -->
 # Loading · Empty · Error States
 
 Every screen that draws data has at least three branches. A screen that implements only the success path goes
@@ -116,14 +116,18 @@ The backend sends failures as `{ error: { code, message, details? }, requestId }
 | `code` | Status | What the screen does |
 | --- | --- | --- |
 | `NETWORK_ERROR` / `TIMEOUT` | — | "Check your connection" + a retry button (a code the client makes up) |
-| `UNAUTHORIZED` | 401 | Handled by the **auth layer**, not the screen (refresh → login on failure) |
+| `UNAUTHENTICATED` | 401 | Handled by the **auth layer**, not the screen (refresh → login on failure) |
 | `FORBIDDEN` | 403 | Missing role·scope. "You do not have permission" — no retry button |
 | `NOT_FOUND` | 404 | **A missing resource or someone else's resource** (the backend merged the two so as not to leak existence). "Not found, or you do not have access" + a link back to the list |
 | `CONFLICT` | 409 | "Someone else edited this first" + refresh |
-| `VALIDATION_FAILED` | 422 | The messages from `details` **under the relevant form field**, not in a toast |
+| `VALIDATION_FAILED` | 400 | The messages from `details` **under the relevant form field**, not in a toast |
 | `PAYLOAD_TOO_LARGE` | 413 | "The content is too large" — guide the user to shorten the input |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | A client bug (a non-JSON body) — the generic error screen, no retry button |
 | `INTERNAL` | 500 | A generic error screen + retry. Never surface the server's raw message |
-| (429) | 429 | "Try again shortly" — **no automatic retry** |
+| `RATE_LIMITED` | 429 | "Try again shortly" — **no automatic retry** |
+
+The Status column is only the default. The screen branches on `code`, so this table does not change even when it is paired with
+a backend (FastAPI) that sends the same `VALIDATION_FAILED` as a 422.
 
 ```tsx
 export function toUserMessage(error: unknown): string {
@@ -152,7 +156,7 @@ logs and nothing else — omit `onRetry` from `ErrorState` and the button disapp
 the rate limit harder. Exclude all 4xx from the query's `retry` (`data-fetching.md` §5 —
 the two files state one policy).
 
-## 5. Form validation errors (422)
+## 5. Form validation errors (`VALIDATION_FAILED`)
 
 `details` is a **field name → array of messages**. Miss the fact that the value is an array rather than a
 string and `[object Object]` shows up on screen.
@@ -177,7 +181,7 @@ const submit = (input: CreateTaskInput) => {
 <Field label="Title" htmlFor="title" error={fieldErrors.title?.[0]}>…</Field>
 ```
 
-Client validation is **UX guidance up front**, and the final verdict is the server's 422. Put the rule only on the
+Client validation is **UX guidance up front**, and the final verdict is the server's `VALIDATION_FAILED`. Put the rule only on the
 client and it is bypassed by paths that call the API directly; put it only on the server and round trips pile up — put it in both.
 
 ## 6. Error boundaries

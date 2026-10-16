@@ -33,7 +33,7 @@ over HTTP from a REST API you operate yourself, and everything that goes into th
       `page`/`total` do not exist on the backend
 - [ ] Writes use `useMutation` — hook names are `use<Thing>Query` / `use<Thing>Mutation`
 - [ ] In the mutation's `onSuccess`, invalidate the affected keys with `invalidateQueries({ queryKey })`
-- [ ] Branch errors on `error.code` (`UNAUTHORIZED` is the session, `FORBIDDEN`/`NOT_FOUND` is authorization,
+- [ ] Branch errors on `error.code` (`UNAUTHENTICATED` is the session, `FORBIDDEN`/`NOT_FOUND` is authorization,
       `VALIDATION_FAILED` is the per-field message in `details`)
 - [ ] Set `staleTime` to match the nature of the data (the default of 0 refetches every time you return to the screen)
 - [ ] Confirm no secret or signing logic ended up in the frontend (every `VITE_*` is a public value)

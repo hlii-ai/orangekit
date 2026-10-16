@@ -97,14 +97,20 @@ The single `status:` line at the end of the output is the whole result:
 Settled combination: <frontend> × <backend>
 Guide status: frontend=<status> · backend=<status>
 Remaining: <the need from guide-job.json, verbatim> — build it now, or in the next session?
-(init itself is complete. The T1 rule cards already work without the guides)
+Expected cost: generating <number of seam:* entries in need> seam(s) — measured at about 1 hour for 2 axes (audit included),
+               longer on Windows (Git Bash). Hundreds of thousands of tokens per background agent.
+(init itself is complete. The T1 rule cards and the assembled pack resources already work without the guides)
 ```
+
+**Do not drop the expected-cost line, and do not shrink the numbers.** The measurement (`dev/docs/skill-review/contract-first-e2e-2026-08-22.md`:
+generating 2 axes took 37 minutes + 17 minutes of audit, macOS) is the basis. There is a real case where "about 20 minutes" was said without
+basis, the user chose to build now, and then waited an hour — the value of this question lies in letting the user choose with the accurate cost in view.
 
 If they say to continue, call `stack-guide-generator` — **there is no need to marshal arguments.**
 That skill starts by reading `.orangekit/guide-job.json` and closes the file when it finishes.
 Otherwise stop here. The `session-brief` hook reports unfinished work in the next session.
 
-> Why only this one question is asked: **whether to spend 20 minutes now is a decision about the
+> Why only this one question is asked: **whether to spend the time now is a decision about the
 > user's time**, so the system cannot answer for them. "Pre-built or generated", by contrast, is an implementation detail and is not asked.
 
 #### The bar for adding more pre-built material

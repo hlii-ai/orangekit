@@ -1,4 +1,4 @@
-<!-- orangekit-pack-ledger: backend/aws-serverless v3.13.0 -->
+<!-- orangekit-pack-ledger: backend/aws-serverless v3.34.0 -->
 
 # aws-serverless pack — symbol ledger (the L0 declaration)
 
@@ -62,7 +62,7 @@ guesses the argument order (the gate blocks that with a FAIL).
 
 | symbol | kind | shape the pack assumes | why it is a seam |
 | --- | --- | --- | --- |
-| `AppError` | project | `new AppError(code: string, message: string, details?: Record<string, string[]>)` — **the last two arguments are both `string`, so the order is everything.** The code table must contain: `VALIDATION_FAILED` · **`UNAUTHENTICATED`** (`requireAuth` throws it — leave it out and a 401 goes out as a 500) · `NOT_FOUND` · `CONFLICT` · `FORBIDDEN` · `THROTTLED` · `INTERNAL`. Put it in `src/http/app-error.ts` | The error code table and the field-error shape are functions of the wire contract |
+| `AppError` | project | `new AppError(code: string, message: string, details?: Record<string, string[]>)` — **the last two arguments are both `string`, so the order is everything.** The code table must contain: `VALIDATION_FAILED` · **`UNAUTHENTICATED`** (`requireAuth` throws it — leave it out and a 401 goes out as a 500) · `NOT_FOUND` · `CONFLICT` · `FORBIDDEN` · `RATE_LIMITED` · `INTERNAL`. Put it in `src/http/app-error.ts` | The error code table and the field-error shape are functions of the wire contract |
 | `respond` | project | `respond(result: unknown, init?: { status?: number }) => APIGatewayProxyResultV2` · `respond.fail(e: unknown) => APIGatewayProxyResultV2` — **normalize with `toAppError` first, then settle the status from `ERROR_STATUS`.** Put it in `src/http/respond.ts` | The response envelope is a function of the wire contract |
 | `requireAuth` | project | `requireAuth(event: APIGatewayProxyEventV2) => AuthUser` — synchronous. Failure is `AppError('UNAUTHENTICATED')`. Put it in `src/http/require-auth.ts`. **It is not middleware but a function called on the handler's first line** (Lambda has no middleware chain) | The token verification method is a function of the combination |
 | `AuthUser` | project | at minimum `{ id: string; roles: string[] }` — pulled from the Cognito claims | Same as above |

@@ -2,7 +2,7 @@
 
 **Launch three audits in parallel.** Give all three the common preamble below and swap only the "assigned axis".
 **Model · rounds · work location are set by "Audit and repair budget" in `SKILL.md`** — `sonnet` for A and C,
-`haiku` for B, at most 2 rounds, and working directories only under `.orangekit/scratch/`.
+`haiku` for B, one audit (no regression audit), and working directories only under `.orangekit/scratch/`.
 Fill in the `<...>` and hand it over as is. **The auditor does not see the generation conversation** — the audit is independent
 only if they read the artifacts and judge from those alone.
 
@@ -201,18 +201,3 @@ file<TAB>line<TAB>severity<TAB>clusterId<TAB>one-line summary<TAB>how to reconfi
    > the norm was established repeated the same critical defect (`firebase`), while where the norm already existed
    > recurrence was 0. Buried in prose, the main session does not recognize it as a norm
 
----
-
-## Round 2 — regression audit (1 · `haiku`)
-
-Launch it **once**, only when round 1 repaired something. Do not audit everything again — look only at defects the repair
-newly created. There are no audits after this.
-
-You are the regression audit agent. You look only at the difference before and after the repair.
-
-- **Input**: the full output of `diff -ru .orangekit/scratch/pre-repair/<axis>-guide .claude/skills/<axis>-guide` +
-  the round 1 defect TSV (what the repair was meant to fix) + the gate output after the repair
-- **Look at**: ① was the defect it meant to fix actually fixed ② did a repaired line create a **new** compile error · security defect ·
-  contract mismatch ③ did the repair break a reference in another file (`grep` the changed names)
-- **Do not look at**: anything outside the diff · style · the `medium` · `low` items round 1 decided only to record
-- **Return**: the TSV format above, **`critical` only**. If there are none, the single line "no regression"

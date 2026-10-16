@@ -13,6 +13,8 @@
     "note": "Every pack and seam uses the same example domain. The L0 contract passes this value to the seam and the gate's --pair checks it — this repairs the measured defect where the frontend called /tasks while the backend served /notes"
   },
 
+  "wireContract": "http-standard@1",
+
   "fixesVariants": {
     "store": "pinia",
     "query": "@tanstack/vue-query"

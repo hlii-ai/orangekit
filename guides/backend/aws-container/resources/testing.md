@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-container v3.12.0 -->
+<!-- orangekit-pack: backend/aws-container v3.34.0 -->
 # Tests (Vitest + docker compose local parity)
 
 The advantage of this stack is that **local is the same as production**. `docker compose` brings PostgreSQL 16 up as it is,
@@ -151,9 +151,9 @@ describe('POST /api/tasks', () => {
     expect(res.status).toBe(201)
     expect((await res.json()).data.title).toBe('first task')
   })
-  it('returns 422 and a field error when title is empty', async () => {
+  it('returns 400 and a field error when title is empty', async () => {
     const res = await post({ title: '' })
-    expect(res.status).toBe(422)
+    expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error.code).toBe('VALIDATION_FAILED')
     expect(body.error.details.title).toBeDefined()
@@ -269,10 +269,10 @@ it.each([
   ['a different issuer', await sign({ iss: 'https://evil.test' })],
   ['a different client_id', await sign({ client_id: 'other-app' })],
   ['no token', undefined],
-])('%s → the same 401 UNAUTHORIZED envelope', async (_label, token) => {
+])('%s → the same 401 UNAUTHENTICATED envelope', async (_label, token) => {
   const res = await call(token)
   expect(res.status).toBe(401)
-  expect((await res.json()).error.code).toBe('UNAUTHORIZED')
+  expect((await res.json()).error.code).toBe('UNAUTHENTICATED')
   expect(res.headers.get('WWW-Authenticate')).toBe('Bearer')
 })
 ```

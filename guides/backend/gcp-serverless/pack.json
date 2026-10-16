@@ -21,6 +21,8 @@
     "note": "Every pack and seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from these values and the gate blocks any divergence — measured, the frontend used /tasks while the backend used /notes and the complete examples could not run against each other"
   },
 
+  "wireContract": "http-standard@1",
+
   "fixesVariants": { "runtime": "cloud-run", "framework": "hono", "database": "firestore" },
   "fixesVariantsNote": "**It nails down the Cloud Run container (a resident process)** — the entire body of the pack stands on the premise that the process is alive between requests (Firestore client reuse · the JWKS cache · SIGTERM drain · concurrency settings). A project that picks Cloud Functions resolves all of these differently, so it is not a variant but a different system — and **the function-unit + Firestore combination is owned by the `firebase` axis pack.** The framework is Hono (it stands on the web-standard Request/Response and attaches to Node through `@hono/node-server`). Pick Express and the middleware signature and error propagation differ, which makes every handler example wrong",
 

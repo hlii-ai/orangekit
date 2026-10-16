@@ -2,7 +2,7 @@
   "axis": "frontend",
   "name": "react-vite",
   "displayName": "React 18 + Vite 5 SPA",
-  "packVersion": "3.12.0",
+  "packVersion": "3.34.0",
   "verified": "2026-08-22",
   "extractedFrom": "skills/react-aws-frontend-guide (v3.11.0)",
 
@@ -12,6 +12,9 @@
     "route": "/tasks",
     "note": "Every pack and seam uses the same example domain. The L0 contract passes this value to the seam and the gate's --pair checks it — this repairs the measured defect where the frontend called /tasks while the backend served /notes"
   },
+
+  "wireContract": "http-standard@1",
+  "wireContractSince": "3.34.0",
 
   "fixesVariants": {
     "router": "react-router",

@@ -17,6 +17,8 @@
     "note": "Every pack and every seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from this value so that the gate blocks divergence — measured, the frontend used /tasks and the backend /notes, and the complete examples could not run against each other"
   },
 
+  "wireContract": "http-standard@1",
+
   "fixesVariants": { "language": "javascript", "bundler": "vite", "router": "history-api" },
   "fixesVariantsNote": "**The language is the whole of this pack.** The preset leaves the default at JavaScript, and that choice replaces the type-standard slot with **JSDoc + runtime schema validation** — a project that picks TypeScript gets that slot back, so this pack hands it not a variant but **the wrong thing**. Routing is pinned to a **single History API entry point**: choose multiple HTML entry points and the whole account of the router·state restoration·link interception becomes meaningless (it turns into a question about Vite's multi-input configuration). The bundler is Vite — `import.meta.env` and the module resolution rules are premises of the body text",
 

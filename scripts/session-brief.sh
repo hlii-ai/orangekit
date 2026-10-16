@@ -214,7 +214,7 @@ orangekit_majors() {  # stdin: "pkgs=a@1 b@2 ..." → sorted "a@1 b@2"
 }
 
 if [ -n "${PLUG_VER:-}" ]; then
-  FIXES=""; PINNED=""
+  FIXES=""; PINNED=""; CPIN=""
   for AJ in "$ORANGEKIT_ROOT"/.claude/skills/*/assembly.json; do
     [ -f "$AJ" ] || continue
     GD=$(dirname "$AJ"); GN=$(basename "$GD")
@@ -226,6 +226,25 @@ if [ -n "${PLUG_VER:-}" ]; then
     # the numbering schemes differ, so it always differed and "there are guide fixes" showed every session for guides with nothing to fix
     CUR=$({ grep -m1 -oE '"packVersion"[[:space:]]*:[[:space:]]*"[0-9.]+"' "$PJ" 2>/dev/null || true; } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
     [ -n "${PKV:-}" ] && [ "$PKV" = "${CUR:-}" ] && continue
+    # Wire contract move — install-guide.sh does not update this installed copy (contract pinning). Without the same
+    # verdict here, it would recommend every session an update command that will be refused
+    HAVEC=$({ grep -m1 -oE '"wireContract"[[:space:]]*:[[:space:]]*"[^"]*"' "$AJ" 2>/dev/null || true; } | sed -E 's/.*"([^"]*)"$/\1/')
+    WANTC=$({ grep -m1 -oE '"wireContract"[[:space:]]*:[[:space:]]*"[^"]*"' "$PJ" 2>/dev/null || true; } | sed -E 's/.*"([^"]*)"$/\1/')
+    # legacy (an installed copy from before the standard contract) diverges only when it is older than the pack whose wire
+    # values really changed (wireContractSince) — the same verdict as contract_drift in install-guide.sh
+    CDRIFT=0
+    if [ -f "$GD/SKILL.md" ] && [ "${HAVEC:-legacy}" != "${WANTC:-legacy}" ]; then
+      CDRIFT=1
+      if [ -z "$HAVEC" ]; then
+        SINCE=$({ grep -m1 -oE '"wireContractSince"[[:space:]]*:[[:space:]]*"[0-9.]+"' "$PJ" 2>/dev/null || true; } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+        if [ -z "$SINCE" ]; then CDRIFT=0
+        elif [ -n "${PKV:-}" ] && [ "$(printf '%s\n%s\n' "$PKV" "$SINCE" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" = "$SINCE" ]; then CDRIFT=0
+        fi
+      fi
+    fi
+    if [ "$CDRIFT" -eq 1 ]; then
+      CPIN="$CPIN $GN"; continue
+    fi
     HAVE=$({ grep -m1 -oE 'pkgs=[^>]*' "$GD/SKILL.md" 2>/dev/null || true; } | orangekit_majors)
     WANT=$({ grep -oE '"[@A-Za-z0-9._/-]+@[0-9.]+"' "$PJ" 2>/dev/null | tr -d '"' || true; } | orangekit_majors)
     if [ -n "$HAVE" ] && [ -n "$WANT" ] && [ "$HAVE" != "$WANT" ]; then
@@ -234,10 +253,20 @@ if [ -n "${PLUG_VER:-}" ]; then
       FIXES="$FIXES $GN(v$PKV)"     # a fix within the same premise — it has to reach
     fi
   done
+  # The installer applies contract pinning to **the whole combination** — once one axis is caught, updates of the other
+  # axes that have a seam are refused too. Recommending those axes separately as FIXES would recommend a refused command every session
+  if [ -n "$CPIN" ] && [ -n "$FIXES" ]; then
+    for F in $FIXES; do
+      [ -f "$ORANGEKIT_ROOT/.claude/skills/${F%%(*}/SKILL.md" ] && CPIN="$CPIN ${F%%(*}"
+    done
+    FIXES=""
+  fi
   [ -n "$FIXES" ] && printf -- '- There are guide fixes under the same stack premise (plugin v%s ↔ installed%s) — `bash "%s/scripts/install-guide.sh" --frontend <pack> --backend <pack> [--app <app>]`\n' \
     "$PLUG_VER" "$FIXES" "$PLUGIN_ROOT"
   [ -n "$PINNED" ] && printf -- '- %s: the plugin pack has moved to a different stack major — **not updating**. Move it across with `/stack-guide-generator` when you raise the dependency\n' \
     "$(printf '%s' "$PINNED" | sed 's/^ //')"
+  [ -n "$CPIN" ] && printf -- '- %s: the plugin pack moved to the standard wire contract and diverges from the installed seam — **not updating**. For a prebuilt seam, add `--seam <combination>` to the update command; for a generated seam, move it across when you regenerate it with `/stack-guide-generator`\n' \
+    "$(printf '%s' "$CPIN" | sed 's/^ //')"
 
   # T1 rule cards have no stack premise (code-change discipline · reversibility · lessons) — the latest is always right
   #

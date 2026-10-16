@@ -20,6 +20,8 @@
     "displayLabel": "Task"
   },
 
+  "wireContract": "none",
+
   "fixesVariants": {},
   "fixesVariantsNote": "No variant is nailed down. This pack is pattern-knowledge (0 exports) and the client, auth and policy are decided by the Supabase product — there is no in-axis branch the project can choose",
 

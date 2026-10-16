@@ -1,6 +1,6 @@
 # Wire contract — react-vite × aws-container
 
-<!-- orangekit-wire-contract: react-vite+aws-container v3.12.0 -->
+<!-- orangekit-wire-contract: react-vite+aws-container v3.34.0 -->
 
 The canonical contract of a prebuilt seam. On the generation path the main session fills this form at L0, but
 this combination is already settled, so it was **derived from the real seam and frozen**. The gate
@@ -41,20 +41,19 @@ rather than in a list is that the gate reads a backtick in a list as "a value th
 
 | code | status | when |
 | --- | --- | --- |
-| `BAD_REQUEST` | 400 | JSON cannot be parsed, malformed query |
-| `UNAUTHORIZED` | 401 | token missing · expired · signature mismatch (reason not distinguished) |
+| `VALIDATION_FAILED` | 400 | schema validation failed, JSON cannot be parsed, malformed query |
+| `UNAUTHENTICATED` | 401 | token missing · expired · signature mismatch (reason not distinguished) |
 | `FORBIDDEN` | 403 | authenticated but insufficient role · scope (not ownership) |
 | `NOT_FOUND` | 404 | resource absent **or** unauthorized access |
 | `CONFLICT` | 409 | unique constraint violation, state conflict |
 | `PAYLOAD_TOO_LARGE` | 413 | body exceeds the size limit |
-| `VALIDATION_FAILED` | 422 | schema validation failed |
 | `INTERNAL` | 500 | unexpected exception (do not expose the internal message) |
 
 Codes the client makes on its own (NETWORK_ERROR · TIMEOUT · BAD_SHAPE) live in the frontend guide only — the backend does not emit them, so they are not in the table.
 
 ## 5. The surface of authorization failure
 
-- Unauthenticated: 401 `UNAUTHORIZED`
+- Unauthenticated: 401 `UNAUTHENTICATED`
 - Authorization failure: **404 `NOT_FOUND`** — do not leak existence. A frontend that handles only 403 goes out of alignment.
   403 arrives only on the non-ownership axis (insufficient role)
 - Return after auth expiry: attempt a silent refresh on the first 401 only, and if that fails again send the user

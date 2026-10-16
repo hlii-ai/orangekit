@@ -198,6 +198,57 @@ cache_slot() { # $1=axis
   return 0
 }
 
+# ── Wire contract pinning ─────────────────────────────────────────────
+# A pack names a standard contract (guides/contracts/) through pack.json `wireContract`. A generated or cached seam was
+# written to **the pack's contract at install time** and is owned by the project, so this script does not update it —
+# which means updating only a pack whose contract changed leaves one guide teaching the new code (`UNAUTHENTICATED`) in the pack
+# and the old code (`UNAUTHORIZED`) in the seam. An installed copy's contract is assembly.json `wireContract`; with none, it is
+# an installed copy from before the standard contract (legacy).
+#
+# The verdict is made over **the whole combination** — pinning one axis while updating the other makes the two guides diverge.
+# An installed copy with no seam (no SKILL.md) has nothing to diverge from, so it is updated. A prebuilt seam is owned by the
+# plugin, so it is updated only when this run resolves that seam as well (--seam).
+pack_contract() { # $1=pack directory
+  local v; v=$({ grep -m1 -oE '"wireContract"[[:space:]]*:[[:space:]]*"[^"]*"' "$1/pack.json" 2>/dev/null || true; } \
+                | sed -E 's/.*"([^"]*)"$/\1/')
+  printf '%s' "${v:-legacy}"
+}
+installed_contract() { # $1=install directory
+  local v; v=$({ grep -m1 -oE '"wireContract"[[:space:]]*:[[:space:]]*"[^"]*"' "$1/assembly.json" 2>/dev/null || true; } \
+                | sed -E 's/.*"([^"]*)"$/\1/')
+  printf '%s' "${v:-legacy}"
+}
+# **legacy is not a divergence by itself.** Most installed copies from before the standard contract are of packs whose wire
+# values did not change. Only a pack whose values really changed declares pack.json `wireContractSince` (the packVersion
+# that carried the change), and a legacy installed copy counts as diverged only when it is older than that edition. legacy → none
+# is the same — a pack with no HTTP boundary does not declare it.
+vlt() { # $1 < $2 (dot-separated versions)
+  [ "$1" = "$2" ] && return 1
+  [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" = "$1" ]
+}
+contract_drift() { # $1=axis $2=pack → prints "installed → pack" when they diverge
+  local dst="$PROJECT_ROOT/.claude/skills/$1-guide" packdir="$G/$1/$2" have want since iv cslot
+  [ -f "$dst/assembly.json" ] && [ -f "$dst/SKILL.md" ] && [ -f "$packdir/pack.json" ] || return 0
+  have=$(installed_contract "$dst"); want=$(pack_contract "$packdir")
+  [ "$have" = "$want" ] && return 0
+  if [ "$have" = legacy ]; then
+    since=$({ grep -m1 -oE '"wireContractSince"[[:space:]]*:[[:space:]]*"[0-9.]+"' "$packdir/pack.json" 2>/dev/null || true; } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+    [ -n "$since" ] || return 0
+    iv=$({ grep -m1 -oE '"packVersion"[[:space:]]*:[[:space:]]*"[0-9.]+"' "$dst/assembly.json" 2>/dev/null || true; } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+    [ -n "$iv" ] && ! vlt "$iv" "$since" && return 0
+  fi
+  if grep -q 'seam=prebuilt/' "$dst/SKILL.md" 2>/dev/null && [ -n "$SEAM" ] && [ -d "$G/seams/$SEAM/$1" ]; then
+    return 0   # the same run updates the plugin-owned seam along with it
+  fi
+  # If this run resolves the cache of the current edition, that seam was made to the current contract — it is updated along with it
+  cslot=$(cache_slot "$1")
+  if [ "$NO_CACHE" -eq 0 ] && [ -n "$cslot" ] && [ -d "$CACHE_ROOT/${FE:-none}+${BE:-none}@$PLUGIN_VER/$cslot" ]; then
+    return 0
+  fi
+  printf '%s → %s' "$have" "$want"
+  return 0
+}
+
 # ── Assembling one axis ───────────────────────────────────────────────
 # Leaves AXIS_STATE: complete (through SKILL.md) · resources (waiting for a seam) · generate (no pack, or unfinished)
 #                    · pinned (left untouched because the stack premise is pinned)
@@ -256,9 +307,11 @@ assemble() { # $1=frontend|backend|app  $2=pack name
   if [ -f "$dst/SKILL.md" ] && [ "$FORCE" -eq 0 ]; then
     local have want
     have=$({ grep -m1 -oE 'pkgs=[^>]*' "$dst/SKILL.md" 2>/dev/null || true; } \
-           | grep -oE '[@A-Za-z0-9._/-]+@[0-9]+' | sort -u | tr '\n' ' ')
+           | { grep -oE '[@A-Za-z0-9._/-]+@[0-9]+' || true; } | sort -u | tr '\n' ' ')
+    # ↑ In a hub with no pkgs= stamp (a SKILL.md the generator wrote, and the like) this grep exits 1 on no match, and
+    #   pipefail + set -e **ends the installer without a message** (the contract-pinning fixture exposed it)
     want=$({ grep -oE '"[@A-Za-z0-9._/-]+@[0-9.]+"' "$packdir/pack.json" 2>/dev/null | tr -d '"' || true; } \
-           | grep -oE '[@A-Za-z0-9._/-]+@[0-9]+' | sort -u | tr '\n' ' ')
+           | { grep -oE '[@A-Za-z0-9._/-]+@[0-9]+' || true; } | sort -u | tr '\n' ' ')
     if [ -n "$have" ] && [ -n "$want" ] && [ "$have" != "$want" ]; then
       PINNED=1; AXIS_STATE=pinned
       printf '  [%s-guide]  stack premise pinned — not updating the pack\n' "$axis"
@@ -266,6 +319,17 @@ assemble() { # $1=frontend|backend|app  $2=pack name
       printf '    Move it across with /stack-guide-generator when you raise the dependency, or use --force to skip knowingly\n'
       return 0
     fi
+  fi
+
+  # Wire contract pinning — main made the verdict over the whole combination. Only an axis with an installed copy stops
+  if [ -n "$CONTRACT_HOLD" ] && [ -f "$dst/assembly.json" ] && [ -f "$dst/SKILL.md" ]; then
+    AXIS_STATE=pinned
+    printf '  [%s-guide]  wire contract pinned — not updating the pack (%s)\n' "$axis" "${CONTRACT_HOLD# }"
+    printf '    The installed seam was written to the old contract. Updating only the pack makes one guide teach two contracts.\n'
+    printf '    For a prebuilt seam, pass --seam <combination> as well and it is updated along with it. For a generated seam,\n'
+    printf '    ask /stack-guide-generator to "regenerate the seam" and move it together with the pack (--force updates only the pack and\n'
+    printf '    mixes it with the old seam — use it only when you plan to fix the seam by hand)\n'
+    return 0
   fi
 
   printf '  [%s-guide]  pack %s%s\n' "$axis" "$pack" "${seamsrc:+ + seam $seamsrc}"
@@ -326,12 +390,14 @@ except Exception: print('')" 2>/dev/null)
     # carries no --seam, and a prebuilt seam is never a cache target, so that is always the case.
     # Retiring seamFiles in that state leaves SKILL.md in place, because put_hub is never called either,
     # and it becomes **a broken hub referring to deleted files**. packFiles is safe because packdir is always resolved.
-    local cands; cands=$(grep -oE '"packFiles"[^]]*\]' "$dst/assembly.json" 2>/dev/null \
-                         | grep -oE '"[A-Za-z0-9._-]+\.md"' | tr -d '"')
+    # An empty array (`"seamFiles": []`) means no grep match → pipefail + set -e ends the installer silently.
+    # That is exactly the run in which a project first installed without a seam receives its first seam
+    local cands; cands=$({ grep -oE '"packFiles"[^]]*\]' "$dst/assembly.json" 2>/dev/null || true; } \
+                         | { grep -oE '"[A-Za-z0-9._-]+\.md"' || true; } | tr -d '"')
     if [ -n "$seamdir" ]; then
       cands="$cands
-$(grep -oE '"seamFiles"[^]]*\]' "$dst/assembly.json" 2>/dev/null \
-  | grep -oE '"[A-Za-z0-9._-]+\.md"' | tr -d '"')"
+$({ grep -oE '"seamFiles"[^]]*\]' "$dst/assembly.json" 2>/dev/null || true; } \
+  | { grep -oE '"[A-Za-z0-9._-]+\.md"' || true; } | tr -d '"')"
     fi
     while IFS= read -r oldf; do
       if [ -z "$oldf" ]; then continue; fi
@@ -349,6 +415,7 @@ $(grep -oE '"seamFiles"[^]]*\]' "$dst/assembly.json" 2>/dev/null \
   # Assembly ledger — what came from where. The basis on which the gate identifies pack-owned files
   if [ "$DRY" -eq 0 ]; then
     { printf '{\n  "axis": "%s",\n  "pack": "%s/%s",\n  "packVersion": "%s",\n' "$axis" "$axis" "$pack" "${pv#v}"
+      printf '  "wireContract": "%s",\n' "$(pack_contract "$packdir")"
       printf '  "seam": %s,\n  "assembledAt": "%s",\n' "$([ -n "$seamsrc" ] && printf '"%s"' "$seamsrc" || echo null)" "$TODAY"
       printf '  "packFiles": ['
       first=1; for f in "$packdir/resources"/*.md; do [ -f "$f" ] || continue
@@ -487,7 +554,7 @@ except Exception: print('null')" 2>/dev/null || printf 'null')
     printf '  "state": { "frontend": "%s", "backend": "%s", "app": "%s" },\n' "$FE_STATE" "$BE_STATE" "$APP_STATE"
     printf '  "packs": { "frontend": %s, "backend": %s, "app": %s },\n' "$fpack" "$bpack" "$apack"
     printf '  "notes": %s,\n' "$notes"
-    # Audit round counter — stack-guide-generator increments it before launching audits and stops at 2.
+    # Audit round counter — stack-guide-generator increments it before launching an audit and stops at 1.
     # Why it lives in a file: so the counter does not reset to 0 when a cut-off session is picked up (prevents endless re-audits)
     printf '  "auditRound": 0,\n'
     printf '  "createdAt": "%s"\n}\n' "$TODAY"
@@ -602,6 +669,54 @@ run_self_test() {
   ast=$(_app "")
   _chk "$(_is [ "$ast" = resources ])" "an unknown shape does not receive the cache (\"cannot tell\" is not folded into some shape) → ${ast:-none}"
 
+  # ── Wire contract pinning ─────────────────────────────────────────
+  # **This branch blocks updates of the consumer's installed copy.** Both are pinned: that it blocks when it should
+  # (old contract + generated seam) and that it does not block when it should not (--force · no seam · updating the prebuilt
+  # seam along with it) — over-blocking is a silent failure in which the fix never arrives.
+  mkdir -p "$t/guides/frontend/wcp/resources" "$t/guides/seams/wcp+none/frontend/resources"
+  printf '<!-- orangekit-pack: frontend/wcp v2.0.0 verified 2026-01-01 zod@4 -->\n\n# wcp axis pack\n' > "$t/guides/frontend/wcp/PACK.md"
+  printf '{\n  "axis": "frontend",\n  "name": "wcp",\n  "packVersion": "2.0.0",\n  "wireContract": "http-standard@1",\n  "wireContractSince": "2.0.0",\n  "pkgs": ["zod@4"],\n  "resources": [ { "file": "a.md", "nav": "A" } ]\n}\n' > "$t/guides/frontend/wcp/pack.json"
+  printf '<!-- orangekit-pack: frontend/wcp v2.0.0 -->\n\n# A (new contract)\n' > "$t/guides/frontend/wcp/resources/a.md"
+  printf -- '---\nname: frontend-guide\ndescription: x\n---\n# Hub\n' > "$t/guides/seams/wcp+none/frontend/HUB.md"
+  printf '<!-- orangekit-seam: wcp+none v2.0.0 -->\n\n# Seam\n' > "$t/guides/seams/wcp+none/frontend/resources/s.md"
+  _wc() { # $1=seam source (generated|prebuilt/wcp+none|none) $2=installed contract (""=legacy) $3..=extra args → state
+    local src="$1" have="$2" d="$proj/.claude/skills/frontend-guide"; shift 2
+    rm -rf "$proj"; mkdir -p "$d/resources"
+    printf '<!-- orangekit-pack: frontend/wcp v1.0.0 -->\n\n# A (old contract)\n' > "$d/resources/a.md"
+    printf '{\n  "axis": "frontend",\n  "pack": "frontend/wcp",\n  "packVersion": "1.0.0",\n%s  "seam": null,\n  "packFiles": ["a.md"],\n  "seamFiles": []\n}\n' \
+      "${have:+  \"wireContract\": \"$have\",\n}" > "$d/assembly.json"
+    [ "$src" != none ] && printf -- '---\nname: frontend-guide\ndescription: x\n---\n<!-- orangekit-guide: assembled 2026-01-01 combo=wcp+none packs=frontend/wcp@1.0.0 seam=%s -->\n# Hub\n' "$src" > "$d/SKILL.md"
+    out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" \
+          bash "$0" --frontend wcp --no-freshness --no-cache "$@" 2>&1) || true
+    printf '%s' "$out" | sed -nE 's/.*state: frontend=([a-z]+).*/\1/p' | head -1
+  }
+  _new() { _is grep -q 'new contract' "$proj/.claude/skills/frontend-guide/resources/a.md"; }
+  ast=$(_wc generated "")
+  _chk "$(_is [ "$ast" = pinned ])" "an old-contract installed copy + a generated seam does not update the pack → ${ast:-none}"
+  _chk "$(_is [ "$(_new)" = 1 ])" "  …and the pack file really is unchanged"
+  ast=$(_wc generated "http-standard@1")
+  _chk "$(_is [ "$ast" != pinned ])" "the same contract is updated → ${ast:-none}"
+  _chk "$(_is [ "$(_new)" = 0 ])" "  …and the pack file really was updated"
+  ast=$(_wc generated "" --force)
+  _chk "$(_is [ "$ast" != pinned ])" "--force overrides contract pinning → ${ast:-none}"
+  ast=$(_wc none "")
+  _chk "$(_is [ "$ast" != pinned ])" "an installed copy with no seam has nothing to diverge from and is updated → ${ast:-none}"
+  ast=$(_wc prebuilt/wcp+none "" --seam wcp+none)
+  _chk "$(_is [ "$ast" = complete ])" "resolving the prebuilt seam as well updates it along with the pack → ${ast:-none}"
+  ast=$(_wc prebuilt/wcp+none "")
+  _chk "$(_is [ "$ast" = pinned ])" "even with a prebuilt seam, the pack alone is not updated without --seam → ${ast:-none}"
+  ast=$(_wc generated "http-standard@1")
+  _chk "$(_is grep -q '"wireContract": "http-standard@1"' "$proj/.claude/skills/frontend-guide/assembly.json")" "the updated installed copy records its contract (the basis of the next verdict)"
+  # legacy is not a divergence by itself — only a pack whose wire values changed (declares wireContractSince) stops.
+  # Without this, **every** installed copy from before the standard contract would never receive a fix (over-blocking)
+  sed -i.bak '/"wireContractSince"/d' "$t/guides/frontend/wcp/pack.json" && rm -f "$t/guides/frontend/wcp/pack.json.bak"
+  ast=$(_wc generated "")
+  _chk "$(_is [ "$ast" != pinned ])" "a pack whose wire values did not change updates a legacy installed copy too → ${ast:-none}"
+  sed -i.bak 's#"wireContract": "http-standard@1",#"wireContract": "http-standard@1",\
+  "wireContractSince": "1.0.0",#' "$t/guides/frontend/wcp/pack.json" && rm -f "$t/guides/frontend/wcp/pack.json.bak"
+  ast=$(_wc generated "")
+  _chk "$(_is [ "$ast" != pinned ])" "an installed copy already past the edition of that change is updated → ${ast:-none}"
+
   # ── Gate FAIL → quarantine ──────────────────────────────────────────
   # **This branch moves the user's installation.** Without a fixture for the code that moves it,
   # "alive" cannot be told apart from "working". A seam that makes the gate fail is built to see
@@ -642,6 +757,15 @@ if [ -n "$SAVE_SEAM" ]; then save_seam "$SAVE_SEAM"; exit 0; fi
 printf 'Guide assembly\n  plugin:  %s\n  project: %s\n\n' "$G" "$PROJECT_ROOT/.claude/skills"
 # undecided (not chosen) is the same as none — no guide is built by guesswork for an undecided axis
 _axis_on() { [ -n "$1" ] && [ "$1" != none ] && [ "$1" != undecided ]; }
+CONTRACT_HOLD=""
+if [ "$FORCE" -eq 0 ]; then
+  for _ax in frontend:"$FE" backend:"$BE" app:"$APP"; do
+    _pk="${_ax#*:}"; _ax="${_ax%%:*}"
+    _axis_on "$_pk" || continue
+    _d=$(contract_drift "$_ax" "$_pk")
+    if [ -n "$_d" ]; then CONTRACT_HOLD="$CONTRACT_HOLD $_ax: $_d"; fi
+  done
+fi
 if _axis_on "$FE"; then assemble frontend "$FE"; FE_STATE="$AXIS_STATE"; fi
 if _axis_on "$BE"; then assemble backend  "$BE"; BE_STATE="$AXIS_STATE"; fi
 if _axis_on "$APP"; then assemble app "$APP"; APP_STATE="$AXIS_STATE"; fi

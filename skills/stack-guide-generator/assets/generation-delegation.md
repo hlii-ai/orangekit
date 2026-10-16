@@ -77,6 +77,11 @@ Generation rules (instruct the subagent with these verbatim):
 5. Output location: the project's `.claude/skills/frontend-guide/` · `.claude/skills/backend-guide/` · `.claude/skills/app-guide/`
 6. **Run the gate yourself before returning** — reach **0 FAILs** with `guide-gate.sh --guide <path> --generated`
    and then return. Do not fix WARNs and REVIEWs; **report them with a reason attached**
+   - **The generator's scope cap: writing + the gate, and no further.** Installing packages (`npm i` and the like) · `tsc` · starting a DB ·
+     running tests or mutations are **not done** — execution verification belongs to the main session's Step 4-1 (`pack-smoke.sh`) and
+     audit A. Measured (a consumer project, Windows): when the delegation instruction also asked for install and `tsc`, the backend
+     generator went on to run an embedded PostgreSQL · vitest · mutations, and **a single agent took 62 minutes and 340k tokens**.
+     Put this line into the delegation prompt verbatim — without it the generator widens "checking" on its own
 7. **For a relational DB, link to the data-modeling card — do not copy it.** The canonical source is
    the T1 rule card (`data-modeling.md` under `.claude/rules/`), which orangekit-init installs for every preset
    and which loads automatically on a `paths:` match (supabase · migrations · db · prisma · drizzle).

@@ -2,7 +2,7 @@
 
 AI Native Dev Harness for Claude Code — reversibility-axis workflow, self-testing hooks, graph instrumentation.
 
-![version](https://img.shields.io/badge/version-1.2.0-blue)
+![version](https://img.shields.io/badge/version-1.3.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## What it is

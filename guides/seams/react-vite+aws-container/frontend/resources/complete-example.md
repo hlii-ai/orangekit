@@ -1,4 +1,4 @@
-<!-- orangekit-seam: react-vite+aws-container/frontend v3.12.0 -->
+<!-- orangekit-seam: react-vite+aws-container/frontend v3.34.0 -->
 # Complete example — the Tasks feature (list + create)
 
 This shows how one feature runs from type declaration to screen, in file order.
@@ -210,7 +210,7 @@ export function CreateTaskDialog({ open, onClose }: { open: boolean; onClose: ()
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setFieldErrors({});
-    // client validation is only an early hint — the final ruling is the server's 422
+    // client validation is only an early hint — the final ruling is the server's VALIDATION_FAILED
     if (title.trim().length < 2) {
       setFieldErrors({ title: ['The title must be at least 2 characters.'] });
       return;
@@ -282,7 +282,7 @@ URL(?status=open)
 | Calling `fetch('/tasks')` directly from a screen | Token attachment · error normalization · base URL diverge screen by screen → go through the request function + hook |
 | Implementing pagination with `page`/`total` | The backend gives only `nextCursor`. A total-count or page-number UI cannot be built → "Load more" or infinite scroll |
 | Using the response as-is without `res.data` | The success envelope is `{ data }`. Unwrapping happens in `http.ts` alone |
-| Expecting flat field errors such as `err.fieldErrors` | The failure envelope is `{ error: { code, message, details } }`, `details` appears on 422 only, and its values are **arrays** |
+| Expecting flat field errors such as `err.fieldErrors` | The failure envelope is `{ error: { code, message, details } }`, `details` appears on `VALIDATION_FAILED` only, and its values are **arrays** |
 | Writing `queryKey: ['tasks', filter]` directly in a screen | It diverges from the invalidation key and the list never refreshes → always the `taskKeys` factory |
 | Missing `invalidateQueries` after a create | The save succeeded but the list is unchanged. This is what "it shows up if you refresh" really is |
 | `invalidateQueries({ queryKey: taskKeys.list(filter) })` | Only the current filter's list refreshes. Move to another tab and the list is stale → invalidate by prefix with `taskKeys.lists()` |

@@ -2,7 +2,7 @@
   "axis": "backend",
   "name": "aws-serverless",
   "displayName": "AWS serverless (Lambda + API Gateway + DynamoDB)",
-  "packVersion": "3.13.0",
+  "packVersion": "3.34.0",
   "verified": "2026-08-23",
   "extractedFrom": "Newly written — no proven original. No other pack was opened, not even as a format reference (only assets/pack-resource-template.md was used)",
 
@@ -19,6 +19,9 @@
     "displayLabel": "Task",
     "note": "Uses the same example domain as the other packs. From this value L0 issues the vocabulary policy (vocab-task) so the gate blocks divergence"
   },
+
+  "wireContract": "http-standard@1",
+  "wireContractSince": "3.34.0",
 
   "fixesVariants": { "iac": "aws-cdk-lib", "sdk": "@aws-sdk/lib-dynamodb" },
   "fixesVariantsNote": "IaC is pinned to CDK and DynamoDB access to SDK v3's DocumentClient. A project that chose SAM (YAML templates) has an entirely different deployment and permissions section, so assembling this pack hands it the wrong guidance. A variant that goes to a relational DB makes backendType cloud-server, so backend/node-api or aws-container owns it",

@@ -16,6 +16,7 @@
     "displayLabel": "Task",
     "note": "Every pack and seam uses the same example domain. From this value L0 issues the vocabulary policy (`vocab-task`) so the gate blocks divergence — measured: the frontend used /tasks and the backend /notes, leaving the complete examples unable to run against each other"
   },
+  "wireContract": "http-standard@1",
   "fixesVariants": {
     "framework": "nestjs",
     "orm": "typeorm",

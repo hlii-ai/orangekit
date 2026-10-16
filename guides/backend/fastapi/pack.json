@@ -21,6 +21,8 @@
     "note": "Every pack and seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from these values and the gate blocks any divergence — measured, the frontend used /tasks while the backend used /notes and the complete examples could not run against each other"
   },
 
+  "wireContract": "http-standard@1",
+
   "fixesVariants": { "framework": "fastapi", "orm": "sqlalchemy" },
   "fixesVariantsNote": "The router shape (APIRouter + Depends injection) and the query shape (SQLAlchemy 2.0 async ORM + Alembic) are the premise of the entire pack body. For a project that picked Django REST Framework, the ORM, routing, and serialization are a different system rather than a variant of FastAPI, so a separate axis pack is needed. The same goes for Flask + SQLAlchemy, whose dependency injection and async boundary differ",
 

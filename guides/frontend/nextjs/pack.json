@@ -16,6 +16,8 @@
     "displayLabel": "Task"
   },
 
+  "wireContract": "http-standard@1",
+
   "fixesVariants": {
     "store": "zustand",
     "forms": "react-hook-form"

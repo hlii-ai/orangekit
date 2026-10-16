@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-serverless v3.13.0 -->
+<!-- orangekit-pack: backend/aws-serverless v3.34.0 -->
 # Data access — ownership lives in the key condition
 
 This file owns **the code that calls** DynamoDB: the document client singleton (`src/db/client.ts`) and
@@ -247,7 +247,7 @@ That is why `isConditionalCheckFailed` looks past the name and into the cancella
 (`resources/error-handling.md`). A detector that reads only the name turns a condition failure inside a transaction into a 500.
 
 A throttle is a different animal — a failure a retry is **right** for. Once the SDK's default retries are exhausted,
-detect it with `isThroughputExceeded` and send it out as `THROTTLED` (API Gateway does not retry).
+detect it with `isThroughputExceeded` and send it out as a 429 `RATE_LIMITED` (API Gateway does not retry).
 A validation failure or a condition failure is not a retry target.
 
 ## Misuse list ① — idiom contrast table

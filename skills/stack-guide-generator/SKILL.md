@@ -45,7 +45,7 @@ cat .orangekit/guide-job.json 2>/dev/null
 | `need` | What to build. The vocabulary below maps 1:1 onto the rows of the Step 2 branch table |
 | `packs` | Paths of the assembled packs. That axis is an "axis that has a pack", so read the three files in Step 2 |
 | `app` | The app axis value (`presets.app`). If it is not `none`, `app-guide` is a target — if a pack exists, its path is carried in `packs.app` |
-| `auditRound` | How many audit rounds have been launched so far. **At 2, launch no more audits** ("Audit and repair budget") |
+| `auditRound` | How many audit rounds have been launched so far. **At 1, launch no more audits** ("Audit and repair budget") |
 | `notes` | The axis preset notes (serverCode · securityBoundary · policyEngine · language · appNotes) **＋ dimensions that are not axes** (deliveryModel · clientKind · pwa · appShell · nativeStack). The entire input for combination dependencies and conditional slot decisions |
 
 | `need` item | Meaning | What to build |
@@ -55,7 +55,7 @@ cat .orangekit/guide-job.json 2>/dev/null
 | `app` | The app pack is missing or unfinished (including `custom`) | `.claude/skills/app-guide/` in full. The input is `techStack.app` + the notes in `presets/app/<name>.json` (for `custom`, the entered framework) |
 
 **Write `status` as `running` when you start.** If the session dies, that state remains and
-the `session-brief` hook reports it to the next session — the device that keeps 20 minutes from vanishing silently.
+the `session-brief` hook reports it to the next session — the device that keeps the time spent on generation from vanishing silently.
 
 ```bash
 python3 - <<'PY'
@@ -262,27 +262,22 @@ app-guide (`--pair` compares only frontend and backend, so this section is check
 The generator also runs the same gate before returning, but **the report that it ran is itself a self-report** (principle 5).
 **Read `assets/verification-gate.md` and follow it exactly.**
 
-## Audit and repair budget — 2 rounds · lighter models · a fixed work location
+## Audit and repair budget — once · lighter models · a fixed work location
 
 Generation **sets** quality; audit and repair **confirm** it. If confirming costs more than generating, the order has been
 inverted. Measured (a consumer project, 2026-10-14): after the repair the model launched 5 second-round audits on its own,
 each audit spent 45k~100k tokens within its first minute, and 11 working folders were left at the **drive root**.
 That is what happens when the spec sets no cap, no model and no location. The four below are **caps, not options**.
 
-**① At most 2 rounds.**
+**① Audit → repair happens once.** Launch audits A · B · C (all of Step 5) once, repair the confirmed `critical` · `high`
+once, and that is the end. **Do not launch audits again** — there is no regression audit either. Defects the repair newly
+creates are caught only by re-running the Step 4 gate (mechanical).
 
-| Round | Audit | What gets repaired |
-| --- | --- | --- |
-| 1 | A · B · C (all of Step 5) | `critical` · `high` |
-| 2 | **One regression audit** — it looks only at the diff of what round 1 fixed (`assets/audit-prompt.md` "Round 2") | `critical` only |
-| End | **None** — do not launch audits again | — |
-
-- **Before** launching an audit, increment `auditRound` in `.orangekit/guide-job.json` by 1. If the session is cut off and
-  picked up again, keep counting from this value — **at 2, launch no more audits**
-- If round 1 fixed nothing, skip round 2
-- A `critical` still left after round 2 **does not block the install** — write it in a "Known defects" section at the very top
+- **Before** launching the audit, set `auditRound` in `.orangekit/guide-job.json` to 1. If the session is cut off and
+  picked up again, keep using this value — **at 1, launch no more audits**
+- A `critical` still left after the repair **does not block the install** — write it in a "Known defects" section at the very top
   of the hub (so a model reading the guide does not copy that pattern) and put it on the first line of the completion report
-- Gate FAILs are fixed inside the repair rounds as well. If it is still FAIL after round 2, that axis goes down to
+- Gate FAILs are fixed in the same repair. If the gate is still FAIL after the repair, that axis goes down to
   `.orangekit/failed-guides/` under `install-guide.sh`'s existing rule and is reported — the loop does not
   run again
 
@@ -295,7 +290,6 @@ that model is unavailable, drop the argument and inherit.
 | Audit A (execution) · C (cross-file · security) | `sonnet` | It involves security judgement |
 | Audit B (version claims) | `haiku` | A line-by-line true/false lookup |
 | Repair | `sonnet` | The findings are already concrete in the TSV, so it is execution more than judgement |
-| Round 2 regression audit | `haiku` | It looks only at the diff |
 
 When the generator and the auditor are different models, principle 5 (generator ≠ verifier) actually gets stronger.
 
@@ -363,16 +357,15 @@ Generation discipline cannot block wrongly confident knowledge — the model doe
 
    | Severity | Criterion | Handling |
    | --- | --- | --- |
-   | `critical` | A security defect (auth · tokens · redirects · injection · secret exposure) · guide code that does not compile or run · a wire-contract mismatch between the two guides | Repaired in rounds 1 and 2 |
-   | `high` | A wrong API or version claim that breaks when followed · guidance that contradicts a policy | Repaired in round 1 only |
+   | `critical` | A security defect (auth · tokens · redirects · injection · secret exposure) · guide code that does not compile or run · a wire-contract mismatch between the two guides | Repaired |
+   | `high` | A wrong API or version claim that breaks when followed · guidance that contradicts a policy | Repaired |
    | `medium` · `low` | Wording consistency · example enrichment · a missing reference note · gate WARN/REVIEW | **Not repaired.** Record each as one line under "Known defects", and do not ask the user |
 
-   **Before repairing, copy the target guide to `.orangekit/scratch/pre-repair/`** — it is the input (diff) of the round 2 regression audit.
    **The ledger already assigned file ownership, so grouping by clusterId means there are no write conflicts** —
    send all of a cluster's findings together in **one** `SendMessage` per cluster, concurrently
 3. After repairing, **run Step 4 again** — a repair creating new defects is a common failure mode.
-   **Re-launching audits is not this step** — the only re-audit is the single round 2 regression audit of the "Audit and repair budget"
-4. A `critical` still left after round 2 does not block the install — put it in the "Known defects" section at the top of the hub and on the first line of the completion report
+   **Do not launch audits again** — "Audit and repair budget" ①: audit → repair happens once
+4. A `critical` still left after the repair does not block the install — put it in the "Known defects" section at the top of the hub and on the first line of the completion report
 
 ## Step 7: Stamp and report
 

@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-container v3.12.0 -->
+<!-- orangekit-pack: backend/aws-container v3.34.0 -->
 # Input validation (Zod 4) — request body, query, environment variables
 
 Every value coming from the browser is hostile input. Even when the SPA validates with the same schema,
@@ -61,7 +61,7 @@ import { z, type ZodType } from 'zod'
 import { AppError } from '@/http/errors'
 
 function fail(err: z.ZodError): never {
-  throw new AppError(422, 'VALIDATION_FAILED', 'the request values are not valid',
+  throw new AppError(400, 'VALIDATION_FAILED', 'the request values are not valid',
     z.flattenError(err).fieldErrors)
 }
 
@@ -70,7 +70,7 @@ export async function jsonBody<T extends ZodType>(c: Context, schema: T): Promis
   try {
     raw = await c.req.json()
   } catch {
-    throw new AppError(400, 'BAD_REQUEST', 'the JSON body could not be read')
+    throw new AppError(400, 'VALIDATION_FAILED', 'the JSON body could not be read')
   }
   const r = schema.safeParse(raw)
   return r.success ? r.data : fail(r.error)
@@ -87,7 +87,8 @@ export function pathParam<T extends ZodType>(c: Context, schema: T): z.infer<T> 
 }
 ```
 
-- **A parse failure is a 422, not a 400.** 400 means "not even JSON", 422 means "JSON but it breaks the rules"
+- **Broken JSON and a rule violation are the same 400 `VALIDATION_FAILED`** — the screen has no reason to tell them apart.
+  The only difference is `details` (only a rule violation carries per-field messages)
 - `z.flattenError(err).fieldErrors` has the shape `{ title: ["..."] }`, so it maps straight onto an SPA form
 - Do not echo the original input back in the error `details` — secret values get copied into the response and the logs
 
@@ -196,7 +197,7 @@ Do not use the filename the client sent as the storage key — the server genera
 
 | often chosen wrong | exactly when it applies |
 | --- | --- |
-| `parse()` vs `safeParse()` | **Both are `safeParse`.** Boundary parsing goes into the 422 envelope; boot configuration prints key names only and calls `process.exit(1)` — the exception from `parse` leaves only a stack and loses which key was missing from the logs |
+| `parse()` vs `safeParse()` | **Both are `safeParse`.** Boundary parsing goes into the 400 envelope; boot configuration prints key names only and calls `process.exit(1)` — the exception from `parse` leaves only a stack and loses which key was missing from the logs |
 | Making the PATCH schema with `Create.partial()` | `.default()` survives, so an empty PATCH passes and an unspecified field is overwritten → keep the default-free base as the source and put `.default()` only on Create |
 | `z.object()` vs `z.strictObject()` | A request body takes `strictObject` — it refuses unknown keys. An external webhook payload is better off with `object` |
 | `.optional()` vs `.nullish()` vs `.default()` | Absent key takes `optional`, also allowing `null` takes `nullish`, and always having a value takes `default` |

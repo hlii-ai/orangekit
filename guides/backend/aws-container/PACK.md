@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-container v3.12.0 verified 2026-08-22 hono@4 @hono/node-server@1 typescript@5 drizzle-orm@0.45 drizzle-kit@0.31 pg@8 jose@5 zod@4 vitest@2 aws-cdk-lib@2 @aws-sdk/client-s3@3 @aws-sdk/s3-request-presigner@3 -->
+<!-- orangekit-pack: backend/aws-container v3.34.0 verified 2026-08-22 hono@4 @hono/node-server@1 typescript@5 drizzle-orm@0.45 drizzle-kit@0.31 pg@8 jose@5 zod@4 vitest@2 aws-cdk-lib@2 @aws-sdk/client-s3@3 @aws-sdk/s3-request-presigner@3 -->
 
 # aws-container axis pack — hub fragments
 
@@ -65,7 +65,7 @@ The request body, query and path parameters are all `unknown`. Only the parsed t
 
 ```ts
 // ✅ Only parsed values go on to the service
-const body = await jsonBody(c, CreateTaskInput)   // throws into the 422 envelope on failure
+const body = await jsonBody(c, CreateTaskInput)   // throws into the 400 envelope on failure
 const task = await createTask(user.sub, body)
 
 // ❌ A cast is not validation — it blocks nothing at runtime
@@ -129,7 +129,7 @@ if (task.ownerId !== user.sub) throw new AppError(403, 'FORBIDDEN', 'Not your ta
 ```
 
 A token verification failure does not distinguish its reason either — expiry, signature mismatch and issuer mismatch all give the same
-401 `UNAUTHORIZED` envelope. Use 403 only on the **non-ownership axis** (admin-only and the like).
+401 `UNAUTHENTICATED` envelope. Use 403 only on the **non-ownership axis** (admin-only and the like).
 
 ### 5. A mutation checks the affected row count
 

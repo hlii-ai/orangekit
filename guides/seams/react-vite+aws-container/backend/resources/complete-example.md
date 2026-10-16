@@ -1,4 +1,4 @@
-<!-- orangekit-seam: react-vite+aws-container/backend v3.12.0 -->
+<!-- orangekit-seam: react-vite+aws-container/backend v3.34.0 -->
 # Complete example — one full lap around the `tasks` resource
 
 Migration → schema → query → service → handler → test, driven through **a single domain**.
@@ -151,7 +151,7 @@ function decodeCursor(raw?: string): q.Cursor | undefined {
   if (!raw) return undefined
   const [iso, id] = Buffer.from(raw, 'base64url').toString('utf8').split('|')
   const createdAt = new Date(iso ?? '')
-  if (Number.isNaN(createdAt.getTime()) || !id) throw new AppError(400, 'BAD_REQUEST', 'bad cursor')
+  if (Number.isNaN(createdAt.getTime()) || !id) throw new AppError(400, 'VALIDATION_FAILED', 'bad cursor')
   return { createdAt, id }
 }
 

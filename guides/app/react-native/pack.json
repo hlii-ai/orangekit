@@ -13,6 +13,8 @@
     "note": "Every pack and seam uses the same example domain. The app is also a client calling the same API, so it uses the same vocabulary as the web screen axis"
   },
 
+  "wireContract": "http-standard@1",
+
   "fixesVariants": {
     "router": "expo-router",
     "store": "zustand",

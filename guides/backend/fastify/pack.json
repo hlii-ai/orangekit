@@ -16,6 +16,7 @@
     "displayLabel": "Task",
     "note": "Every pack and seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from these values and the gate blocks any divergence"
   },
+  "wireContract": "http-standard@1",
   "fixesVariants": {
     "framework": "fastify",
     "orm": "drizzle"

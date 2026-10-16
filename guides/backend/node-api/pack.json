@@ -20,6 +20,8 @@
     "note": "Every pack and seam uses the same example domain. L0 issues the vocabulary policy (`vocab-task`) from these values and the gate blocks any divergence — measured, the frontend used /tasks while the backend used /notes and the complete examples could not run against each other"
   },
 
+  "wireContract": "http-standard@1",
+
   "fixesVariants": { "framework": "express", "orm": "prisma" },
   "fixesVariantsNote": "The handler shape (Express 5 routers and error middleware) and the query shape (Prisma Client + migrate) are the premise of the entire pack body. For a project that picked NestJS, DI, decorators, and modules are a different system rather than a variant of Express, so a separate axis pack (node-nest) is needed. For a project that picked Drizzle, backend/aws-container owns that shape",
 

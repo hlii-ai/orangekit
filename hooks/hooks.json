@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/session-brief.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-brief.sh\"",
             "timeout": 30
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/security-check.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/security-check.sh\"",
             "timeout": 15
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/build-gate.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/build-gate.sh\"",
             "timeout": 30
           }
         ]
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh\"",
             "timeout": 30
           }
         ]
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/handoff.sh\"",
             "timeout": 30
           }
         ]
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/track-skill.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/track-skill.sh\"",
             "timeout": 10
           }
         ]

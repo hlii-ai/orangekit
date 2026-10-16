@@ -2,7 +2,7 @@
   "axis": "backend",
   "name": "aws-container",
   "displayName": "AWS containers (ECS/Fargate + RDS PostgreSQL)",
-  "packVersion": "3.12.0",
+  "packVersion": "3.34.0",
   "verified": "2026-08-22",
   "extractedFrom": "skills/react-aws-backend-guide (v3.11.0)",
 
@@ -16,6 +16,9 @@
     "route": "/api/tasks",
     "displayLabel": "Task"
   },
+
+  "wireContract": "http-standard@1",
+  "wireContractSince": "3.34.0",
 
   "fixesVariants": {
     "framework": "hono",

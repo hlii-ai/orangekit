@@ -1,4 +1,4 @@
-<!-- orangekit-seam: react-vite+aws-container/backend v3.12.0 -->
+<!-- orangekit-seam: react-vite+aws-container/backend v3.34.0 -->
 # API endpoints and error handling
 
 Covers the standard shape of a Hono 4 route, the request/response contract, status code mapping, and global error handling.
@@ -115,7 +115,7 @@ The owner is always `c.get('user').sub`. An `ownerId` carried in the body or que
 | failure | `{ "error": { "code": "...", "message": "...", "details"?: ... }, "requestId": "..." }` |
 
 - `code` is read by a machine and `message` by a person. The SPA branches **on `code` only**
-- `details` is carried on a validation failure (422) only — a map of per-field messages
+- `details` is carried on a validation failure (`VALIDATION_FAILED`) only — a map of per-field messages
 - `requestId` goes into every error response. When a user reports that value you find it in the log immediately
 
 ## Pagination is done with a cursor
@@ -133,12 +133,11 @@ With `offset`, inserted rows shift the items and produce duplicates and omission
 
 | `error.code` | Status | Meaning | Where it arises |
 | --- | --- | --- | --- |
-| `BAD_REQUEST` | 400 | JSON parse failure, malformed query | `validate.ts` |
-| `UNAUTHORIZED` | 401 | token missing · expired · signature/issuer mismatch (**reason not distinguished**) | `auth.ts` |
+| `VALIDATION_FAILED` | 400 | Zod schema violation, JSON parse failure, malformed query | `validate.ts` |
+| `UNAUTHENTICATED` | 401 | token missing · expired · signature/issuer mismatch (**reason not distinguished**) | `auth.ts` |
 | `FORBIDDEN` | 403 | authenticated but insufficient role · scope (not ownership) | service |
 | `NOT_FOUND` | 404 | resource absent **or** unauthorized access (same response) | service |
 | `CONFLICT` | 409 | unique constraint violation, state transition conflict | service / DB |
-| `VALIDATION_FAILED` | 422 | Zod schema violation | `validate.ts` |
 | `PAYLOAD_TOO_LARGE` | 413 | body size exceeded | the body size guard |
 | `INTERNAL` | 500 | unexpected exception | `onError` |
 
@@ -151,10 +150,10 @@ import type { Context } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { log } from '@/http/logger'
 
-export type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 422 | 500
+export type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 415 | 429 | 500
 export type ErrorCode =
-  | 'BAD_REQUEST' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND'
-  | 'CONFLICT' | 'VALIDATION_FAILED' | 'PAYLOAD_TOO_LARGE' | 'INTERNAL'
+  | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND'
+  | 'CONFLICT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'RATE_LIMITED' | 'INTERNAL'
 
 export class AppError extends Error {
   constructor(
@@ -167,8 +166,9 @@ export class AppError extends Error {
 
 // the status of a framework-thrown HTTPException → the contractual code. A status not in the table folds into 500
 const FRAMEWORK_CODES: Partial<Record<number, ErrorCode>> = {
-  400: 'BAD_REQUEST', 401: 'UNAUTHORIZED', 403: 'FORBIDDEN',
+  400: 'VALIDATION_FAILED', 401: 'UNAUTHENTICATED', 403: 'FORBIDDEN',
   404: 'NOT_FOUND', 409: 'CONFLICT', 413: 'PAYLOAD_TOO_LARGE',
+  415: 'UNSUPPORTED_MEDIA_TYPE', 429: 'RATE_LIMITED',
 }
 
 export const notFound = (c: Context) =>
@@ -200,8 +200,8 @@ export const onError = (err: Error, c: Context) => {
 
 Why `err.getResponse()` is not returned as it is: the framework response has neither `error.code` nor
 `requestId`, so the contract "the SPA branches on `code` only" breaks on that path alone. **Take the status code only
-and rebuild the body as our envelope.** Conversely, mashing every `HTTPException` into `BAD_REQUEST`
-puts a `BAD_REQUEST` code on a 413 response, and the 413 row of the code table is never produced —
+and rebuild the body as our envelope.** Conversely, mashing every `HTTPException` into `VALIDATION_FAILED`
+puts a `VALIDATION_FAILED` code on a 413 response, and the 413 row of the code table is never produced —
 middleware that decides its own status, such as `bodyLimit`, must either register that status in the table above (`FRAMEWORK_CODES`)
 or be brought inside the contract by throwing an `AppError` through the `onError` option, as in `app.ts`.
 
@@ -227,8 +227,8 @@ try {
 }
 ```
 
-The main SQLSTATEs: `23505` unique violation (409), `23503` FK violation (409 or 422), `23514` check
-violation (422), `22P02` invalid text→type conversion (400 — usually Zod should catch it first).
+The main SQLSTATEs: `23505` unique violation (409), `23503` FK violation (409 or 400), `23514` check
+violation (400), `22P02` invalid text→type conversion (400 — usually Zod should catch it first).
 
 ## Body size and timeouts
 
