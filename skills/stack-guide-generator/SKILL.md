@@ -53,7 +53,7 @@ cat .orangekit/guide-job.json 2>/dev/null
 | `seam:frontend` · `seam:backend` · `seam:app` | The packs are assembled and only the seam is missing | That axis's seam + hub (as many as the axis's `seamSlots`). **If that axis is in `variantGaps`, write only that variant file**, then carry over the pack's `HUB.md` as the hub and add only that file's row to Navigation — the API client and complete example are already in the pack |
 | `frontend` · `backend` | There is no pack, or it is unfinished (including `custom`) | That axis in full (hub + every resource) |
 | `app` | The app pack is missing or unfinished (including `custom`) | `.claude/skills/app-guide/` in full. The input is `techStack.app` + the notes in `presets/app/<name>.json` (for `custom`, the entered framework) |
-| `refresh:frontend` · `refresh:backend` · `refresh:app` | Assembly finished on the verified major, and the user chose to apply the latest major | Rewrite **only the affected resources of the installed guide** at the new major — "Step 2-B: refresh" below. The input is `stale` |
+| `refresh:frontend` · `refresh:backend` · `refresh:app` | Assembly finished on the verified major, and the registry has a higher major | **After every other need is done, last of all** ask the user (Step 7), and if chosen rewrite only the affected files of the completed install at the new major — "Step 2-B: refresh" below |
 
 **Write `status` as `running` when you start.** If the session dies, that state remains and
 the `session-brief` hook reports it to the next session — the device that keeps the time spent on generation from vanishing silently.
@@ -236,9 +236,21 @@ inside the axis — they largely hold up when the combination changes.
 
 ## Step 2-B: refresh — moving an installed guide to a new major
 
-**Fix the installed copy, not the pack.** The pack (plugin-owned) is raised by the maintainer's periodic check; only the gap in
-between is filled in the project's `.claude/skills/<axis>-guide/`. The rewrite scope is `stale[].files` only
-(the resources where that package appears) — rebuilding the whole pack brings back the generation time that was just removed.
+**Fix the installed copy, not the pack — and only once the installed copy is complete.** The pack (plugin-owned) is raised by the
+maintainer's periodic check; only the gap in between is filled in the project's `.claude/skills/<axis>-guide/`. If generation
+(seams · hub) remains, **finish it on the verified major first** — changing the version mid-generation makes the seams re-read the
+changed pack, or leaves only the seam files on the old version.
+
+**Recompute the targets from the completed install.** `stale` in `guide-job.json` was built at assembly time from the pack alone and
+does not know the seam · hub files. So recompute per axis:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/guide-freshness.sh" --guide .claude/skills/<axis>-guide --json
+```
+
+The last column of the TSV's `major_up` rows lists every installed file where that package appears (pack resources · variants · seams).
+This mode does not know the pack premise, so use `stale[].premise` (the pack's `fixesVariants`). The rewrite scope is those files
+only — rebuilding the whole pack brings back the generation time that was just removed.
 
 | `stale` row | Scope | Note |
 | --- | --- | --- |
@@ -246,12 +258,16 @@ between is filled in the project's `.claude/skills/<axis>-guide/`. The rewrite s
 | `premise: true` (pack premise — framework·ORM) | all of `files` + the hub's description of that package | a large scope. init showed the cost with ⚠ |
 | a row with empty `files` (toolchain — `typescript` · `@types/node`) | no rewrite | the guide text has no version-specific idioms. Raise only `pkgs=` in the hub stamp |
 
+**Order**: run it **after** Step 7 has loaded the seams into the cache — the cache must stay on the verified-major edition so the next
+project on the same combination gets the same starting point. Then ask question ②, and if chosen run the procedure below before
+closing the job.
+
 The procedure uses the same discipline as generation: delegate the affected resources per cluster to generators (based on the new major's
 **official migration guide** — tag the version claims) → the Step 4 gate → skip `pack-smoke`, since it works against the pack and
 not the installed copy, and have audit A typecheck against the new major → one audit → one repair.
 When done, write **the new major** into the hub stamp's `pkgs=` and into `assembly.json` — from then on the installer's stack-premise
-pinning (`pinned`) does not overwrite it with the pack's old major. **Do not put the seam of a refreshed axis into the cache** —
-the cache key is the plugin version, and that edition's pack is on the old major.
+pinning (`pinned`) does not overwrite it with the pack's old major. **Do not load the seams into the cache again after refresh** —
+following the order above, the cache already took the verified-major edition before refresh.
 
 **init is not the only time to refresh.** In a project where code has piled up, the baseline is not the registry's latest but
 **the major the project actually installed** (a guide ahead of the code is wrong guidance). When `session-brief` reports a package whose
@@ -409,6 +425,10 @@ Generation discipline cannot block wrongly confident knowledge — the model doe
 ### Close the handed-off job (required if you read one in Step 0)
 
 Close it **only after 0 gate FAILs and a finished audit and repair.** There is an order — put it in the cache first, then delete:
+
+If generation is done and need contains `refresh:*`, ask init's question ② (update to the latest majors / keep the verified majors —
+`orangekit-init` Step 9.5 "② The latest-majors question") **after 1) loading the cache and before 2) closing the job**, and if chosen
+run Step 2-B. A job with no generation (need is `refresh:*` only) starts straight from the question.
 
 ```bash
 # 1) Load the audited seam into the cache — the next project on the same combination generates nothing

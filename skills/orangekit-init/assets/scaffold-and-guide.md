@@ -95,44 +95,60 @@ The single `status:` line at the end of the output is the whole result:
   Just report it and **let init continue** — the T1 rule cards already work without a guide
 - **The baseline comparison is the script's job too** (on by default, first install only). Assembly always finishes on the
   major the pack **verified**; when the registry has a higher major, the script records `refresh:<axis>` in what is left
-  and the package · majors · affected resources in `stale`. Do not judge by hand — carry it into the one question below
+  and the package · majors in `stale`. Do not judge by hand — carry it into question ② after completion
 
-#### If work remains — ask one thing and stop
+#### If work remains — ask twice, in order: ① generation ② (after completion) the latest majors
+
+**Apply the latest majors only after the skills are complete.** Changing versions mid-generation either makes the seams re-read
+the changed pack, or leaves the seam files alone on the old version so one guide mixes versions. So generation always finishes on
+the single major the pack **verified**, and the completed install is raised afterwards — the targets are recomputed from the
+completed install too, so pack files · seam files · the hub are all caught.
+
+**① The generation question** — only when need contains `seam:*` · `frontend` · `backend` · `app`:
 
 ```
 Settled combination: <frontend> × <backend>
 Guide status: frontend=<status> · backend=<status>
-Remaining: <the need from guide-job.json, verbatim>
+Remaining: <need without refresh:*>
 Expected cost: generating <number of seam:* entries in need> seam(s) — measured at about 1 hour for 2 axes (audit included),
                longer on Windows (Git Bash). Hundreds of thousands of tokens per background agent.
-Latest majors: <if there is stale, list "package declared→latest" per axis. Mark a pack premise with ⚠>
-               — applying it rewrites only the <sum of stale files> affected resources in the installed guide
 (init itself is complete. The T1 rule cards and the assembled pack resources already work without the guides)
 
-  1. Build now + apply the latest majors     (slowest · latest)
-  2. Build now · pin to the verified majors   (only when there is stale — fast)
-  3. In the next session
+  1. Build now
+  2. In the next session
 ```
-
-With no `stale`, merge 1 and 2 into a single "build now". If the only remaining work is `refresh:*` (a combination whose
-seams already exist), state the cost line only as the number of affected resources.
-
-**If 2 is chosen, drop `refresh:*` from need and show the pin command** — a guide is right only when what it teaches matches
-what the project installs. Print the install line built from the pack's `pkgs` majors as-is
-(e.g. `npm i react@18 react-dom@18 vite@5`). When the project raises a dependency later, `/stack-guide-generator`
-moves only the affected resources of the installed guide (that skill's "Step 2-B: refresh").
 
 **Do not drop the expected-cost line, and do not shrink the numbers.** The measurement (`dev/docs/skill-review/contract-first-e2e-2026-08-22.md`:
 generating 2 axes took 37 minutes + 17 minutes of audit, macOS) is the basis. There is a real case where "about 20 minutes" was said without
 basis, the user chose to build now, and then waited an hour — the value of this question lies in letting the user choose with the accurate cost in view.
 
-If they say to continue, call `stack-guide-generator` — **there is no need to marshal arguments.**
-If 2 was chosen, delete `refresh:*` from need in `guide-job.json` before the call (leave `stale` in place as the record).
-That skill starts by reading `.orangekit/guide-job.json` and closes the file when it finishes.
-Otherwise stop here. The `session-brief` hook reports unfinished work in the next session.
+If they build now, call `stack-guide-generator` — **there is no need to marshal arguments.** That skill reads
+`.orangekit/guide-job.json`, completes the guides, and asks question ② right there (its Step 7).
+For the next session, stop here — the `session-brief` hook reports unfinished work.
 
-> Why only this one question is asked: **whether to spend the time now is a decision about the
-> user's time**, so the system cannot answer for them. "Pre-built or generated", by contrast, is an implementation detail and is not asked.
+**② The latest-majors question** — for a combination with nothing to generate (complete via the pack hub), skip ① and init asks
+**immediately**. For a generated combination, `stack-guide-generator` asks after generation ends.
+**Ask only when a major has actually risen** — if `stale` is empty, or recomputing on the completed install finds 0 rises, finish
+without asking. If it cannot be judged (lookup failure · offline), say "latest majors not checked (offline)" in one line and do not
+ask — undecidable is folded neither into "risen" nor into "latest".
+
+```
+The guides are complete (on the majors the pack verified).
+Latest majors: <result of guide-freshness.sh --guide on the completed install — "package declared→latest" per axis,
+               a pack premise (pack.json fixesVariants) marked ⚠> — applying rewrites only <total> affected files
+
+  1. Update to the latest majors        (affected files only · shorter than generation)
+  2. Keep the verified majors           (shows the install command pinned to them)
+```
+
+If 1, run `stack-guide-generator`'s "Step 2-B: refresh". If 2, print the install line built from the pack's `pkgs` majors as-is
+(e.g. `npm i react@18 react-dom@18 vite@5`) — a guide is right only when what it teaches matches what the project installs.
+When the project raises a dependency later, `session-brief` reports it and the same refresh runs then.
+If 2 is chosen and the only remaining work is `refresh:*`, close the job (`rm -f .orangekit/guide-job.json`) — left in place, it is
+reported as unfinished work every session.
+
+> Why only these two questions are asked: **whether to spend the time now, and whether to move to an unverified major, are the
+> user's decisions**, so the system cannot answer for them. "Pre-built or generated", by contrast, is an implementation detail and is not asked.
 
 #### The bar for adding more pre-built material
 
