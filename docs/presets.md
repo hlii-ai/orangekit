@@ -153,7 +153,16 @@ If the session is cut off, the next session's briefing reports the unfinished wo
 
 **Whether to use a pre-built version or generate is decided by the system — it is not asked.** Because leaking
 implementation detail to the user turns it into a question they cannot answer. What *is* asked is only
-**whether to spend 20 minutes now**, because that is a decision about the user's time.
+**whether to spend the time now** (with the measured cost), because that is a decision about the user's time.
+
+### Pack hub — combinations that need no seam (v3.35.0)
+
+A pack that follows the standard wire contract (`guides/contracts/http-standard.md`) does the seam's job itself:
+the API client, complete example and endpoints go in `resources/`, auth in `variants/auth/<self-issued|oidc>/`,
+and the hub in `HUB.md`. The installer picks the variant from the notes' `authKind` and `appShell`, and when every axis
+is on the same contract it lays down the hub and **completes with zero generation**. Only variants the pack lacks
+(hybrid shell bridge · other auth) remain as `variantGaps`, and only those files are generated. Current pack hubs:
+`react-vite` · `fastify` · `react-native`.
 
 ### Seam cache — built once per combination
 

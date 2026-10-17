@@ -82,6 +82,12 @@ bash "$R/scripts/doctor.sh" --usage --root <consumer project>     # only when a 
 # Guide harness — only when there are guides/ or stack-guide-generator/ commits since the last report (--regress is slow)
 bash "$R/skills/stack-guide-generator/scripts/guide-gate.sh" --regress
 bash "$R/skills/stack-guide-generator/scripts/pack-smoke.sh" --self-test
+# Pack freshness — runs **every time** (the ecosystem moves even without commits). A pack with a bump is not on this
+# evaluation's defect list but on the maintenance list: handle it with pack-authoring.md "Pack refresh" and release.
+# Putting it off makes the user pay the same refresh separately on every consumer init (measured 2026-10: all 14 packs bumped)
+for p in "$R"/guides/frontend/*/ "$R"/guides/backend/*/ "$R"/guides/app/*/; do
+  bash "$R/scripts/guide-freshness.sh" --pack "$p" >/dev/null 2>&1 || echo "needs refresh: ${p#"$R"/}"
+done
 # P1 — routing vocabulary (read it excluding the severity-table context)
 grep -rn 'Small\|Medium\|Large' "$R"/skills/*/SKILL.md
 # P3 — repetition ceilings (including shared files)

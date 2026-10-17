@@ -1,10 +1,10 @@
-<!-- orangekit-pack: app/react-native v1.0.0 -->
+<!-- orangekit-pack: app/react-native v3.35.0 -->
 # Data and offline — server cache · idempotency keys · the mutation queue
 
 This file owns `src/lib/queryClient.ts` · `src/lib/idempotency.ts` · `src/offline/outbox.ts` · `src/offline/useOutboxSync.ts`.
 The outbox's `send` implementation (`sendOutboxOp` — envelope parsing · error code → `SendResult` · the `Idempotency-Key` header) and the
-query hooks·query keys are functions of the wire contract, so the seam's `api-client.md` owns them; the position of `queryClient.clear()`
-in sign-out is owned by `auth-and-session.md`.
+query hooks·query keys are functions of the wire contract, so `api-client.md` owns them; the position of `queryClient.clear()`
+in sign-out is owned by the auth variant's `auth-and-session.md`.
 
 ## 1. Decision tree — what goes where
 
@@ -31,11 +31,11 @@ import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 
-// Up to 2 times, only for network failures (no numeric status) and 5xx. Reads status by duck typing instead of importing ApiError
+// Up to 2 times, only for network failures (no status, or 0 — api-client.md's NETWORK_ERROR·TIMEOUT) and 5xx. Reads status by duck typing instead of importing ApiError
 function shouldRetry(failureCount: number, error: unknown): boolean {
   if (failureCount >= 2) return false;
   const status = (error as { status?: unknown } | null)?.status;
-  return typeof status !== 'number' || status >= 500; // a 4xx comes back the same however often you resend
+  return typeof status !== 'number' || status === 0 || status >= 500; // a 4xx comes back the same however often you resend
 }
 
 export const queryClient = new QueryClient({
@@ -56,6 +56,7 @@ export function wireQueryManagers(): () => void {
 ```
 
 - The `failureCount` of the `retry` function is 0 on the first failure — stop at `>= 2` and there are exactly 2 retries. <!-- verified: query-core@5.104.3 retryer.js:67,132,137 + a real QueryClient run: 503·network error tried 3 times · 404·401 once -->
+- Adding `status === 0` (the client-made `NETWORK_ERROR`·`TIMEOUT`) to the retry targets came in 3.35.0. <!-- unverified: a branch added after the run above — not rerun -->
 - If the app goes to the background while waiting to retry, the retry stops too — the resume condition is `focusManager.isFocused()`. <!-- verified: query-core@5.104.3 retryer.js:91 canContinue -->
 - **Wiring obligation**: exactly once, in the `useEffect(() => wireQueryManagers(), [])` of the root layout (`src/app/_layout.tsx`).
   Call it in the render body and the subscriptions are torn down and re-registered on every render. Hand the return value back as the effect's cleanup. <!-- verified: query-core@5.104.3 onlineManager.js setEventListener calls the previous cleanup · ran with AppState/NetInfo stubs and counted unsubscribes on rewire·teardown -->
@@ -168,7 +169,7 @@ export const outbox = {
 
 - The lock wraps only storage reads·writes (lock the send too and `enqueue` holds up the screen). Removal is by `key`, so an op that arrives mid-flush is not lost either.
 - The second `send` of a concurrent call is never used; it receives the in-progress result as is. A corrupted stored value is treated as an empty queue, and a malformed element as discarded. <!-- verified: ran on top of AsyncStorage's official jest mock (async-storage@2.2.0) — concurrent flush gets the same Promise·send once · enqueue during flush preserved · continues after drop · throw=retry stops · corrupted value -->
-- `clear()` must be in the sign-out cleanup order (owned by the seam's `useAuth().signOut`). It bumps the generation to stop a loop in progress, so
+- `clear()` must be in the sign-out cleanup order (owned by the auth variant `auth-and-session.md`'s `signOut`·refresh-rejection path). It bumps the generation to stop a loop in progress, so
   ops a new user enqueues after the clear do not go out through the previous user's flush. One op already in transit cannot be taken back. <!-- verified: ran the §7 tests with jest-expo@57 + AsyncStorage's official mock — a mutant without the generation counter fails because the old flush sends /b, enqueued after clear -->
 
 ## 5. When to call flush (`src/offline/useOutboxSync.ts`)
@@ -203,8 +204,8 @@ export function useOutboxSync(ready: boolean): void {
 ```
 
 **Caller's obligation: `useOutboxSync(status === 'signedIn')` once, in the root layout** — the root layout file is owned by `navigation.md` and the call goes there.
-`sendOutboxOp` (`src/api/outboxSend.ts`) is implemented by the seam's `api-client.md` — it sends `op.key` as `Idempotency-Key`, and maps
-2xx·"already processed with the same key" → `'sent'`, network failure·5xx·429·401·408 → `'retry'` (401 means waiting for the token refresh — if the refresh fails the seam hands off to `signOut` and `outbox.clear()` discards the queue. Nothing is resent after re-sign-in — pending mutations do not cross an account boundary), any other 4xx → `'drop'`.
+`sendOutboxOp` (`src/api/outboxSend.ts`) is implemented in `api-client.md` §4 — it sends `op.key` as `Idempotency-Key`, and maps
+2xx·"already processed with the same key" → `'sent'`, network failure·5xx·429·401·408 → `'retry'` (401 means waiting for the token refresh — if the refresh is rejected the auth variant hands off to local cleanup and `outbox.clear()` discards the queue. Nothing is resent after re-sign-in — pending mutations do not cross an account boundary), any other 4xx → `'drop'`.
 `onlineManager.subscribe` receives the value bound to NetInfo in §2. **Background resending while the app is closed is out of scope.**
 
 ## 6. Optimistic updates and the outbox
@@ -212,8 +213,8 @@ export function useOutboxSync(ready: boolean): void {
 The outbox guarantees **that it reaches the server**; an optimistic update guarantees **that the screen does not wait**. Invalidation after flush (§5) reconciles the two.
 | Situation | What to do |
 | --- | --- |
-| An update made offline | Fix the cache first with `setQueryData`, then `outbox.enqueue` — the query keys are seam-owned, so do it inside the seam's hook |
-| Updating the same item right after creating it | The `POST`'s server id does not exist yet. Whether the server accepts a client-generated id is the wire contract, so the seam decides |
+| An update made offline | Fix the cache first with `setQueryData`, then `outbox.enqueue` — the query keys (`taskKeys`) are owned by `api-client.md` — see `complete-example.md` §2 for an example |
+| Updating the same item right after creating it | The `POST`'s server id does not exist yet. The wire contract does not accept client-generated ids — do not edit an item whose create is still pending |
 | An op that was `drop`ped | The optimistic value turned out false — roll it back with `invalidateQueries()` and tell the user |
 
 ## 7. Tests — prove order preservation and the retry stop together
@@ -231,8 +232,8 @@ jest.mock('expo-crypto', () => ({ randomUUID: (() => { let n = 0; return () => `
 beforeEach(() => AsyncStorage.clear());
 
 it('does not send later ops when the head is retry, and resends in order with the same keys', async () => {
-  const a = await outbox.enqueue({ method: 'POST', path: '/tasks', body: { title: 'a' } });
-  const b = await outbox.enqueue({ method: 'PATCH', path: '/tasks/1', body: { title: 'b' } });
+  const a = await outbox.enqueue({ method: 'POST', path: '/api/tasks', body: { title: 'a' } });
+  const b = await outbox.enqueue({ method: 'PATCH', path: '/api/tasks/1', body: { title: 'b' } });
   const seen: string[] = [];
   const sendAs = (r: 'sent' | 'retry') => async (op: OutboxOp) => (seen.push(op.key), r);
 

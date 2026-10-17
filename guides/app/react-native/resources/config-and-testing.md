@@ -1,9 +1,9 @@
-<!-- orangekit-pack: app/react-native v1.0.0 -->
+<!-- orangekit-pack: app/react-native v3.35.0 -->
 # Config and testing — the only module that reads environment values · path aliases · the screen test harness
 
 This file owns `src/config.ts` · `tsconfig.json` · `jest.config.js` · `test/setup.ts` · `test/renderWithProviders.tsx`.
 Code that reads `EXPO_PUBLIC_*` lives **only in this file**. Injecting values per build profile (`env` in `eas.json`) is owned by `release-and-updates.md`,
-and the actual implementations of `http`·`ApiError`·`useTasksQuery` by the seam's `api-client.md` — here they are only mocked in tests.
+and the actual implementations of `http`·`ApiError`·`useTasksQuery` by `api-client.md` — here they are only mocked in tests.
 
 ## 1. Decision tree — where does this value live
 
@@ -65,6 +65,15 @@ function parseApiBaseUrl(raw: string, appEnv: AppEnv): string {
   return (url.origin + url.pathname).replace(/\/+$/, ''); // strip only trailing slashes — http joins it as `${base}${path}`
 }
 
+// Optional values — used only when the auth variant is oidc. Both empty is null; only one set is a config mistake, so it throws
+function parseOidc(issuer: string | undefined, clientId: string | undefined): { issuer: string; clientId: string } | null {
+  const [i, c] = [issuer?.trim() ?? '', clientId?.trim() ?? ''];
+  if (!i && !c) return null;
+  if (!i || !c) throw new Error('Environment variables EXPO_PUBLIC_OIDC_ISSUER·EXPO_PUBLIC_OIDC_CLIENT_ID must be set together');
+  if (toUrl('EXPO_PUBLIC_OIDC_ISSUER', i).protocol !== 'https:') throw new Error(`Environment variable EXPO_PUBLIC_OIDC_ISSUER must be https: ${i}`);
+  return { issuer: i.replace(/\/+$/, ''), clientId: c }; // so appending the discovery path does not produce //
+}
+
 // An optional value — apps with no webview leave it empty. An empty array makes isTrustedOrigin false for everything (fail-closed)
 function parseWebOrigins(raw: string | undefined): string[] {
   const parts = (raw ?? '').split(',').map((s) => s.trim()).filter((s) => s !== '');
@@ -81,16 +90,18 @@ export const config: {
   apiBaseUrl: string;
   appEnv: AppEnv;
   trustedWebOrigins: readonly string[];
+  oidc: { issuer: string; clientId: string } | null;
 } = {
   apiBaseUrl: parseApiBaseUrl(required('EXPO_PUBLIC_API_BASE_URL', process.env.EXPO_PUBLIC_API_BASE_URL), appEnv),
   appEnv,
   trustedWebOrigins: parseWebOrigins(process.env.EXPO_PUBLIC_WEB_ORIGINS),
+  oidc: parseOidc(process.env.EXPO_PUBLIC_OIDC_ISSUER, process.env.EXPO_PUBLIC_OIDC_CLIENT_ID),
 };
 ```
 
 - **Throwing is the feature.** A bad build must die immediately on the first screen to be caught in internal distribution (preview) —
   start quietly with an empty string and every request goes out as a relative path with no visible cause.
-- Only `EXPO_PUBLIC_WEB_ORIGINS` is optional — when empty it is `[]` and the webview trusts no message. When it has a value it is strict:
+- `EXPO_PUBLIC_OIDC_*` (oidc variant only · the client ID is a public value) and `EXPO_PUBLIC_WEB_ORIGINS` are optional. When the web origins are empty it is `[]` and the webview trusts no message. When it has a value it is strict:
   it does not accept `http:` (`isTrustedOrigin` would give `false` anyway, so it is a dead entry, and throwing is what makes the config mistake visible).
 - Only the development API allows `http:`, in `development` (a local server). A query·hash in the API address breaks path joining, so it is rejected.
 - `URL` is the WHATWG implementation (`whatwg-url-minimum`) the Expo runtime installs — RN's own `URL.origin` is a regex and
@@ -157,6 +168,8 @@ jest.mock('react-native-safe-area-context', () => require('react-native-safe-are
 process.env.EXPO_PUBLIC_APP_ENV = 'development';
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test.invalid';
 process.env.EXPO_PUBLIC_WEB_ORIGINS = 'https://web.test.invalid';
+process.env.EXPO_PUBLIC_OIDC_ISSUER = 'https://idp.test.invalid'; // the oidc variant requires it at import time — the self-issued variant does not read it
+process.env.EXPO_PUBLIC_OIDC_CLIENT_ID = 'test-client';
 ```
 
 In jest, babel-preset-expo does not inline the values; it rewrites them as references to `env` (= `process.env`) from `expo/virtual/env`, so
@@ -175,18 +188,11 @@ import type { ReactElement, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react-native';
 
-export async function renderWithProviders(
-  ui: ReactElement,
-): Promise<Awaited<ReturnType<typeof render>> & { queryClient: QueryClient }> {
+export async function renderWithProviders(ui: ReactElement): Promise<Awaited<ReturnType<typeof render>> & { queryClient: QueryClient }> {
   const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: Infinity },
-      mutations: { retry: false },
-    },
+    defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
   });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  }
+  const Wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   const result = await render(ui, { wrapper: Wrapper });
   return { ...result, queryClient };
 }
@@ -197,9 +203,9 @@ export async function renderWithProviders(
 - `gcTime: Infinity` — a finite `gcTime` sets a `setTimeout` when a query goes inactive. The timer left after the test holds up jest's exit.
   With `Infinity`, no timer is set. <!-- verified: @tanstack/query-core@5.104.3 removable.js scheduleGc·utils.js isValidTimeout (Infinity excluded) · compared by running: the same screen test with gcTime 300000 hung on "Jest did not exit" until the 60-second limit, with Infinity it exited in 3 seconds -->
 
-## 6. Screen tests — cut seam symbols with `jest.mock`
+## 6. Screen tests — cut the HTTP boundary with `jest.mock`
 
-A screen calls `http` (seam) through `useTasksQuery` (seam). Cut the boundary at `@/api/http` —
+A screen calls `http` through `useTasksQuery` (both in `api-client.md`). Cut the boundary at `@/api/http` —
 mock all the way to the hook and the real wiring, such as query keys·page flattening, goes untested. `ApiError` must stay real for `instanceof` to hold.
 
 ```tsx
@@ -211,16 +217,16 @@ import { renderWithProviders } from '../renderWithProviders';
 
 jest.mock('@/api/http', () => ({
   ...jest.requireActual<typeof import('@/api/http')>('@/api/http'),
-  http: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
+  http: { get: jest.fn(), getPage: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
-const get = jest.mocked(http.get);
+const getPage = jest.mocked(http.getPage);
 
 beforeEach(() => {
-  get.mockReset();
+  getPage.mockReset();
 });
 
 it('draws the list when there are tasks, and the empty state when there are none', async () => {
-  get.mockResolvedValueOnce({ items: [{ id: 't1', title: 'First task' }], nextCursor: null });
+  getPage.mockResolvedValueOnce({ items: [{ id: 't1', title: 'First task', status: 'open', createdAt: '2026-10-17T00:00:00Z' }], nextCursor: null });
   await renderWithProviders(<TasksScreen />);
   expect(await screen.findByText('First task')).toBeOnTheScreen();
   expect(screen.queryByText('No tasks yet')).toBeNull();
@@ -238,7 +244,7 @@ with `require.context`. <!-- verified: the require.context regex in expo-router@
 
 ```ts
 // test/config.test.ts
-const BASE = { EXPO_PUBLIC_APP_ENV: 'production', EXPO_PUBLIC_API_BASE_URL: 'https://api.example.com/v1/' };
+const BASE = { EXPO_PUBLIC_APP_ENV: 'production', EXPO_PUBLIC_API_BASE_URL: 'https://api.example.com/' };
 
 function load(env: Record<string, string>) {
   const saved = { ...process.env };
@@ -257,12 +263,12 @@ it('throws at boot for a non-https web origin, and normalizes https to an origin
   expect(() => load({ EXPO_PUBLIC_WEB_ORIGINS: 'http://web.example.com' })).toThrow('allows only https');
   const ok = load({ EXPO_PUBLIC_WEB_ORIGINS: 'HTTPS://Web.Example.com:443/path , https://help.example.com' });
   expect(ok.trustedWebOrigins).toEqual(['https://web.example.com', 'https://help.example.com']);
-  expect(ok.apiBaseUrl).toBe('https://api.example.com/v1');
+  expect(ok.apiBaseUrl).toBe('https://api.example.com'); // the http call site appends the path (/api/tasks)
   expect(load({ EXPO_PUBLIC_WEB_ORIGINS: '' }).trustedWebOrigins).toEqual([]); // an app with no webview
 });
 ```
 
-<!-- verified: ran under jest-expo@57 — this test passes · it fails on each of 2 mutants (web origin https check removed / module always throws) -->
+<!-- verified: ran under jest-expo@57 — this test passes · it fails on each of 2 mutants (web origin https check removed / module always throws). In 3.35.0 the API address input was changed to the form without /v1, and this was not rerun -->
 
 ## Misuse list ① — web·old-version habits → the current shape in Expo SDK 57
 

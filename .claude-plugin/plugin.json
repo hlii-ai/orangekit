@@ -1,6 +1,6 @@
 {
   "name": "orangekit-product",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "displayName": "OrangeKit Claude Code Devkit",
   "description": "AI Native Dev Harness — reversibility-axis workflow + self-testing hooks + graph instrumentation",
   "author": {

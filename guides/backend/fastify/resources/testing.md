@@ -1,9 +1,10 @@
-<!-- orangekit-pack: backend/fastify v3.33.0 -->
+<!-- orangekit-pack: backend/fastify v3.35.0 -->
 # Testing — `app.inject` and a real PostgreSQL
 
 This file owns the Vitest configuration · the test DB guard · the fixtures (`src/test/`) and **the shape of the tests
-that prove the blocking**. `authFor`, which builds the auth header, is owned by the seam's `auth-boundaries` (whether
-it is a header or a cookie is a function of the combination).
+that prove the blocking**. `authFor` (`src/test/auth.ts`), which builds the auth header, and the test defaults for the
+auth keys (`authTestEnv`) are owned by `resources/auth-boundaries.md` — how the token is signed is a function of the
+auth method.
 
 ## 1. Decision tree — what is checked with which test
 
@@ -40,13 +41,18 @@ export default defineConfig({
 
 <!-- file: src/test/env.ts -->
 ```ts
-// src/test/env.ts — setupFiles. Injects the test DB URL before the app modules load
+// src/test/env.ts — setupFiles. Injects the test DB URL and the auth keys before the app modules load
+import { authTestEnv } from '../auth-env'
+
 const url = process.env.TEST_DATABASE_URL
 if (!url) throw new Error('TEST_DATABASE_URL is not set — tests do not run against the development DB')
 // Reject unless the name ends in _test — resetDb deletes rows
 if (!new URL(url).pathname.endsWith('_test')) throw new Error(`The test DB name must end in _test: ${new URL(url).pathname}`)
 process.env.DATABASE_URL = url
 process.env.LOG_LEVEL ??= 'warn'
+process.env.NODE_ENV ??= 'test'
+// The auth keys differ per variant — the variant supplies test-only values. Values already set are not overwritten
+for (const [k, v] of Object.entries(authTestEnv)) process.env[k] ??= v
 ```
 
 <!-- file: src/test/global-setup.ts -->
@@ -126,7 +132,7 @@ describe('ownership', () => {
     const other = await app.inject({ url: `/api/tasks/${theirs.id}`, headers: authFor('alice') })
     const missing = await app.inject({ url: '/api/tasks/00000000-0000-4000-8000-000000000000', headers: authFor('alice') })
     expect(own.statusCode).toBe(200)
-    expect(own.json().id).toBe(mine.id)
+    expect(own.json().data.id).toBe(mine.id)
     expect(other.statusCode).toBe(404)
     // Absence and non-ownership are the same envelope byte for byte — if they differ, it becomes an existence oracle
     expect(other.body).toBe(missing.body)
@@ -137,7 +143,7 @@ describe('ownership', () => {
     const res = await app.inject({ method: 'PATCH', url: `/api/tasks/${theirs.id}`, headers: authFor('alice'), payload: { title: 'hijacked' } })
     expect(res.statusCode).toBe(404)
     const still = await app.inject({ url: `/api/tasks/${theirs.id}`, headers: authFor('bob') })
-    expect(still.json().title).toBe('original')
+    expect(still.json().data.title).toBe('original')
   })
 
   it('the list shows only your own tasks', async () => {
@@ -145,7 +151,7 @@ describe('ownership', () => {
     await seedTask('bob')
     const res = await app.inject({ url: '/api/tasks', headers: authFor('alice') })
     expect(res.statusCode).toBe(200)
-    expect(res.json().items.map((t: { id: string }) => t.id)).toEqual([mine.id])
+    expect(res.json().data.map((t: { id: string }) => t.id)).toEqual([mine.id])
   })
 
   it('deleting someone else\'s task is a 404 and the original remains, while deleting your own is a 204', async () => {
@@ -162,7 +168,7 @@ describe('ownership', () => {
     const mine = await seedTask('alice')
     const res = await app.inject({ url: `/api/tasks/${mine.id}`, headers: authFor('alice') })
     expect(res.statusCode).toBe(200)
-    expect(Object.keys(res.json()).sort()).toEqual(['createdAt', 'id', 'status', 'title'])
+    expect(Object.keys(res.json().data).sort()).toEqual(['createdAt', 'id', 'status', 'title'])
   })
 })
 
@@ -173,7 +179,8 @@ describe('auth boundary', () => {
     const probe = await buildApp({ logger: false, onRoute: (r) => {
       for (const m of [r.method].flat()) routes.push({ method: m, url: r.url })
     } })
-    const api = routes.filter((r) => r.url.startsWith('/api/'))
+    // /api/auth/* is where tokens are obtained, so it is public — rejection on those paths is checked by the auth-boundaries.md tests
+    const api = routes.filter((r) => r.url.startsWith('/api/') && !r.url.startsWith('/api/auth/'))
     expect(api.length).toBeGreaterThanOrEqual(5)
     for (const r of api) {
       const url = r.url.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000')
@@ -194,7 +201,9 @@ list, update, delete** — prove only one and you can delete the condition from 
 The auth boundary test does not list routes by hand. It collects the **registered** routes through
 `buildApp({ onRoute })` and walks them, so a new domain plugin attached without the auth hook is caught
 automatically. The `/healthz` 200 is the pair that catches the hook being moved up to the root so that everything is
-401. `authFor` is placed by the seam in `src/test/auth.ts`.
+401. Only paths under `/api/auth/` are excluded — login is a place that has to be reachable without a token, and
+rejection on those paths (no cookie · reuse · origin mismatch) is asserted separately by the tests in
+`resources/auth-boundaries.md`. `authFor` lives in `src/test/auth.ts`.
 
 ## 5. The rollback test (`src/services/task-service.test.ts`)
 

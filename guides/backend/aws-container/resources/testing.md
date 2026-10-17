@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-container v3.34.0 -->
+<!-- orangekit-pack: backend/aws-container v3.35.0 -->
 # Tests (Vitest + docker compose local parity)
 
 The advantage of this stack is that **local is the same as production**. `docker compose` brings PostgreSQL 16 up as it is,
@@ -130,7 +130,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/db/queries/tasks', () => ({
   insertTask: vi.fn(async (ownerId: string, input: { title: string }) =>
-    ({ id: 'n1', ownerId, title: input.title, body: '', createdAt: new Date() })),
+    ({ id: 'n1', ownerId, title: input.title, body: '', status: 'open', createdAt: new Date() })),
 }))
 vi.mock('@/http/auth', async (orig) => ({
   ...(await orig<typeof import('@/http/auth')>()),
@@ -201,7 +201,7 @@ import { insertTask, findOwnedTask, updateOwnedTask, deleteOwnedTask } from '@/d
 
 const ALICE = '11111111-1111-1111-1111-111111111111'
 const BOB = '22222222-2222-2222-2222-222222222222'
-const task = (title: string) => ({ title, body: '' })      // insertTask takes parsed input
+const task = (title: string) => ({ title, body: '', status: 'open' as const })   // insertTask takes parsed input
 
 describe('ownership isolation', () => {
   it('a task belonging to another user is not read', async () => {

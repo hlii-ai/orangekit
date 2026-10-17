@@ -50,9 +50,10 @@ cat .orangekit/guide-job.json 2>/dev/null
 
 | `need` item | Meaning | What to build |
 | --- | --- | --- |
-| `seam:frontend` · `seam:backend` · `seam:app` | The packs are assembled and only the seam is missing | That axis's seam + hub (as many as the axis's `seamSlots`) |
+| `seam:frontend` · `seam:backend` · `seam:app` | The packs are assembled and only the seam is missing | That axis's seam + hub (as many as the axis's `seamSlots`). **If that axis is in `variantGaps`, write only that variant file**, then carry over the pack's `HUB.md` as the hub and add only that file's row to Navigation — the API client and complete example are already in the pack |
 | `frontend` · `backend` | There is no pack, or it is unfinished (including `custom`) | That axis in full (hub + every resource) |
 | `app` | The app pack is missing or unfinished (including `custom`) | `.claude/skills/app-guide/` in full. The input is `techStack.app` + the notes in `presets/app/<name>.json` (for `custom`, the entered framework) |
+| `refresh:frontend` · `refresh:backend` · `refresh:app` | Assembly finished on the verified major, and the user chose to apply the latest major | Rewrite **only the affected resources of the installed guide** at the new major — "Step 2-B: refresh" below. The input is `stale` |
 
 **Write `status` as `running` when you start.** If the session dies, that state remains and
 the `session-brief` hook reports it to the next session — the device that keeps the time spent on generation from vanishing silently.
@@ -109,8 +110,8 @@ if a framework major rises after two months it is stale. `fixesVariants` is the 
 
 | Package that rose | Meaning | Action |
 | --- | --- | --- |
-| One caught by `fixesVariants` (framework · ORM) | **The pack's premise changed** | Do not fix it in a consumer session. Install at the declared major and report it as a plugin update |
-| Any other package | Partial rot | Re-author **only the affected resources** + `--pack` + `pack-smoke` + a focused audit B (A and C cover the changed files only) |
+| One caught by `fixesVariants` (framework · ORM) | **The pack's premise changed** | The pack is not fixed (it is the maintainer's periodic refresh target). Assemble at the declared major, and if the user chooses to apply it, move **only the installed copy** with Step 2-B |
+| Any other package | Partial rot | The same — after assembly, if applying is chosen, move **only the affected resources** of the installed copy with Step 2-B |
 | No major rose | Fresh | Assemble as is (0 lines) |
 
 **Do not run this on an existing project.** `install-guide.sh` already enforces "the project fixes the stack
@@ -128,7 +129,12 @@ guidance but guidance that is **wrong for this project**. That is why
 > ⓐ a combination judged to be used often ⓑ the maintainer finished the audit and repairs to the end
 > ⓒ **it is included in the seam regression of `--self-test`** — if it is not re-verified automatically every time
 > a pack is fixed, a prebuilt seam becomes a source of drift.
-> Currently shipped: `nextjs+supabase` · `react-vite+aws-container` · `vue+node-api`.
+> Currently shipped: `nextjs+supabase` · `react-vite+aws-container` (since v3.35.0 **backend only** — the frontend is the react-vite pack hub) · `vue+node-api`.
+>
+> **Pack hubs replace seams (v3.35.0).** A pack that follows the standard wire contract (`guides/contracts/`) carries the API client,
+> complete example and endpoints inside the pack, carries auth as `variants/auth/<method>/`, and carries its hub as `HUB.md`.
+> When the other axis is on the same contract too, that combination completes with no seam. Currently: `react-vite` · `fastify` · `react-native`.
+> The more of the remaining HTTP packs move to this shape, the more combination seams are left only for real combination dependencies such as BaaS and hybrid shells.
 >
 > **The cache tells you the promotion candidates.** The same combination piling up in `~/.claude/orangekit/seam-cache/`
 > is itself the evidence of frequency — the maintainer picks from that list. Instead of prebuilding 28 combinations,
@@ -144,6 +150,8 @@ If `fixesVariants` is `{}` that is a declaration that no variant is nailed down,
 
 | State | Action | Lines generated |
 | --- | --- | --- |
+| Pack hub (`HUB.md`) + all variants resolved + same wire contract | **No generation** — the installer lays down the pack hub and the auth variant | 0 lines |
+| Pack hub + some variants unresolved (`variantGaps` — e.g. a hybrid shell bridge, an auth method the pack lacks) | Generate only those variant files | 1–2 files |
 | Both axis packs + a prebuilt seam | **No generation** — `install-guide.sh` assembly only | 0 lines |
 | Both axis packs · no seam | Assemble the packs, then **generate the seam only** (3 files per axis) | ~1,100 lines/axis |
 | A pack on one axis only | Assemble that axis + generate its seam; for the other axis **generate hub + every resource** | Mixed |
@@ -225,6 +233,29 @@ The frontend-guide slots **data fetching · routing/auth · complete example** d
 The backend-guide slots **API endpoints · complete example** depend on the frontend choice.
 The remaining slots (styling · state management · component patterns / data access · validation · testing) close
 inside the axis — they largely hold up when the combination changes.
+
+## Step 2-B: refresh — moving an installed guide to a new major
+
+**Fix the installed copy, not the pack.** The pack (plugin-owned) is raised by the maintainer's periodic check; only the gap in
+between is filled in the project's `.claude/skills/<axis>-guide/`. The rewrite scope is `stale[].files` only
+(the resources where that package appears) — rebuilding the whole pack brings back the generation time that was just removed.
+
+| `stale` row | Scope | Note |
+| --- | --- | --- |
+| `premise: false` (partial rot) | only the resources in `files` | usually a few test·tooling files |
+| `premise: true` (pack premise — framework·ORM) | all of `files` + the hub's description of that package | a large scope. init showed the cost with ⚠ |
+| a row with empty `files` (toolchain — `typescript` · `@types/node`) | no rewrite | the guide text has no version-specific idioms. Raise only `pkgs=` in the hub stamp |
+
+The procedure uses the same discipline as generation: delegate the affected resources per cluster to generators (based on the new major's
+**official migration guide** — tag the version claims) → the Step 4 gate → skip `pack-smoke`, since it works against the pack and
+not the installed copy, and have audit A typecheck against the new major → one audit → one repair.
+When done, write **the new major** into the hub stamp's `pkgs=` and into `assembly.json` — from then on the installer's stack-premise
+pinning (`pinned`) does not overwrite it with the pack's old major. **Do not put the seam of a refreshed axis into the cache** —
+the cache key is the plugin version, and that edition's pack is on the old major.
+
+**init is not the only time to refresh.** In a project where code has piled up, the baseline is not the registry's latest but
+**the major the project actually installed** (a guide ahead of the code is wrong guidance). When `session-brief` reports a package whose
+major in `package.json` has risen above the guide's `pkgs=`, write only that package as `stale` and run the same procedure.
 
 ## Step 2-A: Authoring an axis pack — the maintainer path
 

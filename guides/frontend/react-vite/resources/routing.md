@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.12.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
 # Routing (React Router v7 · library mode)
 
 In a Vite SPA, React Router is used **as a library only** — no framework mode, no file-based
@@ -8,6 +8,7 @@ routing; the route object tree is declared directly in code.
 
 ```tsx
 import { createBrowserRouter } from 'react-router';
+import { authRoutes } from '@/auth/routes';
 import { RootLayout } from './RootLayout';
 import { RequireAuth } from './RequireAuth';
 
@@ -18,10 +19,9 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <Navigate to="/tasks" replace /> },
-      { path: 'login', lazy: () => import('@/auth/pages/LoginPage') },
-      // Must be **the same path** as the OIDC redirect_uri (auth-and-session.md §2).
-      // Without this route the callback the issuer sends back lands on a 404 screen and the login never completes
-      { path: 'auth/callback', lazy: () => import('@/auth/pages/AuthCallbackPage') },
+      // The login (and OIDC callback) routes are owned by the auth adapter (auth-and-session.md).
+      // The number of screens differs per method, so the paths are spread here rather than written — they must be outside RequireAuth
+      ...authRoutes,
       {
         element: <RequireAuth />,               // a layout route with no path = the auth gate
         children: [
@@ -42,14 +42,16 @@ export const router = createBrowserRouter([
 ```
 
 ```tsx
-// main.tsx — the nesting order is **identical** to auth-and-session.md §4 (the two must never diverge)
-<AuthProvider userManager={userManager} onSigninCallback={onSigninCallback}>
-  <AuthWiring>                                {/* mounts the token provider — leave it out and requests go without the header */}
-    <QueryClientProvider client={queryClient}>
+// src/main.tsx — there is no auth Provider. The module owns the adapter's state and useAuth() subscribes to it
+void startSession();                          // session restore — useAuth().status stays 'loading' until it finishes
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>   {/* the single instance from src/api/queryClient.ts */}
       <RouterProvider router={router} />
     </QueryClientProvider>
-  </AuthWiring>
-</AuthProvider>
+  </StrictMode>,
+);
 ```
 
 The module a `lazy` points at exports route properties — the screen component is exported under the
@@ -87,11 +89,11 @@ When a parent layout has to pass a value down to a child, use `<Outlet context={
 
 ```tsx
 export function RequireAuth() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { status } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <FullPageSpinner />;      // restoring the session — do not bounce before the verdict
-  if (!isAuthenticated) {
+  if (status === 'loading') return <FullPageSpinner />;   // restoring the session — do not bounce before the verdict
+  if (status === 'signedOut') {
     const returnTo = location.pathname + location.search;
     return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
@@ -99,7 +101,7 @@ export function RequireAuth() {
 }
 ```
 
-- Redirect while `isLoading` and the login screen flashes on every refresh
+- Redirect while `'loading'` and the login screen flashes on every refresh
 - Use `replace` — otherwise the back button returns to the protected route and you get a loop
 - **Always validate that the return path is an internal path.** `//evil.com`, `/\evil.com`, and values with
   control characters mixed in are parsed by the browser as external URLs. A string prefix check
@@ -125,43 +127,14 @@ export function safeReturnTo(raw: string | null, fallback = '/'): string {
 }
 ```
 
-`safeReturnTo` **only means something if a screen consumes it.** Only two places read the return path, the login
-page and the callback page, and both pass only a value that has been through this function to `navigate`.
+`safeReturnTo` **only means something if a screen consumes it.** The only places that read the return path are the login
+screen (and, for OIDC, the callback screen), and those screens are owned by the auth adapter
+(`auth-and-session.md`). The rule is the same for every method — pass only a value that has been through this function to `navigate`.
 
 ```tsx
-// src/auth/pages/LoginPage.tsx
-export function Component() {
-  const auth = useAuth();
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-  const target = safeReturnTo(params.get('returnTo'));   // validated here, exactly once
-
-  useEffect(() => {
-    if (auth.isAuthenticated) navigate(target, { replace: true });   // navigation stays inside the router
-  }, [auth.isAuthenticated, target, navigate]);
-
-  if (auth.isLoading) return <FullPageSpinner />;
-  return <Button onClick={() => auth.signinRedirect({ state: { returnTo: target } })}>Log in</Button>;
-}
-Component.displayName = 'LoginPage';
-```
-
-```tsx
-// src/auth/pages/AuthCallbackPage.tsx — the screen shown while AuthProvider exchanges the code
-export function Component() {
-  const auth = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (auth.isLoading || !auth.isAuthenticated) return;
-    const raw = (auth.user?.state as { returnTo?: string } | undefined)?.returnTo ?? null;
-    navigate(safeReturnTo(raw), { replace: true });     // state is a value that round-tripped → always re-validate
-  }, [auth.isLoading, auth.isAuthenticated, auth.user, navigate]);
-
-  if (auth.error) return <ErrorState title="Sign-in failed" message={auth.error.message} />;
-  return <FullPageSpinner />;
-}
-Component.displayName = 'AuthCallbackPage';
+// Navigation after login finishes — a shape independent of the method (the full screens are in auth-and-session.md)
+const [params] = useSearchParams();
+navigate(safeReturnTo(params.get('returnTo')), { replace: true });
 ```
 
 - **Do not use `window.location.assign`/`href` for the return navigation.** It becomes a channel that bypasses
@@ -199,9 +172,10 @@ for free, and the value doubles as the query key.
 
 ```tsx
 const [searchParams, setSearchParams] = useSearchParams();
-const filter: TaskFilter = {
-  status: (searchParams.get('status') as TaskFilter['status']) ?? 'all',
-};
+// The URL is a value from outside — narrow it with an allow-list instead of casting (the same shape as STATUS_VALUES in complete-example.md)
+const STATUS_VALUES: TaskFilter['status'][] = ['all', 'open', 'done'];
+const raw = searchParams.get('status');
+const filter: TaskFilter = { status: STATUS_VALUES.find((s) => s === raw) ?? 'all' };
 
 // Changing the filter — replace, so as not to dirty the history
 const setStatus = (status: TaskFilter['status']) =>
@@ -212,13 +186,13 @@ const { data } = useTasksQuery(filter);   // URL → query key
 
 **Do not put the cursor in the URL.** The backend's pagination uses opaque cursors, so carrying one in the URL
 means nothing for sharing·restoration, and there are no page numbers either. The next-page state is owned by
-`useInfiniteQuery` inside the cache (`data-fetching.md` §3).
+`useInfiniteQuery` inside the cache (`data-fetching.md` §5).
 
 ## 6. Deep links on static hosting (history fallback)
 
 `createBrowserRouter` uses real paths (`/tasks/42`). Static hosting has no file at that path, so
 **unless every unmatched path is sent back to `index.html`, refreshes and deep links
-return 404.** `/auth/callback` is no exception, and without this setting the login itself
+return 404.** The OIDC variant's `/auth/callback` is no exception, and without this setting the login itself
 never completes.
 
 | Hosting | Setting |
@@ -227,7 +201,7 @@ never completes.
 | nginx | `location / { try_files $uri $uri/ /index.html; }` |
 | Local preview | `vite preview` falls back by default — always confirm the deployment environment does the same |
 
-- The API is on **a different origin** (the ALB). Check that the fallback rule does not swallow `/api/*`
+- If the API is served from `/api/*` on the same host, check that the fallback rule does not swallow `/api/*`
 - Serve `index.html` with `Cache-Control: no-cache` and hashed assets with a long cache.
   Cache the index and it points at the old bundle even after a deploy, breaking the whole screen
 
@@ -243,7 +217,7 @@ never completes.
 
 | Old habit (v5/v6) | The v7 form |
 | --- | --- |
-| `import { Link } from 'react-router-dom'` | `import { Link } from 'react-router'` — the packages were merged in v7 |
+| `import { Link } from 'react-router-dom'` | `import { Link } from 'react-router'` — the packages were merged in v7 <!-- verified: React Router v7 upgrade notes — react-router-dom only re-exports react-router --> |
 | `<Switch>` / `<Route component={X}>` (v5) | `<Routes>` / `element={<X />}`, or the route object's `Component` |
 | `useHistory().push(...)` (v5) | `useNavigate()('/path')` |
 | `<Redirect to="/x" />` (v5) | `<Navigate to="/x" replace />` |

@@ -1,5 +1,27 @@
 # Lessons
 
+## [category: tooling] The typecheck had not run once in months — "install failed → skip"
+
+- date: 2026-10-17
+- situation: In the seam-absorption pilot, the react-vite pack's `--online` typecheck ended with "toolchain install failed — unchecked".
+  The cause was `react-dom` missing from `pkgs`, so npm pulled in react-dom@19 and hit a peer conflict (ERESOLVE) with react@18,
+  and with `--silent` the log was empty. Once fixed, real defects in existing pack files poured out (missing imports · the
+  `ImportMeta.env` type · a missing testing library). aws-container's typecheck was already failing at HEAD too.
+- mistake: The skip was explicitly reported as "not a pass", but nobody treated a pack that kept skipping as a defect.
+- lesson: An `--online` skip on a shipped pack is not "undecidable" but **something to investigate** — if there is a network and the install
+  fails, the pkgs declaration is wrong. Pin the peers too (react-dom · the testing library's dom) in pkgs.
+
+## [category: skill] Two client packs made the same session defect separately — behavior rules belong in the contract too
+
+- date: 2026-10-17
+- situation: The web (react-vite) and app (react-native) packs were authored in parallel by different agents, and the audit found the same
+  two defects in both: ① a refresh response arriving after sign-out revived the session ② when the retry after a successful refresh also got 401,
+  the client stayed signedIn. A wire mismatch where the app's refresh body carried a key the server's strict schema rejects was of the same kind.
+- mistake: The contract pinned the values (codes · envelope) but left the client session's **behavior** and the auth endpoint bodies blank.
+  A blank gets filled differently by each author, or left out by all of them alike.
+- lesson: A rule several packs share goes into the contract, whether it is a value or a behavior (§5 session rules · `auth-self-issued.md`).
+  When the audit finds the same defect in two packs, it is not a pack defect but **a blank in the contract** — the audit prompt's "norm candidate" is that signal.
+
 ## [category: tooling] With a space in the path the gate did not FAIL — it went blind
 
 - date: 2026-10-16

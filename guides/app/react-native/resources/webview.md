@@ -1,9 +1,9 @@
-<!-- orangekit-pack: app/react-native v1.0.0 -->
+<!-- orangekit-pack: app/react-native v3.35.0 -->
 # WebView — showing web content and the trust boundary
 
 This file owns `src/webview/trustedOrigin.ts` (`isTrustedOrigin`) and the WebView's **origin validation · navigation restriction ·
 injected script scope**. **Which screens are webviews** and **the web ↔ native message schema** are functions of the app shape
-(cross-platform · rn-webview · rn-native-screens) and the web screen axis, so they belong to the seam's `shell-bridge.md`
+(cross-platform · rn-webview · rn-native-screens) and the web screen axis, so they belong to `shell-bridge.md`, generated per project
 (when the shape is cross-platform that file does not exist and only the §1 table of this file applies). The list of allowed origins is
 read only from `config.trustedWebOrigins` (owned by `config-and-testing.md`).
 
@@ -12,8 +12,8 @@ read only from `config.trustedWebOrigins` (owned by `config-and-testing.md`).
 | Situation | What to pick | Why |
 | --- | --- | --- |
 | Embedding our own web screens in the app (hybrid shell · terms · help) | `react-native-webview` + the three devices in this file | We control the origin |
-| Sending the user to a third-party site (external links · a payment provider's info page) | `Linking.openURL(url)` — the system browser | The app has no reason to open a bridge to that page. `expo-web-browser` is not in the pack's `pkgs` |
-| OAuth sign-in | WebView **forbidden** — the flow in the seam's `auth-and-session.md` | IdPs block embedded WebViews, and it becomes a structure where the app can snoop on password entry |
+| Sending the user to a third-party site (external links · a payment provider's info page) | `Linking.openURL(url)` — the system browser | The app has no reason to open a bridge to that page. `expo-web-browser` is only for the OIDC variant's sign-in |
+| OAuth sign-in | WebView **forbidden** — the system browser flow in the auth variant `auth-and-session.md` (oidc) | IdPs block embedded WebViews, and it becomes a structure where the app can snoop on password entry |
 | Only showing web content, no native features | A WebView, without `onMessage` | The moment you pass `onMessage`, `window.ReactNativeWebView` is injected |
 
 <!-- verified: the onMessage comment in react-native-webview@13.17.0 lib/WebViewTypes.d.ts — "Setting this property will inject this global into your webview" -->
@@ -140,7 +140,7 @@ function onMessage(event: WebViewMessageEvent) {
 
 Injected scripts ride along again **on every page the top-level frame navigates to**. So the only things that may go in are values that
 are safe to publish: a shell marker, the platform, the app version. **No access tokens · refresh tokens · user identifiers** — auth for web
-screens is owned by the web-side session (cookies), and how they connect is decided by the seam's `shell-bridge.md` · `auth-and-session.md`.
+screens is owned by the web-side session (cookies), and how they connect is decided by the generated `shell-bridge.md`.
 Do not widen it to subframes with `…ForMainFrameOnly={false}`.
 
 ```ts

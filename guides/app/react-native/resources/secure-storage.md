@@ -1,9 +1,9 @@
-<!-- orangekit-pack: app/react-native v1.0.0 -->
+<!-- orangekit-pack: app/react-native v3.35.0 -->
 # Secure storage — storing tokens and the boundary of plaintext stores
 
 This file owns `src/lib/tokenStore.ts` and the judgment of "what goes in which store".
-When tokens are received and refreshed, and how they are attached to requests, is owned by the seam (`auth-and-session.md` · `api-client.md`).
-**The order of sign-out cleanup** is also owned by the seam's `useAuth().signOut` — this file only gives the list of what to wipe.
+When tokens are received and refreshed, and how they are attached to requests, is owned by the auth variant's `auth-and-session.md` and `api-client.md`.
+**The order of sign-out cleanup** is also owned by `useAuth().signOut` in `auth-and-session.md` — this file only gives the list of what to wipe.
 
 ## 1. Decision tree — which store does it go in
 
@@ -123,7 +123,7 @@ async function migrateTokenAccessibility(): Promise<void> {
 | The Keystore key disappeared after an Android reinstall | `null` | The library deletes the item itself <!-- verified: expo-secure-store@57.0.4 android/.../SecureStoreModule.kt:140,159-169 (source comparison) --> |
 | The key was invalidated by a biometric change (`requireAuthentication` items) | `null` | `getItemAsync` resolves to `null` <!-- verified: getItemAsync comment in expo-secure-store@57.0.4 build/SecureStore.d.ts --> |
 
-When `get()` is `null`, the caller (the seam's auth flow) judges the state as signed out. The cost of not wiping on a rejected read
+When `get()` is `null`, the caller (the boot path in `auth-and-session.md`) judges the state as signed out. The cost of not wiping on a rejected read
 is "this run alone looks signed out"; the cost of wiping is "one transient error loses the session".
 
 iOS Keychain items can survive deleting the app — right after a reinstall the app starts signed in as the old account.
@@ -131,7 +131,7 @@ iOS Keychain items can survive deleting the app — right after a reinstall the 
 AsyncStorage is wiped together with the app, so keep an install marker there, and when the marker is absent, wipe the tokens:
 
 ```ts
-// Boot cleanup (excerpt) — called from the boot path in the seam's auth-and-session.md, before the auth verdict
+// Boot cleanup (excerpt) — called from the boot path in auth-and-session.md, before the auth verdict
 async function clearTokensAfterReinstall(): Promise<void> {
   if ((await AsyncStorage.getItem('install.marker.v1')) !== null) return;
   await tokenStore.clear();
@@ -142,7 +142,7 @@ async function clearTokensAfterReinstall(): Promise<void> {
 ## 6. What to wipe on sign-out
 
 The order (server revocation → `tokenStore.clear()` → `outbox.clear()` → `queryClient.clear()` → store reset) is owned by
-`useAuth().signOut` in the seam's `auth-and-session.md`. This list is **what must not be left out**.
+`useAuth().signOut` in the auth variant's `auth-and-session.md`. This list is **what must not be left out**.
 
 | Target | How it is wiped | If left out |
 | --- | --- | --- |
@@ -150,7 +150,7 @@ The order (server revocation → `tokenStore.clear()` → `outbox.clear()` → `
 | Server data cache | `queryClient.clear()` | The next user briefly sees the previous user's list |
 | Zustand stores | Each store's reset | Selections·filters carry over to the next account |
 | The outbox queue | `outbox.clear()` (`data-and-offline.md`) | The previous user's mutations are sent with the next user's token |
-| Server-side session·push token registration | The seam's server call | Notifications keep going to a device that signed out |
+| Server-side session·push token registration | The server revocation call in `auth-and-session.md` | Notifications keep going to a device that signed out |
 
 Even if the server revocation call fails, local cleanup proceeds. Leaving local state behind is the greater risk.
 Values unrelated to the account, like the install marker (§5)·UI settings, are not wiped.

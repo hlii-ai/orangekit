@@ -33,7 +33,7 @@ The same values as `exampleDomain` in every pack's `pack.json`.
 - Wire fields: `id` · `title` · `status` · `createdAt`
 - `status` values: `open` · `done`
 
-**Do not invent fields.** Measured: while writing the contract the generator made up `todo`/`doing`/`done` states and an
+Do not invent fields. Measured: while writing the contract the generator made up `todo`/`doing`/`done` states and an
 `updatedAt` field on its own, diverged from the pack examples, and cost one more repair round. The example
 domain is those four fields and nothing more. The owner column (`ownerId` · DB column `owner_id`) is a server-internal value, so
 it need not go on the wire; if it does, use this name. Needing more fields is a matter for the **project's
@@ -94,6 +94,15 @@ never sends them, so they live only in the frontend and app packs. Do not create
 - Authorization failure (role): 403 `FORBIDDEN`
 - Returning after the session expires: on a 401 the client tries one reissue, and on a second failure sends the user to login
 
+Two client session rules (prose — behavior, not values). In the pilot the web and app packs broke them **identically**,
+and the audit caught both as critical/high:
+
+- **If the retry is also a 401, end the session.** When the reissue succeeds but the retry gets a 401 again (user deleted, subject mismatch),
+  the client goes to `signedOut` and sends the user to login. Showing only an error and staying `signedIn` leaves a permanent 401 screen
+- **Logout does not revive an in-flight reissue.** If a reissue response arrives after logout and stores the token again,
+  the logged-out session comes back to life. Bump a session generation value on logout, and have the reissue discard its result
+  when the generation it captured before the request has changed
+
 Why an ownership failure goes out as a 404: the backends that use this contract have no data-layer policy engine, so
 the application layer is the only boundary, and distinguishing 403 from 404 lets an unauthorized user enumerate which
 resources exist. The client handles a 404 on one screen as "missing, or not mine".
@@ -104,13 +113,16 @@ resources exist. The client handles a 404 on one screen as "missing, or not mine
 
 **How the token is obtained and refreshed is decided by the auth adapter, not by this contract.** What the contract pins
 is only the delivery mechanism (Bearer) and the 401 reaction in §5 — which is why the API client and the complete example go into the pack
-regardless of the auth method, and only the adapter is swapped. The adapter exports two functions, `getAccessToken()` and
-`refresh()`, and the API client calls only those two.
+regardless of the auth method, and only the adapter is swapped. The adapter exports three functions, `getAccessToken()` ·
+`refresh()` · `endSession()`, and the API client calls only those three (`endSession` when the retry is also a 401 — §5).
 
 Adapter kinds (prose — not values): **self-issued** (the server puts login · reissue · logout under `/api/auth`
 and the refresh token lives in an httpOnly cookie or the app's secure storage) · **external IdP** (OIDC + PKCE — Cognito ·
 Auth0 · Identity Platform and the like; the server only verifies through JWKS). A browser client and an app client
 differ only in where the refresh token is kept — a cookie versus secure storage.
+
+**The self-issued adapter's wire is set by `auth-self-issued.md`** — those values are not required of combinations with a
+different auth method, so they are kept out of this contract's lists and tables (put them there and the gate demands them of OIDC combinations too).
 
 Authenticating with a server-side session cookie alone (no Bearer) is outside this contract — such a project generates a combination
 seam instead of an adapter.

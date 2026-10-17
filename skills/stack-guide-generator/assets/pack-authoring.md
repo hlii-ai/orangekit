@@ -266,3 +266,22 @@ tokens · tool calls · the count of audit findings per class · the actual valu
 above. **Do not write "it got faster" without measurement** —
 the previous session's estimate (20~40 minutes) was proven wrong by a measured 64 minutes.
 
+## Pack refresh — major bumps (maintainer, periodic)
+
+**This is where a consumer init's refresh cost is brought to zero.** When a pack goes stale, every consumer pays the
+same rewrite separately at init (stack-guide-generator Step 2-B). So `harness-evaluation` runs
+`guide-freshness.sh --pack` over every pack on each evaluation, and a bump lands here.
+
+| Kind of bump | What to do |
+| --- | --- |
+| partial rot (outside `fixesVariants`) | rewrite only the affected files from `--json` → raise that major in `pkgs` |
+| pack premise (inside `fixesVariants` — framework·ORM) | **reopen from L0**: freeze `pkgs` · ledger shapes (signatures may have changed) · policy regexes (idioms may have changed) at the new major, then rewrite the affected resources |
+| toolchain (`typescript` · `@types/node` · 0 affected files) | raise only `pkgs` and confirm just the typecheck with `pack-smoke --online` |
+
+The basis is **each package's official migration guide**, and version claims get tags (audit B looks at them).
+The pass bar is the same as authoring — `--pack` FAIL 0 · `pack-smoke --online` · audit (once). When done,
+raise `packVersion`·file stamps·the `verified` date and release. **If wire values changed**,
+raise `wireContractSince` to that edition too (the installer's contract pinning looks at that value).
+
+> **A prerelease is not the latest.** Some packages have an rc on the `latest` tag (prisma 8.0.0-rc) —
+> `guide-freshness.sh` falls back to the highest stable release for its verdict. Do not raise a pack to follow an rc.

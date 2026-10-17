@@ -69,6 +69,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && p
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 G="$PLUGIN_ROOT/guides"
 
+STALE_TSV="$(mktemp)"; VGAP_TSV="$(mktemp)"; trap 'rm -f "$STALE_TSV" "$VGAP_TSV"' EXIT
 FE=""; BE=""; SEAM=""; DRY=0; FORCE=0; SAVE_SEAM=""; NO_CACHE=0; CHECK_FRESH=1
 GATE=0; NOTES=""; AXIS_STATE=""; FE_STATE=skip; BE_STATE=skip; SELFTEST=0
 APP=""; APP_STATE=skip
@@ -191,10 +192,82 @@ v=str(v).strip()
 print(v if re.fullmatch(r'[a-z0-9-]+', v) else '')" "$src" 2>/dev/null || true
   return 0
 }
-cache_slot() { # $1=axis
-  if [ "$1" != app ]; then printf '%s' "$1"; return 0; fi
-  local sh; sh=$(app_shape)
-  [ -n "$sh" ] && printf 'app.%s.%s' "$APP" "$sh"
+cache_slot() { # $1=axis [$2=pack directory — if it has variants, the chosen values go into the slot name]
+  local base=""
+  if [ "$1" != app ]; then base="$1"
+  else
+    local sh; sh=$(app_shape)
+    [ -n "$sh" ] && base="app.$APP.$sh"
+  fi
+  [ -n "$base" ] || return 0
+  # A cached seam (hub included) was written for the variants chosen at the time — a project with a different auth
+  # method receiving the same slot gets an assembly whose hub points at auth files that are not there (measured in review).
+  # The variant values go into the slot name
+  local tag=""
+  if [ -n "${2:-}" ] && grep -q '"variants"' "$2/pack.json" 2>/dev/null; then
+    local auth shell; auth=$(note_val authKind); shell=$(note_val appShell)
+    tag=$(python3 - "$2/pack.json" "$auth" "$shell" 2>/dev/null <<'PYTAG' || true
+import json, sys
+vs = json.load(open(sys.argv[1])).get('variants') or {}
+vals = {'auth': sys.argv[2], 'shell': sys.argv[3]}
+print('.'.join(f"{d}-{vals.get(d) or 'none'}" for d in sorted(vs)))
+PYTAG
+)
+  fi
+  printf '%s' "$base${tag:+.$tag}"
+  return 0
+}
+
+# ── Pack variant resources · pack hub ──────────────────────────────────
+# Most of what a seam used to be — a function of the combination — has moved into the packs through the standard wire
+# contract. The remaining differences are two choices **within an axis** — the auth method (`authKind`) and the app shell
+# shape (`appShell`). So a pack carries the files for each choice under `variants/<dimension>/<directory>/`, and pack.json
+# `variants` maps a notes value → a directory:
+#   "variants": { "auth": { "self-issued": "self-issued", "oidc": "oidc" },
+#                 "shell": { "rn-native-screens": "rn", "rn-webview": "rn", "": null } }
+# null means "that value has no files"; a value missing from the table is "unresolved" — unresolved is never folded into
+# some arbitrary file but left as a generation target (that variant file + the hub). Dimension → notes key: auth=authKind, shell=appShell.
+note_val() { # $1=notes key → value (empty string if absent)
+  # Source: --notes → guide-job.json → the .orangekit/preset-notes.json init left behind. The job file is deleted when the job
+  # closes, so on an update run (no --notes) without the third source the variant reads as "unresolved" and the installed
+  # auth files get retired (measured in review)
+  local src="" j="$PROJECT_ROOT/.orangekit/guide-job.json" pn="$PROJECT_ROOT/.orangekit/preset-notes.json"
+  if [ -n "$NOTES" ] && [ -f "$NOTES" ]; then src="$NOTES"; elif [ -f "$j" ]; then src="$j"; elif [ -f "$pn" ]; then src="$pn"; fi
+  [ -n "$src" ] || return 0
+  python3 - "$src" "$1" 2>/dev/null <<'PYNOTE' || true
+import json, re, sys
+try: d = json.load(open(sys.argv[1]))
+except Exception: sys.exit(0)
+if isinstance(d.get('notes'), dict): d = d['notes']
+v = str(d.get(sys.argv[2]) or '').strip() if isinstance(d, dict) else ''
+print(v if re.fullmatch(r'[a-z0-9-]*', v) else '')
+PYNOTE
+  return 0
+}
+variant_select() { # $1=pack directory → "F\t<file>" (chosen variant file) · "U\t<dimension>\t<value>" (unresolved)
+  local packdir="$1"
+  grep -q '"variants"' "$packdir/pack.json" 2>/dev/null || return 0
+  local auth shell; auth=$(note_val authKind); shell=$(note_val appShell)
+  python3 - "$packdir" "$auth" "$shell" 2>/dev/null <<'PYVAR' || true
+import json, os, sys
+packdir, auth, shell = sys.argv[1], sys.argv[2], sys.argv[3]
+pj = json.load(open(os.path.join(packdir, 'pack.json')))
+vs = pj.get('variants') or {}
+chosen = {'auth': auth, 'shell': shell}
+# If the shell is unresolved, the dimensions the shell owns are unresolved too — web inside a hybrid shell receives its
+# token from native, so laying down the web login variant would be wrong guidance (pack.json shellOverrides)
+shell_unres = 'shell' in vs and shell not in vs['shell']
+over = set(pj.get('shellOverrides') or []) if shell_unres else set()
+for dim, table in vs.items():
+    val = chosen.get(dim, '')
+    if val not in table or dim in over:
+        print(f"U\t{dim}\t{val or '(none)'}"); continue
+    d = table[val]
+    if d is None: continue
+    vd = os.path.join(packdir, 'variants', dim, d)
+    for f in sorted(os.listdir(vd)) if os.path.isdir(vd) else []:
+        if f.endswith('.md'): print(f"F\t{os.path.join(vd, f)}")
+PYVAR
   return 0
 }
 
@@ -258,8 +331,19 @@ assemble() { # $1=frontend|backend|app  $2=pack name
   local dst="$PROJECT_ROOT/.claude/skills/$axis-guide"
   local seamdir="" seamsrc="" cslot
   AXIS_STATE=generate
-  cslot=$(cache_slot "$axis")
-  if [ -n "$SEAM" ] && [ "$axis" != app ] && [ -d "$G/seams/$SEAM/$axis" ]; then
+  cslot=$(cache_slot "$axis" "$packdir")
+  # If the notes a prebuilt seam assumed (auth method and the like) differ from this project, it is not used — using it
+  # makes the two guides teach opposites, the frontend self-issued and the backend OIDC (measured in review). Fall through to generation
+  local seamconflict=""
+  if [ -n "$SEAM" ] && [ -f "$G/seams/$SEAM/seam.json" ]; then
+    local sak pak; pak=$(note_val authKind)
+    sak=$(python3 -c "import json,sys; print((json.load(open(sys.argv[1])).get('notes') or {}).get('authKind',''))" "$G/seams/$SEAM/seam.json" 2>/dev/null || true)
+    if [ -n "$sak" ] && [ -n "$pak" ] && [ "$sak" != "$pak" ]; then seamconflict="authKind $sak ≠ project $pak"; fi
+  fi
+  if [ -n "$seamconflict" ] && [ -d "$G/seams/$SEAM/$axis" ]; then
+    printf '  [%s-guide]  not using prebuilt seam %s — %s\n' "$axis" "$SEAM" "$seamconflict"
+  fi
+  if [ -z "$seamconflict" ] && [ -n "$SEAM" ] && [ "$axis" != app ] && [ -d "$G/seams/$SEAM/$axis" ]; then
     # Prebuilt seams exist only for the web screen·backend axes — app seams split by shape and are reused only through the cache
     seamdir="$G/seams/$SEAM/$axis"; seamsrc="prebuilt/$SEAM"
   elif [ "$NO_CACHE" -eq 0 ] && [ -n "$cslot" ] && [ -d "$CACHE_ROOT/${FE:-none}+${BE:-none}@$PLUGIN_VER/$cslot" ]; then
@@ -289,12 +373,14 @@ assemble() { # $1=frontend|backend|app  $2=pack name
     local fscript="$PLUGIN_ROOT/scripts/guide-freshness.sh" fcode=0
     if [ -f "$fscript" ]; then
       printf '  [%s-guide]  freshness verdict (%s)\n' "$axis" "$pack"
-      bash "$fscript" --pack "$packdir" || fcode=$?
-      if [ "$fcode" -ne 0 ]; then
-        printf '    ↑ There is a major bump. **The install continues** — the declared major is what this pack\n'
-        printf '      actually verified, and patterns of a different major are not old, they are wrong.\n'
-        printf '      "the pack premise has changed" is a matter for a plugin update, and "partial rot" means only\n'
-        printf '      those resources are up for rewrite (stack-guide-generator Step 4-1).\n'
+      local fout; fout=$(bash "$fscript" --pack "$packdir" --json 2>&1) || fcode=$?
+      printf '%s\n' "$fout" | sed '/── TSV/,$d'
+      if [ "$fcode" -eq 1 ]; then
+        # Keep the major-bump rows — they are what init asks "apply now / pin to the verified major" on,
+        # and the input to stack-guide-generator's refresh job. The verdict is made here and not redone in prose
+        printf '%s\n' "$fout" | awk -F'\t' -v ax="$axis" '$4=="major_up" {print ax "\t" $1 "\t" $2 "\t" $3 "\t" $5 "\t" $6}' >> "$STALE_TSV"
+        printf '    ↑ There is a major bump. **The install continues with the declared (verified) major.**\n'
+        printf '      init asks the user whether to apply it — recorded in what is left as refresh:%s\n' "$axis"
       fi
     else
       printf '    ! freshness verdict skipped — no %s\n' "$fscript"
@@ -310,7 +396,9 @@ assemble() { # $1=frontend|backend|app  $2=pack name
            | { grep -oE '[@A-Za-z0-9._/-]+@[0-9]+' || true; } | sort -u | tr '\n' ' ')
     # ↑ In a hub with no pkgs= stamp (a SKILL.md the generator wrote, and the like) this grep exits 1 on no match, and
     #   pipefail + set -e **ends the installer without a message** (the contract-pinning fixture exposed it)
-    want=$({ grep -oE '"[@A-Za-z0-9._/-]+@[0-9.]+"' "$packdir/pack.json" 2>/dev/null | tr -d '"' || true; } \
+    # Read only from the pkgs array — scanning the whole file reads `"wireContract": "http-standard@1"` as a package, so it
+    # never matches have (the hub stamp) and every update run was "stack premise pinned" and pack fixes never arrived (measured in review)
+    want=$({ awk '/"pkgs"[[:space:]]*:/{f=1} f{print} f&&/\]/{exit}' "$packdir/pack.json" 2>/dev/null | grep -oE '"[@A-Za-z0-9._/-]+@[0-9.]+"' | tr -d '"' || true; } \
            | { grep -oE '[@A-Za-z0-9._/-]+@[0-9]+' || true; } | sort -u | tr '\n' ' ')
     if [ -n "$have" ] && [ -n "$want" ] && [ "$have" != "$want" ]; then
       PINNED=1; AXIS_STATE=pinned
@@ -342,11 +430,69 @@ import json,sys
 try: print('pkgs=' + ' '.join(json.load(open('$packdir/pack.json'))['pkgs']))
 except Exception: print('')" 2>/dev/null)
 
+  # Preserve an existing generated seam — when this run resolved no seam but the previous assembly.json lists seam files
+  # (an update run on an installed copy completed by a generated or cached seam), those files belong to the project. Even
+  # if the pack now carries a file of the same name it does not overwrite it, nor swap in the pack hub — overwriting pushes
+  # the project's seam out to .bak and leaves the hub pointing at the old seam (measured in review)
+  local OLDSEAM=""
+  if [ -z "$seamdir" ] && [ -f "$dst/assembly.json" ]; then
+    OLDSEAM=$({ grep -oE '"seamFiles"[^]]*\]' "$dst/assembly.json" 2>/dev/null || true; } \
+              | { grep -oE '"[A-Za-z0-9._-]+\.md"' || true; } | tr -d '"')
+  fi
+
+  # Variant selection — a prebuilt seam owns auth and shell too, so nothing is chosen. A cached seam carries the variant
+  # values in its slot name (cache_slot), so the variant files for those values are laid down with it — variant files are pack-owned and not in the cache
+  local vsel="" vfiles="" vunres="" usehub=0
+  case "$seamsrc" in prebuilt/*) ;; *)
+    vsel=$(variant_select "$packdir")
+    vfiles=$(printf '%s\n' "$vsel" | awk -F'\t' '$1=="F"{print $2}')
+    vunres=$(printf '%s\n' "$vsel" | awk -F'\t' '$1=="U"{print $2"="$3}' | tr '\n' ' ')
+    vunres="${vunres% }" ;;
+  esac
+  if [ -z "$seamdir" ] && [ -z "$OLDSEAM" ]; then
+    # Pack hub: only when every variant is resolved and the other axes use the same wire contract — the hub was written for the contract
+    if [ -f "$packdir/HUB.md" ] && [ -z "$vunres" ] && [ "$HUB_OK" -eq 1 ]; then usehub=1; fi
+    if [ -n "$vunres" ]; then
+      printf '%s\n' "$vunres" | tr ' ' '\n' | awk -v ax="$axis" -F= 'NF==2{print ax "\t" $1 "\t" $2}' >> "$VGAP_TSV"
+    fi
+  fi
+
   local SEAMLABEL="${seamsrc:-generated}"
+  [ "$usehub" -eq 1 ] && SEAMLABEL="pack"
   local info="<!-- orangekit-guide: assembled $TODAY combo=${FE:-none}+${BE:-none} packs=$axis/$pack@${pv#v} seam=$SEAMLABEL $pkgs -->"
 
-  for f in "$packdir/resources"/*.md; do [ -f "$f" ] && put "$f" "$dst/resources/$(basename "$f")"; done
-  if [ -n "$seamdir" ]; then
+  # When the seam has a resource of the same name, the seam wins — laying down both repeats update·.bak on every run
+  local PACKLIST=""
+  for f in "$packdir/resources"/*.md; do
+    [ -f "$f" ] || continue
+    if [ -n "$seamdir" ] && [ -f "$seamdir/resources/$(basename "$f")" ]; then continue; fi
+    if printf '%s\n' "$OLDSEAM" | grep -qxF "$(basename "$f")"; then
+      printf '    = %-30s project seam — preserved (not laying down the pack file of the same name)\n' "$(basename "$f")"
+      continue
+    fi
+    put "$f" "$dst/resources/$(basename "$f")"
+    PACKLIST="$PACKLIST$(basename "$f")
+"
+  done
+  if [ -n "$vfiles" ]; then
+    while IFS= read -r f; do
+      [ -f "$f" ] || continue
+      if printf '%s\n' "$OLDSEAM" | grep -qxF "$(basename "$f")"; then
+        printf '    = %-30s project seam — preserved (not laying down the pack variant)\n' "$(basename "$f")"
+        continue
+      fi
+      put "$f" "$dst/resources/$(basename "$f")"
+      PACKLIST="$PACKLIST$(basename "$f")
+"
+    done <<< "$vfiles"
+  fi
+  if [ "$usehub" -eq 1 ]; then
+    put_hub "$packdir/HUB.md" "$dst/SKILL.md" "$axis-guide" "$info"
+    AXIS_STATE=complete
+  elif [ -z "$seamdir" ] && [ -n "$OLDSEAM" ] && [ -f "$dst/SKILL.md" ]; then
+    printf '    = keeping the existing seam·hub — project-owned (to switch to the pack hub, delete the seam and reassemble)\n'
+    AXIS_STATE=complete
+  elif [ -n "$seamdir" ]; then
     for f in "$seamdir/resources"/*.md; do [ -f "$f" ] && put "$f" "$dst/resources/$(basename "$f")"; done
     # A cache entry may hold only resources and no hub (when it was loaded before hubs existed).
     # Assuming a hub that is not there stops the assembly silently — the split is handled explicitly.
@@ -358,7 +504,13 @@ except Exception: print('')" 2>/dev/null)
       AXIS_STATE=resources
     fi
   else
-    printf '    ! SKILL.md not created — there is no seam. stack-guide-generator builds the hub and the seam\n'
+    if [ -n "$vunres" ]; then
+      printf '    ! SKILL.md not created — a variant the pack does not have (%s). stack-guide-generator builds only that file and the hub\n' "$vunres"
+    elif [ -f "$packdir/HUB.md" ] && [ "$HUB_OK" -eq 0 ]; then
+      printf '    ! SKILL.md not created — another axis uses a different wire contract, so the pack hub cannot be used. Building a seam\n'
+    else
+      printf '    ! SKILL.md not created — there is no seam. stack-guide-generator builds the hub and the seam\n'
+    fi
     AXIS_STATE=resources
   fi
 
@@ -373,12 +525,10 @@ except Exception: print('')" 2>/dev/null)
   # user added by hand is not in there and is left alone. It is the same boundary put() keeps with
   # "user edit — preserved". No hand-maintained list of retired names, so it works automatically for every
   # future rename and deletion.
-  if [ "$DRY" -eq 0 ] && [ -f "$dst/assembly.json" ]; then
-    local newfiles="" rf retired=0 oldf
-    for rf in "$packdir/resources"/*.md; do
-      if [ -f "$rf" ]; then newfiles="$newfiles$(basename "$rf")
-"; fi
-    done
+  # No retirement while a variant is unresolved — an update run that could not read the notes would delete the installed
+  # auth files and leave only the hub, a broken guide (measured in review). Unresolved means "unknown", not "gone"
+  if [ "$DRY" -eq 0 ] && [ -f "$dst/assembly.json" ] && [ -z "$vunres" ]; then
+    local newfiles="$PACKLIST" rf retired=0 oldf
     if [ -n "$seamdir" ]; then
       for rf in "$seamdir/resources"/*.md; do
         if [ -f "$rf" ]; then newfiles="$newfiles$(basename "$rf")
@@ -418,11 +568,13 @@ $({ grep -oE '"seamFiles"[^]]*\]' "$dst/assembly.json" 2>/dev/null || true; } \
       printf '  "wireContract": "%s",\n' "$(pack_contract "$packdir")"
       printf '  "seam": %s,\n  "assembledAt": "%s",\n' "$([ -n "$seamsrc" ] && printf '"%s"' "$seamsrc" || echo null)" "$TODAY"
       printf '  "packFiles": ['
-      first=1; for f in "$packdir/resources"/*.md; do [ -f "$f" ] || continue
-        [ $first -eq 0 ] && printf ', '; printf '"%s"' "$(basename "$f")"; first=0; done
+      first=1; while IFS= read -r f; do [ -n "$f" ] || continue
+        [ $first -eq 0 ] && printf ', '; printf '"%s"' "$f"; first=0; done <<< "$PACKLIST"
       printf '],\n  "seamFiles": ['
       first=1; if [ -n "$seamdir" ]; then for f in "$seamdir/resources"/*.md; do [ -f "$f" ] || continue
-        [ $first -eq 0 ] && printf ', '; printf '"%s"' "$(basename "$f")"; first=0; done; fi
+        [ $first -eq 0 ] && printf ', '; printf '"%s"' "$(basename "$f")"; first=0; done
+      else while IFS= read -r f; do [ -n "$f" ] && [ -f "$dst/resources/$f" ] || continue
+        [ $first -eq 0 ] && printf ', '; printf '"%s"' "$f"; first=0; done <<< "$OLDSEAM"; fi
       printf ']\n}\n'
     } > "$dst/assembly.json"
   fi
@@ -452,7 +604,8 @@ save_seam() {
   for axis in frontend backend app; do
     src="$PROJECT_ROOT/.claude/skills/$axis-guide"
     [ -d "$src/resources" ] || continue
-    slot=$(cache_slot "$axis")
+    local spk; spk=$({ grep -m1 -oE '"pack"[[:space:]]*:[[:space:]]*"[^"]+"' "$src/assembly.json" 2>/dev/null || true; } | sed -E 's/.*"([^"]+)"$/\1/')
+    slot=$(cache_slot "$axis" "${spk:+$G/$spk}")
     if [ -z "$slot" ]; then
       printf '  [app-guide]  could not read the shape (appShell·deliveryModel), so not putting it into the cache — pass --notes and it goes in\n'
       continue
@@ -519,6 +672,11 @@ write_job() {
     generate)  need="$need \"app\"" ;;
     resources) need="$need \"seam:app\"" ;;
   esac
+  # Major bump — the assembly finished on the verified major; whether to move to the latest major is the user's call
+  local sax
+  for sax in frontend backend app; do
+    if awk -F'\t' -v a="$sax" '$1==a{f=1} END{exit !f}' "$STALE_TSV" 2>/dev/null; then need="$need \"refresh:$sax\""; fi
+  done
   need="${need# }"; need="${need// /, }"
   if [ -z "$need" ]; then
     if [ -f "$job" ]; then
@@ -547,6 +705,27 @@ try: print(json.dumps(json.load(open('$job')).get('notes')))
 except Exception: print('null')" 2>/dev/null || printf 'null')
   fi
 
+  local stale_json vgap_json
+  vgap_json=$(python3 - "$VGAP_TSV" 2>/dev/null <<'PYVGAP' || printf '[]'
+import json, sys
+rows = [dict(zip(('axis', 'dim', 'value'), l.rstrip('\n').split('\t')))
+        for l in open(sys.argv[1], encoding='utf-8') if l.count('\t') == 2]
+print(json.dumps(rows, ensure_ascii=False))
+PYVGAP
+)
+  stale_json=$(python3 - "$STALE_TSV" 2>/dev/null <<'PYSTALE' || printf '[]'
+import json, sys
+rows = []
+for ln in open(sys.argv[1], encoding='utf-8'):
+    c = ln.rstrip('\n').split('\t')
+    if len(c) < 4:
+        continue
+    c += [''] * (6 - len(c))
+    rows.append({'axis': c[0], 'pkg': c[1], 'majors': c[2], 'latest': c[3],
+                 'premise': c[4] == 'yes', 'files': c[5].split()})
+print(json.dumps(rows, ensure_ascii=False))
+PYSTALE
+)
   mkdir -p "$PROJECT_ROOT/.orangekit"
   { printf '{\n  "status": "pending",\n  "combo": "%s+%s",\n' "${FE:-none}" "${BE:-none}"
     printf '  "need": [%s],\n' "$need"
@@ -554,6 +733,10 @@ except Exception: print('null')" 2>/dev/null || printf 'null')
     printf '  "state": { "frontend": "%s", "backend": "%s", "app": "%s" },\n' "$FE_STATE" "$BE_STATE" "$APP_STATE"
     printf '  "packs": { "frontend": %s, "backend": %s, "app": %s },\n' "$fpack" "$bpack" "$apack"
     printf '  "notes": %s,\n' "$notes"
+    # Major-bump list: axis · package · declared→latest major · latest version · pack premise (fixesVariants) or not · affected resources
+    printf '  "stale": %s,\n' "$stale_json"
+    # Variants the pack does not have — the generator builds only these files and the pack hub, not a whole seam
+    printf '  "variantGaps": %s,\n' "$vgap_json"
     # Audit round counter — stack-guide-generator increments it before launching an audit and stops at 1.
     # Why it lives in a file: so the counter does not reset to 0 when a cut-off session is picked up (prevents endless re-audits)
     printf '  "auditRound": 0,\n'
@@ -569,7 +752,7 @@ except Exception: print('null')" 2>/dev/null || printf 'null')
 run_self_test() {
   local t proj out code=0 pass=0 fail=0
   t=$(mktemp -d) || { printf 'failed to create a temporary directory\n' >&2; exit 2; }
-  trap 'rm -rf "$t"' EXIT
+  trap 'rm -rf "$t" "$STALE_TSV" "$VGAP_TSV"' EXIT
   proj="$t/proj"
 
   local p
@@ -717,6 +900,128 @@ run_self_test() {
   ast=$(_wc generated "")
   _chk "$(_is [ "$ast" != pinned ])" "an installed copy already past the edition of that change is updated → ${ast:-none}"
 
+  # ── Major bump → what is left: refresh:<axis> ─────────────────────────
+  # The assembly finishes on the verified major and leaves the basis for handing the latest-major decision to the user.
+  # If it is not recorded, init has nothing to ask and a stale guide is installed silently — this branch is pinned down
+  if [ -f "$PLUGIN_ROOT/scripts/guide-freshness.sh" ]; then
+    mkdir -p "$t/scripts"; cp "$PLUGIN_ROOT/scripts/guide-freshness.sh" "$t/scripts/"
+    printf 'zod\t5.0.0\n' > "$t/fake-latest.tsv"
+    rm -rf "$proj"; mkdir -p "$proj"
+    out=$(ORANGEKIT_FRESHNESS_FAKE="$t/fake-latest.tsv" CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" \
+          bash "$0" --frontend full --no-cache 2>&1) || true
+    _chk "$(_is grep -q '"refresh:frontend"' "$proj/.orangekit/guide-job.json")" "records a major bump as refresh:frontend in what is left"
+    _chk "$(_is grep -q '"pkg": "zod", "majors": "4→5"' "$proj/.orangekit/guide-job.json")" "  …puts the bumped package and majors into stale"
+    _chk "$(_is grep -q '# A' "$proj/.claude/skills/frontend-guide/resources/a.md")" "  …the assembly still finishes on the verified major"
+    printf 'zod\t4.9.0\n' > "$t/fake-latest.tsv"
+    rm -rf "$proj"; mkdir -p "$proj"
+    out=$(ORANGEKIT_FRESHNESS_FAKE="$t/fake-latest.tsv" CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" \
+          bash "$0" --frontend full --no-cache 2>&1) || true
+    _chk "$(_is [ "$(grep -c 'refresh:' "$proj/.orangekit/guide-job.json" 2>/dev/null || true)" = 0 ])" "leaves no refresh when the major is the same"
+  else
+    printf '  – freshness-record fixture skipped — no guide-freshness.sh (this is **unchecked**)\n'
+  fi
+
+  # ── Pack variants · pack hub ──────────────────────────────────────────
+  # The only path that reaches complete without a seam. A wrong pick installs another auth method's guidance, and folding
+  # an unresolved value into any value does the same silently — pinning down pick · unresolved · contract mismatch
+  local vp="$t/guides/frontend/vp" bn="$t/guides/backend/bn"
+  mkdir -p "$vp/resources" "$vp/variants/auth/self-issued" "$vp/variants/auth/oidc" "$bn/resources"
+  printf '<!-- orangekit-pack: frontend/vp v1.0.0 verified 2026-01-01 zod@4 -->\n# vp\n' > "$vp/PACK.md"
+  printf -- '---\nname: vp\ndescription: x\n---\n# pack hub\n' > "$vp/HUB.md"
+  printf '{\n  "axis": "frontend",\n  "name": "vp",\n  "packVersion": "1.0.0",\n  "wireContract": "http-standard@1",\n  "variants": { "auth": { "self-issued": "self-issued", "oidc": "oidc" } },\n  "pkgs": ["zod@4"],\n  "resources": [ { "file": "a.md", "nav": "A" } ]\n}\n' > "$vp/pack.json"
+  printf '<!-- orangekit-pack: frontend/vp v1.0.0 -->\n# A\n' > "$vp/resources/a.md"
+  printf '<!-- orangekit-pack: frontend/vp v1.0.0 -->\n# Self-issued\n' > "$vp/variants/auth/self-issued/auth-and-session.md"
+  printf '<!-- orangekit-pack: frontend/vp v1.0.0 -->\n# OIDC\n' > "$vp/variants/auth/oidc/auth-and-session.md"
+  printf '<!-- orangekit-pack: backend/bn v1.0.0 verified 2026-01-01 zod@4 -->\n# bn\n' > "$bn/PACK.md"
+  printf '{\n  "axis": "backend",\n  "name": "bn",\n  "packVersion": "1.0.0",\n  "wireContract": "none",\n  "pkgs": ["zod@4"],\n  "resources": [ { "file": "b.md", "nav": "B" } ]\n}\n' > "$bn/pack.json"
+  printf '<!-- orangekit-pack: backend/bn v1.0.0 -->\n# B\n' > "$bn/resources/b.md"
+  _vp() { # $1=authKind $2..=extra args → frontend state
+    local ak="$1"; shift
+    rm -rf "$proj"; mkdir -p "$proj"
+    printf '{ "authKind": "%s" }\n' "$ak" > "$t/notes-vp.json"
+    out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" \
+          bash "$0" --frontend vp --no-freshness --no-cache --notes "$t/notes-vp.json" "$@" 2>&1) || true
+    printf '%s' "$out" | sed -nE 's/.*state: frontend=([a-z]+).*/\1/p' | head -1
+  }
+  local vd="$proj/.claude/skills/frontend-guide"
+  ast=$(_vp self-issued)
+  _chk "$(_is [ "$ast" = complete ])" "with variants resolved and the same contract, the pack hub completes it (0 generated) → ${ast:-none}"
+  _chk "$(_is grep -q 'Self-issued' "$vd/resources/auth-and-session.md")" "  …lays down the variant matching authKind (self-issued)"
+  _chk "$(_is grep -q '"auth-and-session.md"' "$vd/assembly.json")" "  …records the variant file as pack-owned (the basis of cache·retirement verdicts)"
+  ast=$(_vp oidc)
+  _chk "$(_is grep -q 'OIDC' "$vd/resources/auth-and-session.md")" "a different authKind lays down a different variant (oidc)"
+  ast=$(_vp custom)
+  _chk "$(_is [ "$ast" = resources ])" "a variant the pack lacks is not folded into any value but left as a generation target → ${ast:-none}"
+  _chk "$(_is grep -q '"dim": "auth", "value": "custom"' "$proj/.orangekit/guide-job.json")" "  …records what is missing in variantGaps"
+  _chk "$(_is [ ! -f "$vd/resources/auth-and-session.md" ])" "  …lays down no variant at all"
+  # Shell-owned auth — with a hybrid shell (a shell value the pack does not have), the web login variant is not laid down
+  python3 - "$vp/pack.json" <<'PYSO'
+import json, sys
+j = json.load(open(sys.argv[1])); j['variants']['shell'] = {'': None}; j['shellOverrides'] = ['auth']
+json.dump(j, open(sys.argv[1], 'w'), ensure_ascii=False, indent=2)
+PYSO
+  rm -rf "$proj"; mkdir -p "$proj"
+  printf '{ "authKind": "self-issued", "appShell": "rn-native-screens" }\n' > "$t/notes-vp.json"
+  out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" bash "$0" --frontend vp --no-freshness --no-cache --notes "$t/notes-vp.json" 2>&1) || true
+  _chk "$(_is [ ! -f "$vd/resources/auth-and-session.md" ])" "with the shell unresolved, the shell-owned auth variant is not laid down either (shellOverrides)"
+  _chk "$(_is grep -q '"dim": "auth", "value": "self-issued"' "$proj/.orangekit/guide-job.json")" "  …auth is left as a generation target too (variantGaps)"
+  ast=$(_vp self-issued)
+  _chk "$(_is [ "$ast" = complete ])" "web with no shell (empty appShell) still completes with the pack hub → ${ast:-none}"
+  ast=$(_vp self-issued --backend bn)
+  _chk "$(_is [ "$ast" = resources ])" "another axis on a different wire contract (none) means no pack hub → ${ast:-none}"
+  ast=$(_vp self-issued --backend custom)
+  _chk "$(_is [ "$ast" = resources ])" "another axis with no pack (custom) means no pack hub → ${ast:-none}"
+
+  # ── Update runs — protect the consumer's installed copy (4 measured in review) ─────
+  # ① stack-premise pinning read the @1 of wireContract as a package and blocked every rerun as pinned
+  _vp self-issued >/dev/null
+  mkdir -p "$proj/.orangekit"; printf '{ "authKind": "self-issued" }\n' > "$proj/.orangekit/preset-notes.json"
+  out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" bash "$0" --frontend vp --no-freshness --no-cache 2>&1) || true
+  ast=$(printf '%s' "$out" | sed -nE 's/.*state: frontend=([a-z]+).*/\1/p' | head -1)
+  _chk "$(_is [ "$ast" = complete ])" "rerunning a completed installed copy is not pinned (only pkgs are compared) → ${ast:-none}"
+  # ② an update run with no --notes — rereads the variant from preset-notes.json to protect the auth file,
+  #    and when even that is missing (unresolved) it retires nothing
+  _chk "$(_is [ -f "$vd/resources/auth-and-session.md" ])" "  …rechooses the variant from preset-notes.json even without --notes"
+  rm -f "$proj/.orangekit/preset-notes.json"
+  out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" bash "$0" --frontend vp --no-freshness --no-cache --force 2>&1) || true
+  _chk "$(_is [ -f "$vd/resources/auth-and-session.md" ])" "an update run that does not know the variant does not retire the installed variant file"
+  # ③ an installed copy completed by a generated seam — even if the pack gains a file of the same name it is not overwritten, nor is the hub swapped
+  rm -rf "$proj"; mkdir -p "$vd/resources"
+  printf -- '---\nname: frontend-guide\ndescription: x\n---\n# generated hub\n' > "$vd/SKILL.md"
+  printf '# project seam\n' > "$vd/resources/auth-and-session.md"
+  printf '{\n  "axis": "frontend",\n  "pack": "frontend/vp",\n  "packVersion": "1.0.0",\n  "wireContract": "http-standard@1",\n  "seam": null,\n  "packFiles": ["a.md"],\n  "seamFiles": ["auth-and-session.md"]\n}\n' > "$vd/assembly.json"
+  printf '{ "authKind": "self-issued" }\n' > "$t/notes-vp.json"
+  out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" bash "$0" --frontend vp --no-freshness --no-cache --notes "$t/notes-vp.json" 2>&1) || true
+  ast=$(printf '%s' "$out" | sed -nE 's/.*state: frontend=([a-z]+).*/\1/p' | head -1)
+  _chk "$(_is grep -q 'project seam' "$vd/resources/auth-and-session.md")" "does not overwrite a generated seam file with the pack variant (project-owned)"
+  _chk "$(_is grep -q 'generated hub' "$vd/SKILL.md")" "  …does not swap the generated hub for the pack hub"
+  _chk "$(_is grep -q '"seamFiles": \["auth-and-session.md"\]' "$vd/assembly.json")" "  …carries the seam ownership record forward (the next run protects it too) → ${ast:-none}"
+  # ④ a prebuilt seam whose auth method differs from the project is not used
+  mkdir -p "$t/guides/seams/vp+none/frontend/resources"
+  printf '{ "combo": "vp+none", "notes": { "authKind": "oidc" } }\n' > "$t/guides/seams/vp+none/seam.json"
+  printf -- '---\nname: frontend-guide\ndescription: x\n---\n# prebuilt hub\n' > "$t/guides/seams/vp+none/frontend/HUB.md"
+  printf '# prebuilt\n' > "$t/guides/seams/vp+none/frontend/resources/s.md"
+  ast=$(_vp self-issued --seam vp+none)
+  _chk "$(_is [ ! -f "$vd/resources/s.md" ])" "a prebuilt seam with a different auth method is not used (oidc seam ≠ self-issued) → ${ast:-none}"
+  ast=$(_vp oidc --seam vp+none)
+  _chk "$(_is [ -f "$vd/resources/s.md" ])" "  …the same auth method uses it"
+  # ⑤ cache slots split by variant value — a generated seam for another auth method is not received
+  local vc="$t/vcache"
+  mkdir -p "$vc/vp+none@0.0.0/frontend.auth-oidc.shell-rn-webview/resources"
+  printf -- '---\nname: frontend-guide\ndescription: x\n---\n# cached hub\n' > "$vc/vp+none@0.0.0/frontend.auth-oidc.shell-rn-webview/HUB.md"
+  printf '# cached bridge\n' > "$vc/vp+none@0.0.0/frontend.auth-oidc.shell-rn-webview/resources/shell-bridge.md"
+  for ak in self-issued oidc; do
+    rm -rf "$proj"; mkdir -p "$proj"
+    printf '{ "authKind": "%s", "appShell": "rn-webview" }\n' "$ak" > "$t/notes-vp.json"
+    out=$(ORANGEKIT_SEAM_CACHE="$vc" CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" bash "$0" --frontend vp --no-freshness --notes "$t/notes-vp.json" 2>&1) || true
+    if [ "$ak" = self-issued ]; then
+      _chk "$(_is [ ! -f "$vd/resources/shell-bridge.md" ])" "does not receive a cached seam built for another auth method (variant values in the slot name)"
+    else
+      _chk "$(_is [ -f "$vd/resources/shell-bridge.md" ])" "  …the same variant values receive the cache"
+    fi
+  done
+
+
   # ── Gate FAIL → quarantine ──────────────────────────────────────────
   # **This branch moves the user's installation.** Without a fixture for the code that moves it,
   # "alive" cannot be told apart from "working". A seam that makes the gate fail is built to see
@@ -757,6 +1062,18 @@ if [ -n "$SAVE_SEAM" ]; then save_seam "$SAVE_SEAM"; exit 0; fi
 printf 'Guide assembly\n  plugin:  %s\n  project: %s\n\n' "$G" "$PROJECT_ROOT/.claude/skills"
 # undecided (not chosen) is the same as none — no guide is built by guesswork for an undecided axis
 _axis_on() { [ -n "$1" ] && [ "$1" != none ] && [ "$1" != undecided ]; }
+# The pack hub was written for the standard wire contract — use it only when every axis with a pack is on the same HTTP contract.
+# If the other side is BaaS (none) or another contract, that combination is still a combination seam
+HUB_OK=1; _wc0=""
+for _ax in frontend:"$FE" backend:"$BE" app:"$APP"; do
+  _pk="${_ax#*:}"; _ax="${_ax%%:*}"
+  _axis_on "$_pk" || continue
+  # An axis with no pack (custom and the like) has no guarantee it follows the standard contract — that pair's pack hub is not used
+  [ -f "$G/$_ax/$_pk/pack.json" ] || { HUB_OK=0; continue; }
+  _wc=$(pack_contract "$G/$_ax/$_pk")
+  case "$_wc" in none|legacy) HUB_OK=0 ;; esac
+  if [ -z "$_wc0" ]; then _wc0="$_wc"; elif [ "$_wc" != "$_wc0" ]; then HUB_OK=0; fi
+done
 CONTRACT_HOLD=""
 if [ "$FORCE" -eq 0 ]; then
   for _ax in frontend:"$FE" backend:"$BE" app:"$APP"; do

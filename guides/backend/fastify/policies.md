@@ -1,8 +1,8 @@
-<!-- orangekit-pack-policies: backend/fastify v3.33.0 -->
+<!-- orangekit-pack-policies: backend/fastify v3.35.0 -->
 
 # fastify pack — cross-file invariants
 
-The gate checks **whether the pack itself and the seams keep the policies this pack declares**. When the place that declares a policy
+The gate checks **whether the pack itself (the base resources + the auth variants) keeps the policies this pack declares**. When the place that declares a policy
 and the place that enforces it differ and nothing obliges anyone to reconcile the two, the policy survives only as documentation — this file is that obligation.
 
 ## Machine checks (gate `check_policies` · `check_pack_policies`)
@@ -35,17 +35,26 @@ pack", and even if the owning file's check is deleted, a sibling file carrying t
 | `graceful-shutdown` | require | file:operations.md | `process\.once\('SIGTERM'` | — | `process.once('SIGTERM', onSignal)` | `const SIGTERM_GRACE = 10000` | Die without draining and every deploy cuts off in-flight requests |
 | `error-handler-at-root` | require | file:project-structure.md | `setErrorHandler\(errorHandler\)` | — | `app.setErrorHandler(errorHandler)` | `s.setErrorHandler((e, r, reply) => reply.send(e))` | The envelope is emitted in one place, the root. If a child context overrides `setErrorHandler`, only that child's routes emit a different envelope (confirmed by running it) |
 | `vocab-task` | forbid | guide | `\bnotes?\b` | — | `const notes = []` | `creates a note` | Fix the domain vocabulary at `Task`/`tasks`/`task` (issued by L0) |
-| `requireauth-in-route-plugin` | require | seam | `addHook\('onRequest',[[:space:]]*requireAuth\)` | — | `app.addHook('onRequest', requireAuth)` | `export async function requireAuth(req: FastifyRequest)` | **Why the scope is `seam`**: the place that sets the hook is the seam's route plugin. Scope it to `guide` and the definition alone passes, leaving the wiring itself unchecked |
-| `status-from-table` | require | seam | `ERROR_STATUS\[` | — | `const status = ERROR_STATUS[app.code]` | `export const ERROR_STATUS = {` | The place that decides the status is the seam's `errorHandler`. Bypass the table and the same failure goes out with a different code in each place |
+| `requireauth-in-route-plugin` | require | file:api-endpoints.md | `addHook\('onRequest',[[:space:]]*requireAuth\)` | — | `app.addHook('onRequest', requireAuth)` | `export async function requireAuth(req: FastifyRequest)` | The place that sets the hook is the `tasksRoutes` body. **Why the scope is narrowed to that file**: scope it to `guide` and the definition (a variant file) or a principle example (the hub) alone passes, leaving the wiring itself unchecked (seam → pack in 3.35.0) |
+| `status-from-table` | require | file:api-endpoints.md | `ERROR_STATUS\[` | — | `const status = ERROR_STATUS[app.code]` | `export const ERROR_STATUS = {` | The place that decides the status is `errorHandler` alone. Bypass the table and the same failure goes out with a different code in each place (seam → pack in 3.35.0) |
+| `envelope-data` | require | file:api-endpoints.md | `\{[[:space:]]*data:[[:space:]]*task[[:space:]]*\}` | — | `return { data: task }` | `const data = await listTasks(ownerOf(req.user), req.query)` | A single item is a `{ data }` envelope too (contract §1). The counter-example is the list's local variable `data` — it has to be told apart from a single-item handler that returns the row without an envelope |
+| `no-items-envelope` | forbid | guide | `\{[[:space:]]*items[,:[:space:]]` | — | `return { items, nextCursor }` | `({ items: rows, nextCursor: null })` | The list envelope's key is `data` (contract §1). The seam-era `items` was left behind in the pack's tests — the client opens it with one key |
+| `jwt-alg-pinned` | require | file:auth-boundaries.md | `algorithms:[[:space:]]*\[` | — | `jwtVerify(token, key, { algorithms: ['HS256'] })` | `const { payload } = await jwtVerify(token, key)` | The server pins the allowed algorithms — following the token header's `alg` opens algorithm confusion and `none`. Both variants keep it |
+| `no-math-random-token` | forbid | guide | `Math\.random\(` | — | `const token = Math.random().toString(36)` | `const id = Math.random()` | Tokens and salts come from a CSPRNG (`randomBytes` · `randomUUID`) (security vector C5) |
 
-A `scope` of `guide` looks at the whole assembled guide (pack + seam), `pack` at pack files only, `seam` at seam
-files only, and `file:<name>` at that file alone. A `require` is satisfied by at least one occurrence.
-Before assembly (`--pack`), `seam`-scoped policies are undecidable, so **what was skipped is reported explicitly**.
+A `scope` of `guide` looks at the whole assembled guide, `pack` at pack files only, and `file:<name>` at that file
+alone. A `require` is satisfied by at least one occurrence. Since 3.35.0 there are no `seam`-scoped policies — the gate
+assembles and decides per variant combination, so `file:auth-boundaries.md` is checked in each of the two variants.
 
 ## What humans keep (undecidable by machine)
 
 - **Do not answer differently for absence and lack of permission.** Someone else's row is a 404, not a 403. A regex
   cannot see the meaning of a response branch — the tests check it through byte-for-byte identity of the two bodies
+- **Do not put the `requireAuth` hook on `authPlugin`.** It is wrapped in `fp` and attaches to the root, so a hook set
+  there blocks even `/healthz`. A regex cannot see "inside which plugin this `addHook` is" — the `/healthz` 200 in the
+  exhaustive auth boundary test catches it
+- **Do not throw reuse detection inside the transaction.** Throw it and the family invalidation is rolled back. The
+  syntax is the same either way — the "the legitimate copy is 401 too" assertion in `auth.routes.test.ts` catches it
 - **Do not set the auth hook on a sibling plugin.** A machine sees that `addHook` is there, but **whether it is in the
   same context as the routes** can only be known by reading the registration structure. The exhaustive auth boundary
   test in `testing.md` catches this by running

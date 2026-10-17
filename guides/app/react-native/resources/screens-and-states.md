@@ -1,10 +1,10 @@
-<!-- orangekit-pack: app/react-native v1.0.0 -->
+<!-- orangekit-pack: app/react-native v3.35.0 -->
 # Screens and states — the loading·empty·error states · lists · keyboard and safe area
 
 This file owns `src/components/ScreenStates.tsx` and `src/lib/toUserMessage.ts`. The query hook (`useTasksQuery`) and the
-error code table (the values of `ApiError.code`) are functions of the wire contract, so the seam's `api-client.md` owns them, and the
+error code table (the values of `ApiError.code`) are functions of the wire contract, so `api-client.md` owns them, and the
 screen test harness `renderWithProviders` is owned by `config-and-testing.md`. In a hybrid shell, showing state on screens drawn in a
-webview belongs to the web screen axis (which screens are webviews is in the seam's `shell-bridge.md`).
+webview belongs to the web screen axis (which screens are webviews is in `shell-bridge.md`, generated per project).
 
 ## 1. Decision tree — which state is judged first
 
@@ -101,7 +101,7 @@ export function toUserMessage(error: unknown): string {
 }
 ```
 
-The keys of `BY_CODE` are examples — the actual code values follow the error code table in the seam's `api-client.md`. A code that
+The keys of `BY_CODE` are examples — the actual code values follow the error code table in `api-client.md` §1. A code that
 is not in the table folds into the generic message, so the screen does not break.
 
 ## 4. The list screen — three states · infinite scroll · pull to refresh

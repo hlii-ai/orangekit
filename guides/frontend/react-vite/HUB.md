@@ -1,85 +1,82 @@
 ---
 name: frontend-guide
-description: "[Preset: react-vite × aws-container] React 18 + Vite 5 SPA frontend guide covering common-layout extraction, TanStack Query v5 server state, Zustand client state, React Router v7 protected routes, Tailwind styling, and OIDC/Cognito tokens and 401 handling. Use when creating or modifying components, pages, layouts, styling, routing, REST API clients, data fetching, caching, state, or auth/session code. Use ONLY when the active preset matches."
+description: "React 18 + Vite 5 SPA frontend guide: common-layout extraction, TanStack Query v5 server state with cursor pagination, Zustand client state, React Router v7 protected routes, Tailwind styling, a single HTTP client with Bearer tokens and one-shot 401 refresh, and the auth adapter. Use when creating or modifying components, pages, layouts, styling, routing, API clients, data fetching, caching, state, forms, or login/session code."
 ---
-<!-- orangekit-guide-baseline: verified 2026-08-22 react@18 vite@5 typescript@5 react-router@7 @tanstack/react-query@5 zustand@5 tailwindcss@3.4 react-oidc-context@3 oidc-client-ts@3 react-error-boundary@6 sonner@2 msw@2 vitest@3 clsx@2 tailwind-merge@2 eslint-plugin-import@2 -->
+<!-- orangekit-guide-baseline: verified 2026-10-17 react@18 react-dom@18 vite@5 typescript@5 react-router@7 @tanstack/react-query@5 zustand@5 tailwindcss@3.4 react-error-boundary@6 sonner@2 msw@2 vitest@3 clsx@2 tailwind-merge@2 eslint-plugin-import@2 oidc-client-ts@3 @testing-library/react@16 @testing-library/user-event@14 @testing-library/jest-dom@6 -->
 
 # React + Vite SPA Frontend Guide
 
 This guide covers an **SPA that runs only in the browser**. There is no server runtime, so all data comes
-over HTTP from a REST API you operate yourself, and everything that goes into the bundle is assumed to be public.
+over HTTP from your own API, and everything that goes into the bundle is assumed to be public.
+
+If the project has its own API spec (e.g. `dev/docs/api/`), that is canonical, and the wire values in this guide (paths · codes · statuses) are pattern examples.
+The example values follow the standard HTTP contract — success `{ data }` · list `{ data, nextCursor }`, failure
+`{ error: { code, message, details? }, requestId }`, cursor pagination, someone else's resource is 404.
 
 ## Quick Start
-
-> If `dev/docs/api/wire-contract.md` exists, that file is canonical for the envelope, error codes and pagination. If it does not exist and you are building the frontend and backend together from scratch, do steps 1 and 2 of "Inner Order Within One Feature" in `workflow-routing.md` first.
 
 ### Adding a new screen (route)
 
 - [ ] **Search first** in `src/components/common/` and `src/components/layout/` for a shell · form · table to reuse
 - [ ] Add the path to the route-object tree in `src/routes/routes.tsx` — nest it under `RequireAuth` if it needs auth
-- [ ] Put the screen component in `src/features/<feature>/pages/` and code-split it with the route's `lazy`
-- [ ] Fetch data only through the query hooks in `src/features/<feature>/api/` (no `fetch` inside a component)
-- [ ] Render all three states — loading · empty · error (`isPending` / zero items / `isError`)
-- [ ] If you hid UI by permission, implement handling for the server's **403 · 404** responses as well (hiding is only UX)
-- [ ] Write styles as Tailwind utilities, and promote a combination to a shared component on its third repetition
+- [ ] Put the screen in `src/features/<feature>/pages/`, export it as `Component`, and split it with the route's `lazy`
+- [ ] Data only through the query hooks in `src/features/<feature>/api/` — a screen does not call `http` · `fetch`
+- [ ] Render all three states — loading · empty · error (`isPending` → `isError` → zero items)
+- [ ] If you hid UI by permission, handle the server's **403 · 404** responses too (404 means "missing or not yours")
+- [ ] Promote a Tailwind combination to a shared component on its third repetition
 - [ ] Confirm `npm run typecheck && npm run lint && npm run test` passes
 
 ### Adding a new API integration (query/mutation)
 
-- [ ] Check the backend's request/response contract and declare the types + narrowing function in `src/features/<f>/api/tasks.types.ts`
-- [ ] Request functions use only the shared client in `src/api/http.ts` (never assemble the URL or auth header by hand)
-- [ ] Add the query key to the `<feature>Keys` factory (do not scatter string literals across screens)
-- [ ] Lists use cursor pagination — `useInfiniteQuery` (`initialPageParam` · `getNextPageParam`).
-      `page`/`total` do not exist on the backend
-- [ ] Writes use `useMutation` — hook names are `use<Thing>Query` / `use<Thing>Mutation`
-- [ ] In the mutation's `onSuccess`, invalidate the affected keys with `invalidateQueries({ queryKey })`
-- [ ] Branch errors on `error.code` (`UNAUTHENTICATED` is the session, `FORBIDDEN`/`NOT_FOUND` is authorization,
-      `VALIDATION_FAILED` is the per-field message in `details`)
-- [ ] Set `staleTime` to match the nature of the data (the default of 0 refetches every time you return to the screen)
-- [ ] Confirm no secret or signing logic ended up in the frontend (every `VITE_*` is a public value)
+- [ ] Check the wire shape and declare the types + narrowing function (`parseX`) as in `tasks.types.ts` — do not invent fields
+- [ ] Endpoint functions use only `http` from `src/api/http.ts` and pass `parse` (the body goes in `{ body }`)
+- [ ] Add the query key to the `<feature>Keys` factory — the cursor does not go in the key
+- [ ] Lists use `useInfiniteQuery` (`initialPageParam` · `getNextPageParam: (p) => p.nextCursor ?? undefined`) — there is no `page`/`total`
+- [ ] Writes use `useMutation` — on success, `setQueryData` for the detail and `invalidateQueries` for the list
+- [ ] Branch errors on `error.code` — `VALIDATION_FAILED` puts `details` under the fields, `NOT_FOUND` · `FORBIDDEN` are not retried
+- [ ] Do not handle 401 in a screen — the http layer refreshes once and, on failure, sends the user to login
+- [ ] MSW handlers follow the envelope contract too, and every failure test is paired with a passing assertion
 
 ## Architecture Overview
 
 ```
-[Browser SPA]  React 18 · Vite 5 bundle · static hosting    ← an untrusted execution environment
-      │ HTTPS + Authorization: Bearer <access_token>
+[Browser SPA]  React 18 · Vite 5 bundle · static hosting         ← an untrusted execution environment
+      │ HTTPS + Authorization: Bearer <access token>
       ▼
-[REST API]     Hono on ECS/Fargate · behind an ALB          ← the only trust boundary
-      ├── authentication check (JWT signature · issuer · audience · expiry)
-      ├── authorization enforcement (ownership · role) — unauthorized answers 404   ← the frontend only mimics this
-      └── Drizzle ORM → RDS PostgreSQL
-      ▲
-[OIDC Issuer]  Cognito (standard OIDC) — Authorization Code + PKCE
+[HTTP API]     /api/tasks (+ /api/auth/* if self-issued)          ← the only trust boundary
+      ├── token verification (self-issued signing key or IdP JWKS)
+      └── authorization (ownership · role) — someone else's resource is 404, insufficient role is 403
+[Auth adapter] src/auth/session.ts — self-issued or OIDC (PKCE). http knows only getAccessToken · refresh · endSession
 ```
-
-Static hosting **must return `index.html` for every unmatched path**. Without that setting,
-refresh · deep links · `/auth/callback` all become 404s (`resources/routing.md` §6).
 
 | Concern | Owner | The frontend's role |
 | --- | --- | --- |
-| Business rules · validation | API server | It only previews the same rules for UX; the final ruling is the server response |
-| Authorization (who may do what) | API server | Hiding a button · gating a route = convenience. Always handle 403 · 404 |
-| Session · token issuance | OIDC Issuer | Storing · attaching · refreshing · discarding the token |
-| Server data cache | TanStack Query | A single cache. Never duplicated elsewhere |
+| Business rules · validation | API server | Only an advance hint for UX; the final ruling is `VALIDATION_FAILED` |
+| Authorization | API server | Hiding a button · gating a route is convenience. Always handle 403 · 404 |
+| Token issuance · refresh | Server or IdP | Storing (memory/adapter storage) · attaching · one refresh on 401 · discarding |
+| Server data cache | TanStack Query | A single cache. Never duplicated into a store |
 | Screen state | Zustand / URL / `useState` | Only state the server does not know about |
 
-The premise of this stack is that **there is no server code**. There is no escape hatch called "a module that runs only on
-the server", so secrets · signing · policy decisions have no option but to be pushed out to the API server.
+**Minimum supported browsers** — the http client uses `AbortSignal.any` · `AbortSignal.timeout`, so Chrome 116 · Firefox 124 · Safari 17.4 or later. Supporting older browsers requires a polyfill.
 
+Static hosting must return **`index.html` for every unmatched path** — without it, refresh · deep links (and
+the OIDC callback) become 404s (`resources/routing.md` §6). Secrets · signing · policy decisions are all pushed out to the API server.
+
+<!-- pack-slot: directory-structure -->
 ## Directory Structure
 
 ```
 src/
-├── main.tsx                 # createRoot + Provider assembly (Auth · AuthWiring · Query · Router)
+├── main.tsx                 # startSession() + createRoot (Query · Router — no auth Provider)
 ├── config.ts                # the **only** file that reads import.meta.env (exports it typed)
 ├── routes/
-│   ├── routes.tsx           # the route-object tree (single source, includes /auth/callback)
+│   ├── routes.tsx           # the route-object tree (single source, spreads authRoutes)
 │   ├── RootLayout.tsx       # the global shell: header · nav · <Outlet />
 │   └── RequireAuth.tsx      # the auth-gate layout route
 ├── api/
-│   ├── http.ts              # fetch wrapper · envelope parsing · auth header · ApiError normalization
-│   └── tokenProvider.ts     # access-token provider (injected by the auth module)
-├── auth/                    # oidcConfig · AuthWiring · session · endSession · groups · pages/
+│   ├── http.ts              # the only place for raw fetch · envelope parsing · Bearer · 401 refresh
+│   └── queryClient.ts       # the single QueryClient instance (retry policy)
+├── auth/                    # session.ts (adapter) · routes.tsx · pages/ — owned by the auth variant
 ├── features/
 │   └── tasks/
 │       ├── api/             # endpoint functions + query keys + query/mutation hooks
@@ -89,12 +86,14 @@ src/
 │   ├── common/              # UI shared by two or more features ← search here before making a new one
 │   └── layout/              # PageShell · Sidebar · SectionHeader
 ├── stores/                  # Zustand stores (no server data brought in)
-├── lib/                     # cn() · formatters · pure utilities
+├── lib/                     # cn() · safeReturnTo · api/errors.ts (ApiError) · pure utilities
 └── types/                   # types shared by several features
 ```
+<!-- /pack-slot -->
 
 ## Core Principles (6 Key Rules)
 
+<!-- pack-slot: core-principles-axis -->
 ### 1. TanStack Query owns server data — never duplicate it into a global store
 
 Moving a server response into Zustand gives you two caches and leaves you implementing invalidation · refetching ·
@@ -115,10 +114,11 @@ const tasks = useTaskStore((s) => s.tasks);
 If a component `fetch`es directly, the auth header · error normalization · base URL diverge from screen to screen.
 This boundary is **enforced by a lint rule**, not by discipline (see `resources/data-fetching.md`).
 
+The hooks and the client are defined by `resources/data-fetching.md` — a screen knows only what a hook returns.
+
 ```tsx
-// ✅ request function → query hook → component
-export const useTasksQuery = (f: TaskFilter) =>
-  useQuery({ queryKey: taskKeys.list(f), queryFn: () => listTasks(f) });
+// ✅ request function → query hook → component. A screen calls only the hook
+const { data: tasks, isPending, isError } = useTasksQuery(filter);
 
 // ❌ a raw fetch inside a component — the token and the error shape get reinvented here
 const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/tasks`);
@@ -141,20 +141,19 @@ rg -l "rounded-lg border bg-white p-6" src/components    # by class combination
 // ❌ the call site overrides the tokens and the shared component becomes an empty shell
 <Button className="h-11 px-6 text-base font-bold">Delete</Button>
 ```
-
 ### 4. Authorization is not a trust boundary — hiding is UX, blocking is the server
 
-Anyone can download and read the bundle, and a route gate is bypassed from the console. A UI gate is a device
-for "not clicking it by mistake"; the real permission is decided by the API on every request.
+Anyone can read the bundle, and a route gate is bypassed from the console. The real permission is decided by the API on
+every request. In this contract **someone else's resource is 404** (so existence does not leak), and 403 arrives only for an insufficient role —
+a hidden button still needs handling for both of those responses as its pair.
 
 ```tsx
-// ✅ hide it, but trust the server's ruling and handle the failure response
+// ✅ hide it, but trust the server's ruling — 404 is one message, "missing or not yours" (loading-error-states.md §4)
 {canDelete && <Button onClick={remove}>Delete</Button>}
-// mutation.onError: toast.error(toUserMessage(e));
-// this backend returns **someone else's resource as 404** (so existence does not leak). 403 arrives only for an insufficient role
+// mutation onError: toast.error(toUserMessage(e))
 
-// ❌ treating a token claim as "the permission check is done" — defenseless unless the server checks again
-if (jwtDecode(token).role === 'admin') await http.delete(`/tasks/${id}`);
+// ❌ treating a token claim as proof that the permission check is done
+if (jwtDecode(token).role === 'admin') await http.delete(`/api/tasks/${id}`);
 ```
 
 ### 5. There are no secrets in a browser bundle
@@ -188,9 +187,11 @@ return <TaskTable rows={tasks} />;
 // ❌ optional chaining mashes the three states together — error and empty stop being distinguishable
 return <TaskTable rows={data?.pages.flatMap((p) => p.items) ?? []} />;
 ```
+<!-- /pack-slot -->
 
 ## Common Imports
 
+<!-- pack-slot: common-imports-axis -->
 ```tsx
 // React 18
 import { useState, useMemo, useCallback, forwardRef, type ReactNode } from 'react';
@@ -208,20 +209,16 @@ import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousDa
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-// auth (standard OIDC — not a specific IdP SDK)
-import { AuthProvider, useAuth } from 'react-oidc-context';
-import { UserManager, WebStorageStateStore, InMemoryWebStorage } from 'oidc-client-ts';
-
-// error boundary · toast (the packages are pinned — do not use a different one per screen)
-import { ErrorBoundary } from 'react-error-boundary';
-import { toast } from 'sonner';
-
-// project-internal
-import { http, ApiError, type Page } from '@/api/http';
+// project-internal — HTTP · errors · the auth adapter keep the same names regardless of the method
+import { http, type Page } from '@/api/http';
+import { ApiError, type FieldErrors } from '@/lib/api/errors';
+import { useAuth } from '@/auth/session';
 import { config } from '@/config';
 import { cn } from '@/lib/cn';
 ```
+<!-- /pack-slot -->
 
+<!-- pack-slot: component-template -->
 ## Component Template
 
 ```tsx
@@ -261,19 +258,18 @@ TaskCard.displayName = 'TaskCard';
 - React 18 has no automatic ref forwarding — exposing a DOM ref requires `forwardRef`
 - A shared component does not call `useNavigate` · `useQuery` (that blocks reuse)
 - Merge `className` last with `cn()` so the call site can fine-tune spacing only
+<!-- /pack-slot -->
 
 ## Navigation Guide
 
 | What you want to do | File to read |
 | --- | --- |
 | Create a component · extract repeated UI into a shared one · design-token ownership rules | `resources/component-patterns.md` |
-| Fetch list/detail data · query keys · cache invalidation · API client | `resources/data-fetching.md` |
-| Enforce the HTTP call boundary with lint | `resources/data-fetching.md` |
-| Add a route · nested layouts · protected routes · login/callback screens · deep links (history fallback) | `resources/routing.md` |
-| Decide whether to introduce global state · write a Zustand store · optimize subscriptions | `resources/state-management.md` |
 | Write Tailwind classes · define variants · forbidden patterns | `resources/styling.md` |
-| Loading skeletons · empty states · error boundaries · error classification | `resources/loading-error-states.md` |
-| Login/logout · token storage · 401 handling · cache cleanup · swapping the issuer | `resources/auth-and-session.md` |
-| TypeScript configuration · narrowing API types · env variable types | `resources/types-and-testing.md` |
-| Testing components/hooks · HTTP mocking · resetting stores | `resources/types-and-testing.md` |
-| One feature end to end, from list query to create | `resources/complete-example.md` |
+| Decide whether to introduce global state · write a Zustand store · optimize subscriptions · reset stores on logout | `resources/state-management.md` |
+| Add a route · nested layouts · protected routes · validating the return path · URL as state · deep links (history fallback) | `resources/routing.md` |
+| Loading skeletons · empty states · error boundaries · user messages per error code | `resources/loading-error-states.md` |
+| TypeScript configuration · domain types and narrowing responses · env variable types · testing components/hooks · HTTP mocking | `resources/types-and-testing.md` |
+| HTTP client · envelope parsing · 401 refresh · query keys · query/mutation hooks · cache invalidation · HTTP boundary lint | `resources/data-fetching.md` |
+| One feature end to end — cursor list · create (field errors) · status transition · detail 404 · tests | `resources/complete-example.md` |
+| Login/logout · token storage · session restore · login (and callback) screens · single-flight refresh | `resources/auth-and-session.md` |

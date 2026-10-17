@@ -1,13 +1,13 @@
-<!-- orangekit-pack: backend/fastify v3.33.0 verified 2026-10-15 fastify@5 fastify-plugin@5 fastify-type-provider-zod@7 zod@4 drizzle-orm@0.45 drizzle-kit@0.31 pg@8 @types/pg@8 typescript@5 tsx@4 vitest@3 @types/node@24 -->
+<!-- orangekit-pack: backend/fastify v3.35.0 verified 2026-10-15 fastify@5 fastify-plugin@5 fastify-type-provider-zod@7 zod@4 drizzle-orm@0.45 drizzle-kit@0.31 jose@6 @fastify/cookie@11 @fastify/cors@11 @fastify/rate-limit@11 pg@8 @types/pg@8 typescript@5 tsx@4 vitest@3 @types/node@24 -->
 
 # fastify axis pack — hub fragments
 
-These are the **axis-local fragments to insert verbatim** when building the combination hub (`SKILL.md`). A combination that has
-a pre-built seam does not use this file — in that case the seam's `HUB.md` holds the hub in full.
+These are the **axis-local fragments to insert verbatim** when building the hub. Since 3.35.0 this pack carries the
+finished hub `HUB.md` itself (the installer installs it as `.claude/skills/backend-guide/SKILL.md`), and the fragments
+below appear in that hub **character for character** — when you change a fragment, change the same block in `HUB.md` too.
 
 Each fragment sits between `<!-- pack-slot: name -->` and `<!-- /pack-slot -->`, and it closes inside the axis,
-so it holds whatever the frontend axis is. Nothing here is a function of the combination —
-the table at the end of the file states what belongs to the seam.
+so it holds whatever the frontend axis is. The table at the end of the file states what is left to the combination.
 
 <!-- pack-slot: directory-structure -->
 ## Directory Structure
@@ -17,38 +17,30 @@ src/
 ├── index.ts                 # boot only — buildApp() + listen({ host, port }) + signal wiring
 ├── app.ts                   # buildApp(): compilers · error/404 handling · plugin registration (does not listen)
 ├── env.ts                   # the **only** file in app code that reads the process environment (exceptions: test/env · global-setup)
+├── auth-env.ts              # AuthEnvSchema — auth keys (env.ts merges and validates them)
 ├── db/
 │   ├── client.ts            # pg Pool + drizzle singleton — the only pool in this repository
 │   ├── schema.ts            # pgTable definitions — the input to drizzle-kit
+│   ├── auth-schema.ts       # users · refresh_tokens — only with self-issued auth
 │   └── tasks.ts             # query functions. know nothing about HTTP (they take no FastifyRequest · FastifyReply)
-├── schemas/
-│   └── task.ts              # Zod schemas — requests (body · querystring · params) and responses (the serialization boundary)
-├── services/                # domain logic tying several queries together (the transaction boundary) — task-service.ts
+├── schemas/task.ts          # Zod schemas — requests (body · querystring · params) and responses (the serialization boundary)
+├── services/                # the transaction boundary — task-service.ts · auth-service.ts (self-issued)
 ├── http/
-│   ├── app-error.ts         # AppError · ErrorCode — **owned by the seam**
+│   ├── app-error.ts         # AppError · ErrorCode
 │   ├── errors.ts            # the ERROR_STATUS table · toAppError · fieldErrors · SQLSTATE detection
-│   ├── error-handler.ts     # errorHandler — **owned by the seam** (emits the envelope)
-│   ├── require-auth.ts      # requireAuth · AuthUser — **owned by the seam** (onRequest hook)
-│   └── routes/              # route plugins — **owned by the seam** (the pack fixes only the registration point)
-├── ops/
-│   ├── health.ts            # healthz (liveness) · readyz (readiness) · beginDrain
-│   ├── logger.ts            # pino **options** handed to Fastify (not an instance)
-│   └── shutdown.ts          # drain → grace period → app.close() → pool.end()
-└── test/
-    ├── env.ts               # setupFiles — injects TEST_DATABASE_URL + the _test name guard
-    ├── global-setup.ts      # migrations once per run
-    ├── db.ts                # testDb · resetDb · seedTask
-    ├── auth.ts              # authFor — **owned by the seam** (test-only auth header)
-    └── tasks.routes.test.ts # inject route tests — 4 ownership pairs · auth on every registered route
-
-drizzle/                     # drizzle-kit generate output (SQL + meta) — commit it
-drizzle.config.ts            # drizzle-kit config — imports env.ts to get the same validation
+│   ├── error-handler.ts     # errorHandler — emits the envelope (the only place)
+│   ├── require-auth.ts      # requireAuth · AuthUser — onRequest hook (differs per auth variant)
+│   ├── auth-plugin.ts       # authPlugin — CORS (+ /api/auth if self-issued). no requireAuth hook
+│   └── routes/tasks.ts      # tasksRoutes — /api/tasks
+├── ops/                     # health.ts (healthz · readyz · beginDrain) · logger.ts (pino **options**) · shutdown.ts
+└── test/                    # env.ts (_test guard · auth test keys) · global-setup.ts (migrations) · db.ts
+                             # auth.ts (authFor — synchronous) · *.test.ts (inject + real DB)
+drizzle/ · drizzle.config.ts # generate output SQL (commit it) · the config imports env.ts to get the same validation
 vitest.config.ts             # defineConfig from 'vitest/config' · fileParallelism: false
 ```
 
-**Layering flows in one direction only**: `routes → services → db`. The one exception is `http/app-error.ts` —
-`AppError` is a pure error class that knows nothing about HTTP (`ERROR_STATUS` maps the status separately), so the
-data layer throwing it does not invert the dependency.
+**Layering flows in one direction only**: `routes → services → db`. The one exception is `http/app-error.ts` — `AppError`
+is a pure error class that knows nothing about HTTP status, so the data layer throwing it does not invert the dependency.
 <!-- /pack-slot -->
 
 <!-- pack-slot: architecture-overview -->
@@ -61,20 +53,20 @@ parent context. This one paragraph decides the auth boundary on this axis — pr
 
 **What goes at the root and what goes in a plugin**:
 
-| root (`buildApp`) | route plugin (seam) |
+| root (`buildApp`) | route plugin (`tasksRoutes`) |
 | --- | --- |
 | `setValidatorCompiler` · `setSerializerCompiler` — children inherit them | `app.addHook('onRequest', requireAuth)` — only this context's routes |
 | `setErrorHandler(errorHandler)` · `setNotFoundHandler` | route declarations and their `schema` |
-| `/healthz` · `/readyz` — outside auth | domain-specific hooks |
+| `/healthz` · `/readyz` — outside auth · `authPlugin` (CORS) · the `x-request-id` hook | domain-specific hooks |
 
 **Data access is a module, not a decorator.** `db` is not carried with `app.decorate('db', …)` but imported from
 `src/db/client.ts` — principle 6 holds only if query functions do not take the app instance.
 
 **Module resolution is `bundler`** — relative imports carry no extension (`'./errors'`). `tsx` runs the code.
 
-**Files owned by the seam**: `http/app-error.ts` · `http/error-handler.ts` · `http/require-auth.ts` ·
-`http/routes/`. Leave the paths unpinned and the pack's `import { AppError } from './app-error'` dangles after
-assembly.
+**Auth is a variant.** The **paths and export names** of `require-auth.ts` · `auth-plugin.ts` · `auth-env.ts` are
+fixed, and only their bodies differ by auth method (self-issued · OIDC) — so every other file compiles unchanged
+whichever variant is in place.
 <!-- /pack-slot -->
 
 <!-- pack-slot: core-principles-axis -->
@@ -128,7 +120,7 @@ the root and even `/healthz` is blocked. Set it inside the route plugin.
 // ❌ The auth plugin and the route plugin are siblings — the hook does not reach tasksRoutes
 app.register(async (s) => { s.addHook('onRequest', requireAuth) })
 app.register(tasksRoutes, { prefix: '/api/tasks' })
-// ✅ src/http/routes/tasks.ts (owned by the seam) — the first line of the route plugin body, the same context as the routes
+// ✅ src/http/routes/tasks.ts — the first line of the route plugin body, the same context as the routes
 app.addHook('onRequest', requireAuth)
 ```
 
@@ -149,7 +141,7 @@ A handler does not write a failure with `reply.code(404).send(...)`; it **throws
 `ERROR_STATUS`, decides the status, and one place, the root `errorHandler`, decides the envelope.
 
 ```ts
-// src/http/routes/tasks.ts (owned by the seam)
+// src/http/routes/tasks.ts
 // ❌ The handler builds the status and the envelope itself — the same failure goes out in a different shape in each place
 if (!task) return reply.code(403).send({ error: 'not yours' })
 // ✅ Throw only the domain code
@@ -167,7 +159,7 @@ extension.** Pick only the lines each file needs, and **the comments decide in w
 // Libraries
 import Fastify from 'fastify'                                   // only in src/app.ts
 import type { FastifyReply, FastifyRequest } from 'fastify'      // only in http/ · ops/ — forbidden in db/
-import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'  // route plugins (seam)
+import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'  // route plugins
 import { z } from 'zod'                                          // src/schemas/* · src/env.ts · db/tasks (cursor) · route response wrappers
 import { and, desc, eq, lt, or, sql } from 'drizzle-orm'         // src/db/* · ops/health (sql)
 
@@ -176,16 +168,16 @@ import { env } from '../env'                                     // any layer
 import { db, pool } from '../db/client'                          // src/db/* · services · ops/health · shutdown · test/
 import { tasks } from '../db/schema'                             // src/db/* · services · test/
 import { listTasks, getTask, insertTask, updateTask, deleteTask, encodeCursor } from '../db/tasks'  // services · routes
-import { TaskCreateSchema, TaskUpdateSchema, TaskQuerySchema, TaskParamsSchema, TaskViewSchema } from '../schemas/task'  // routes (seam)
+import { TaskCreateSchema, TaskUpdateSchema, TaskQuerySchema, TaskParamsSchema, TaskViewSchema } from '../schemas/task'  // routes
 import type { TaskCreate, TaskUpdate, TaskQuery, TaskView } from '../schemas/task'  // services · queries
-import { ERROR_STATUS, toAppError, errorLogFields } from '../http/errors'  // only in errorHandler (seam)
+import { ERROR_STATUS, toAppError, errorLogFields } from '../http/errors'  // only in errorHandler
 import { healthz, readyz } from '../ops/health'                  // only in src/app.ts
 import { AppError } from '../http/app-error'                     // any layer may throw it
-import { requireAuth } from '../http/require-auth'               // only in route plugins (seam)
+import { requireAuth, type AuthUser } from '../http/require-auth'  // only in route plugins
+import { authFor } from './auth'                                  // only in src/test/*
 ```
 
-`AppError` · `errorHandler` · `requireAuth` are **owned by the seam, but the axis pins their paths.** `AuthUser` ·
-`tasksRoutes` are only defined by the seam, so they are not here.
+`errorHandler` · `tasksRoutes` · `authPlugin` are imported only by `buildApp`, so they are not here (`src/app.ts`).
 <!-- /pack-slot -->
 
 <!-- pack-slot: http-status-and-antipatterns -->
@@ -204,6 +196,7 @@ they disagree, `ERROR_STATUS` wins.
 | 403 | `FORBIDDEN` | only for refusing an action (missing role) on a resource **whose existence is already known** |
 | 404 | `NOT_FOUND` | absence **and** someone else's ownership · a missing route |
 | 409 | `CONFLICT` | unique violation — SQLSTATE `23505` |
+| 429 | `RATE_LIMITED` | login · refresh limits on the self-issued variant's `/api/auth` (other routes when the project adds them) |
 | 413 | `PAYLOAD_TOO_LARGE` | over `bodyLimit` — `FST_ERR_CTP_BODY_TOO_LARGE` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | a Content-Type with no parser — `FST_ERR_CTP_INVALID_MEDIA_TYPE` |
 | 500 | `INTERNAL` | everything else · response schema mismatch (`FST_ERR_RESPONSE_SERIALIZATION`). The cause goes to the log only |
@@ -224,12 +217,20 @@ they disagree, `ERROR_STATUS` wins.
 | `db.insert(...)` inside a transaction callback | it goes out on another connection and **is not rolled back** — query only through the callback argument `tx` <!-- verified: drizzle-orm@0.45.4 — writing through db instead of tx left 1 row after the rollback --> |
 | taking the sort column via `sql.raw(\`… ${column}\`)` | `sql.raw` does not escape — narrow the sort column with an allowlist |
 | request logging with `console.log` | no request correlation (`reqId`), no level, no redact. Use `req.log` |
+| a list response as `{ items }`, a single item as a bare object | contract v1 is `{ data, nextCursor }` · `{ data }` — the client opens both with one function |
 <!-- /pack-slot -->
 
 ## What the seam fills in
 
-| slot | why it is a function of the combination |
+In 3.35.0 three slots (`api-endpoints` · `auth-boundaries` · `complete-example`) moved into the pack — the pack fills
+them on the premise of the wire contract http-standard@1. The auth method is handled by `variants/auth/`
+(`self-issued` · `oidc`).
+
+| slot | now |
 | --- | --- |
-| `api-endpoints` | route plugin shape + request/response envelope. The wire contract decides the envelope |
-| `auth-boundaries` | how the token is verified depends on whether the frontend axis has a server runtime |
-| `complete-example` | a pass through migration → table → query → service → route plugin → inject test |
+| `api-endpoints` | `resources/api-endpoints.md` (pack) |
+| `auth-boundaries` | `variants/auth/<method>/auth-boundaries.md` + `auth-flows.md` (pack variant) |
+| `complete-example` | `resources/complete-example.md` (pack) |
+
+Nothing is left to the combination. A project that authenticates with a session cookie alone (no Bearer) is outside
+contract §6, so it generates a combination seam.

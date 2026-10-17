@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-container v3.34.0 verified 2026-08-22 hono@4 @hono/node-server@1 typescript@5 drizzle-orm@0.45 drizzle-kit@0.31 pg@8 jose@5 zod@4 vitest@2 aws-cdk-lib@2 @aws-sdk/client-s3@3 @aws-sdk/s3-request-presigner@3 -->
+<!-- orangekit-pack: backend/aws-container v3.35.0 verified 2026-08-22 hono@4 @hono/node-server@1 typescript@5 drizzle-orm@0.45 drizzle-kit@0.31 pg@8 jose@5 zod@4 vitest@2 aws-cdk-lib@2 @aws-sdk/client-s3@3 @aws-sdk/s3-request-presigner@3 @types/node@22 -->
 
 # aws-container axis pack — hub fragments
 

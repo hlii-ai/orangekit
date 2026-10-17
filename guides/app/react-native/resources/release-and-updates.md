@@ -1,9 +1,9 @@
-<!-- orangekit-pack: app/react-native v1.0.0 -->
+<!-- orangekit-pack: app/react-native v3.35.0 -->
 # Release and updates — EAS Build profiles · the OTA boundary · runtimeVersion · forced updates
 
 This file owns `eas.json`, the `runtimeVersion`·`updates` fields of `app.config.ts`, the OTA apply flow, and `src/lib/appVersion.ts`.
 Code that reads environment values is owned by `config-and-testing.md` (`src/config.ts`) — here per-profile values are only **put** into `eas.json`.
-**The API that hands down the minimum supported version** is a backend contract (the API version negotiation slot), and that call is owned by the seam's `api-client.md` —
+**The API that hands down the minimum supported version** is a backend contract (the API version negotiation slot), and that call is made with `api-client.md`'s `http` —
 the pack supplies only the function that judges the received string.
 
 ## 1. Decision tree — does it ship over OTA, or does it need a store build
@@ -176,7 +176,7 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { isUpdateRequired } from '@/lib/appVersion';
 
-// minSupported: the seam receives it through the backend contract (the API version negotiation slot) and passes it in. null = not known yet → do not decide
+// minSupported: received through the backend contract (the API version negotiation slot) and passed in. null = not known yet → do not decide
 function useForceUpdateGate(minSupported: string | null): void {
   useEffect(() => {
     if (minSupported === null) return;

@@ -1,29 +1,30 @@
-<!-- orangekit-pack: frontend/react-vite v3.12.0 verified 2026-08-22 react@18 vite@5 typescript@5 react-router@7 @tanstack/react-query@5 zustand@5 tailwindcss@3.4 react-error-boundary@6 sonner@2 msw@2 vitest@3 clsx@2 tailwind-merge@2 eslint-plugin-import@2 -->
+<!-- orangekit-pack: frontend/react-vite v3.35.0 verified 2026-10-17 react@18 react-dom@18 @types/react@18 @types/react-dom@18 vite@5 typescript@5 react-router@7 @tanstack/react-query@5 zustand@5 tailwindcss@3.4 react-error-boundary@6 sonner@2 msw@2 vitest@3 @testing-library/react@16 @testing-library/dom@10 @testing-library/user-event@14 @testing-library/jest-dom@7 clsx@2 tailwind-merge@2 eslint-plugin-import@2 oidc-client-ts@3 -->
 
 # react-vite axis pack — hub fragment
 
-This is the **axis-local fragment to be inserted verbatim** when building a combination hub (`SKILL.md`). A combination that has a
-pre-built seam does not use this file — in that case the seam's `HUB.md` holds the full hub text.
+This is the **axis-local fragment to be inserted verbatim** when building a hub (`SKILL.md`). From v3.35.0 this pack assumes the standard <!-- verified: this pack's pack.json packVersion 3.35.0 change -->
+contract (`http-standard`) and has its own full hub text in `HUB.md`, and for a combination where the auth variant resolves, the installer
+lays that file down as is — these fragments are contained in `HUB.md` **character for character**. This file is used directly
+only by a combination whose variant does not resolve so the hub has to be generated (a hybrid app shell), and by pre-built seams.
 
 Each fragment sits between `<!-- pack-slot: name -->` and `<!-- /pack-slot -->`, and is closed
-inside the axis, so it holds whatever the backend axis turns out to be. Nothing here is a function of the combination —
-the table at the end of the file states what belongs to the seam.
+inside the axis, so it holds whatever the backend axis turns out to be. The table at the end of the file states what generation fills in.
 
 <!-- pack-slot: directory-structure -->
 ## Directory Structure
 
 ```
 src/
-├── main.tsx                 # createRoot + Provider assembly (Auth · AuthWiring · Query · Router)
+├── main.tsx                 # startSession() + createRoot (Query · Router — no auth Provider)
 ├── config.ts                # the **only** file that reads import.meta.env (exports it typed)
 ├── routes/
-│   ├── routes.tsx           # The route object tree (single source, includes /auth/callback)
+│   ├── routes.tsx           # The route object tree (single source, spreads authRoutes)
 │   ├── RootLayout.tsx       # Global shell: header · nav · <Outlet />
 │   └── RequireAuth.tsx      # The auth gate layout route
 ├── api/
-│   ├── http.ts              # fetch wrapper · envelope parsing · auth header · ApiError normalization
-│   └── tokenProvider.ts     # Access token provider (injected by the auth module)
-├── auth/                    # oidcConfig · AuthWiring · session · endSession · groups · pages/
+│   ├── http.ts              # The only place for raw fetch · envelope parsing · Bearer · 401 refresh
+│   └── queryClient.ts       # The single QueryClient instance (retry policy)
+├── auth/                    # session.ts (adapter) · routes.tsx · pages/ — owned by the auth variant
 ├── features/
 │   └── tasks/
 │       ├── api/             # Endpoint functions + query keys + query/mutation hooks
@@ -33,7 +34,7 @@ src/
 │   ├── common/              # UI shared by two or more features ← search here before making a new one
 │   └── layout/              # PageShell · Sidebar · SectionHeader
 ├── stores/                  # Zustand stores (server data must not be brought in)
-├── lib/                     # cn() · formatters · pure utilities
+├── lib/                     # cn() · safeReturnTo · api/errors.ts (ApiError) · pure utilities
 └── types/                   # Types shared by several features
 ```
 <!-- /pack-slot -->
@@ -59,8 +60,7 @@ const tasks = useTaskStore((s) => s.tasks);
 When a component calls `fetch` itself, the auth header·error normalization·base URL diverge screen by screen.
 This boundary is **enforced by a lint rule**, not by discipline (see `resources/data-fetching.md`).
 
-The hooks themselves are **defined by the seam** (`requires` in `ledger.md`) — what this axis owns is how a screen
-consumes them. Put the definition here and there would be two of them, one in the seam and one here.
+The hooks and the client are defined by `resources/data-fetching.md` — a screen knows only what a hook returns.
 
 ```tsx
 // ✅ Request function → query hook → component. The screen calls only the hook
@@ -87,6 +87,21 @@ rg -l "rounded-lg border bg-white p-6" src/components    # by class combination
 // ❌ The call site overrides the tokens and the shared component becomes an empty shell
 <Button className="h-11 px-6 text-base font-bold">Delete</Button>
 ```
+### 4. Authorization is not a trust boundary — hiding is UX, blocking is the server
+
+Anyone can read the bundle, and a route gate is bypassed from the console. The real permission is decided by the API on
+every request. In this contract **someone else's resource is 404** (so existence does not leak), and 403 arrives only for an insufficient role —
+a hidden button still needs handling for both of those responses as its pair.
+
+```tsx
+// ✅ hide it, but trust the server's ruling — 404 is one message, "missing or not yours" (loading-error-states.md §4)
+{canDelete && <Button onClick={remove}>Delete</Button>}
+// mutation onError: toast.error(toUserMessage(e))
+
+// ❌ treating a token claim as proof that the permission check is done
+if (jwtDecode(token).role === 'admin') await http.delete(`/api/tasks/${id}`);
+```
+
 ### 5. There are no secrets in a browser bundle
 
 `VITE_*` variables are inlined as strings at build time and stay in the bundle as they are. API keys·signing keys·
@@ -138,7 +153,10 @@ import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousDa
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-// Project-internal (only what this pack owns — the HTTP client is appended by the seam)
+// project-internal — HTTP · errors · the auth adapter keep the same names regardless of the method
+import { http, type Page } from '@/api/http';
+import { ApiError, type FieldErrors } from '@/lib/api/errors';
+import { useAuth } from '@/auth/session';
 import { config } from '@/config';
 import { cn } from '@/lib/cn';
 ```
@@ -186,12 +204,13 @@ TaskCard.displayName = 'TaskCard';
 - Merge `className` last with `cn()` so the call site can fine-tune spacing and nothing more
 <!-- /pack-slot -->
 
-## What the seam fills in — what this pack does not have
+## What generation fills in — only for combinations that cannot use the pack hub
 
-| Hub slot | Why it is a function of the combination |
-| --- | --- |
-| Architecture Overview | The trust boundary and the data source depend on the backend axis |
-| The 2 Quick Start checklists | The pagination model·error code branching depend on the wire contract |
-| Core Principle "authorization is not a trust boundary" | The principle is universal, but **whether an unauthorized response is 403 or 404** depends on the backend axis. This rule is mandatory |
-| The HTTP client·auth rows of Common Imports | The authentication method and envelope parsing depend on the backend axis |
-| Navigation Guide | `pack.json` supplies the pack resource rows, and the seam adds the seam resource rows |
+From v3.35.0 the slots below are filled by `HUB.md` (assuming the standard contract): <!-- verified: this pack's pack.json seamSlots [] --> Architecture Overview · the 2 Quick Start
+checklists · Core Principle 4 "Authorization is not a trust boundary" (included in the fragment above) · the HTTP · auth rows of
+Common Imports (included in the fragment above) · Navigation Guide. Generation remains only when the variant does not resolve.
+
+| Remaining place | When | What must be upheld |
+| --- | --- | --- |
+| `resources/auth-and-session.md` + hub | Hybrid app shell (`appShell` = `rn-webview` etc.) — `shellOverrides` | The web receives the token from the native bridge. Keep the shape of the adapter rows in the ledger's provides (`getAccessToken` · `refresh` · `endSession` · `useAuth` · `startSession` · `authRoutes`) exactly — `http.ts` calls only the first three |
+| The whole hub | When the opposite axis has a different wire contract | Insert this file's fragments as is; the contract difference is carried by a seam that overrides `data-fetching.md` |

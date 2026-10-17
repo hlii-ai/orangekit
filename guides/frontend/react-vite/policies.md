@@ -1,4 +1,4 @@
-<!-- orangekit-pack-policies: frontend/react-vite v3.12.0 -->
+<!-- orangekit-pack-policies: frontend/react-vite v3.35.0 -->
 
 # react-vite pack — cross-file invariants
 
@@ -18,11 +18,16 @@ section. Count prose and anti-pattern examples and every hit is a false positive
 | `http-only-in-api-layer` | forbid | guide | `\bfetch\(` | `data-fetching.md` | `const res = await fetch('/api/tasks')` | `const res = await window.fetch(url)` | A raw `fetch` belongs only in the HTTP client module. When a screen calls it directly, the auth header·error normalization·base URL diverge |
 | `no-secret-env-prefix` | forbid | guide | `VITE_[A-Z_]*(SECRET\|PASSWORD\|PRIVATE\|CREDENTIAL)` | — | `VITE_SESSION_SECRET` | `VITE_STRIPE_PRIVATE_KEY` | `VITE_*` is inlined into the bundle at build time. The prefix is not protection |
 | `no-server-data-in-store` | forbid | guide | `set\(\{[^}]*\b(tasks\|items\|rows)\b` | — | `set({ tasks: data })` | `set({ list: rows })` | Copying a server response into Zustand gives you two caches. Server state is owned solely by the query cache |
-| `return-to-validated` | require | guide | `navigate\(safeReturnTo\(` | — | `navigate(safeReturnTo(params.get('returnTo')))` | `export function safeReturnTo(raw: unknown)` | A return path must always pass through this before it reaches `navigate`. `//host`·`/\host` are not stopped by a prefix check |
+| `return-to-validated` | require | file:auth-and-session.md | `navigate\(safeReturnTo\(` | — | `navigate(safeReturnTo(params.get('returnTo')))` | `export function safeReturnTo(raw: unknown)` | A return path must always pass through this before it reaches `navigate`. `//host`·`/\host` are not stopped by a prefix check. **Why the scope is narrowed to the auth adapter file** (v3.35.0): the actual return navigation exists only in that file's login · callback screens — leave it at `guide` and an explanatory line in `routing.md` satisfies it, so it passes even when the validation is deleted from the adapter |
 | `three-states` | require | guide | `if \(isPending` | — | `if (isPending) return <ListSkeleton />` | `const { data, isPending } = useQuery(opts)` | A data screen renders all three states: loading·empty·error |
+| `token-not-in-web-storage` | forbid | guide | `(localStorage\|sessionStorage)\.setItem\([^)]*[Tt]oken` | — | `localStorage.setItem('accessToken', token)` | `sessionStorage.setItem("id_token", t)` | Do not write a token to web storage directly — a single XSS reads it. Self-issued keeps it in memory, OIDC leaves it to the `userStore` of `oidc-client-ts` (the cost of that choice is the table in adapter §1) |
+| `refresh-single-flight` | require | file:auth-and-session.md | `inflight \?\?=` | — | `inflight ??= userManager.signinSilent()` | `inflight = userManager.signinSilent()` | Refresh is single-flight. If three concurrent 401s each refresh, reuse detection on a rotating refresh token logs out a legitimate user. Every variant uses this shape |
+| `retry-once-on-401` | require | file:data-fetching.md | `!retried &&` | — | `if (res.status === 401 && init.auth !== false && !retried && (await refresh()))` | `if (res.status === 401 && (await refresh()))` | Contract §5: 401 → one refresh → the original request once. Without a flag pinning the depth, a server that keeps returning 401 even after a successful refresh produces an infinite loop |
 
 When `scope` is `guide`, the verdict is made over the whole assembled guide (pack + seam). When it is `seam`, only
 the seam files are examined. `require` is satisfied by at least one occurrence after assembly.
+`file:<name>` looks at that one resource only — pointing it at a variant file (`auth-and-session.md`) judges it against
+the variant installed for each combination.
 
 **The `proof example` column is mandatory** (the gate FAILs without it). Write one string the regex actually
 catches. The gate asserts two things: ① does the example match its own regex — if it does not, it is a dead regex

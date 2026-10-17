@@ -1,4 +1,4 @@
-<!-- orangekit-seam: react-vite+aws-container/backend v3.34.0 -->
+<!-- orangekit-seam: react-vite+aws-container/backend v3.35.0 -->
 # API endpoints and error handling
 
 Covers the standard shape of a Hono 4 route, the request/response contract, status code mapping, and global error handling.
@@ -122,7 +122,7 @@ The owner is always `c.get('user').sub`. An `ownerId` carried in the body or que
 
 With `offset`, inserted rows shift the items and produce duplicates and omissions. Use a `(created_at, id)` tuple cursor.
 
-- The canonical definition of the request schema `ListTasksQuery` (`limit` · `cursor` · `archived`) is in
+- The canonical definition of the request schema `ListTasksQuery` (`limit` · `cursor` · `archived` · `status`) is in
   `resources/input-validation.md` — it is not declared again here
 - `cursor` is `base64url("<iso>|<uuid>")` and is **a string with an upper bound (`.max(200)`)**.
   The cursor is also a client-supplied value, so it needs a length limit and decode-failure handling (400)
@@ -142,6 +142,25 @@ With `offset`, inserted rows shift the items and produce duplicates and omission
 | `INTERNAL` | 500 | unexpected exception | `onError` |
 
 Pick codes from this table only. If you need a new one, add it to the table first — it is the contract the SPA branches on.
+
+## Paths the router does not handle go out in the same envelope
+
+Hono does not return 405 for a request whose method does not match (`PUT /api/tasks`) — even when the path matches, a different
+method **counts as a match failure and goes to `app.notFound(notFound)`.** So there is no need to build a 405 separately,
+and as long as `notFound` emits our envelope, the two paths give the same response.
+
+| path | where it is handled | response |
+| --- | --- | --- |
+| a missing path (`GET /api/nope`) | `app.notFound(notFound)` | 404 `NOT_FOUND` |
+| a method that is not allowed (`PUT /api/tasks`) | Hono sends it to the same `notFound` instead of a 405 | 404 `NOT_FOUND` |
+| the body limit exceeded | `bodyLimit`'s `onError` → `AppError` | 413 `PAYLOAD_TOO_LARGE` |
+| an uncaught exception | `app.onError(onError)` | 500 `INTERNAL` |
+
+- Without `app.notFound()` registered, Hono's default **`text/plain` "404 Not Found"** goes out and
+  the SPA's JSON parse fails on that path alone — `notFound` emits an envelope that carries `requestId` too
+- A method error under `/api/*` passes `requireAuth` first, so **a `PUT` with no token is a 401**.
+  Authenticated requests get the 404 — an order that does not reveal path existence to unauthenticated users
+- A CORS preflight (`OPTIONS`) is answered first by `cors()`, so it is not covered by this table
 
 ## AppError and global handling (`src/http/errors.ts`)
 
@@ -246,6 +265,7 @@ violation (400), `22P02` invalid text→type conversion (400 — usually Zod sho
 | `c.req.param('id')` vs `c.req.query('id')` | A path segment is `param`, `?id=` is `query`. Both are strings, so parse them with Zod |
 | Using `await c.req.json()` directly | With a missing body or broken JSON it simply throws → wrap it in `jsonBody(c, Schema)` to produce the 400 envelope |
 | `c.req.query()` vs `c.req.queries()` | A single value is `query()`; a repeated key (`?tag=a&tag=b`) gives an array through `queries()` |
+| Building a 405 yourself for a method mismatch | Hono does not return 405; it sends it to `notFound` — contract §7 allows 404, so leave it as is |
 | `throw new HTTPException(404)` | That is a framework error — throw an `AppError` for a domain failure so `code` matches the contract |
 | `app.use(mw)` vs `app.use('/api/*', mw)` | A pathless `use` applies to every path → even the health check gets authentication and the ALB kills the task |
 | Mounting a public route behind `requireAuth` | It deadlocks: you have to sign in to get the login URL → register `/api/auth` **before** `requireAuth` |

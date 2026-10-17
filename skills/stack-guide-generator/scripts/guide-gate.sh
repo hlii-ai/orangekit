@@ -1719,8 +1719,72 @@ check_pack_contract() {
   return 0
 }
 
+# ── Variant combinations · pack hub ─────────────────────────────────────
+# A pack with variants (variants/<dimension>/<directory>/) is **not a complete unit on its base resources alone** —
+# the ledger's provides live in variant files and the hub points at those files. So each variant combination is
+# assembled in the same shape as an installed copy and run through ① the pack check (--pack) and ② the guide check
+# (--guide — hub structure·Navigation coverage). If any combination FAILs the pack FAILs — a consumer receives that combination.
+run_pack_combos() {
+  local P="$1" name; name=$(basename "$P")
+  printf "\n${C_D}guide-gate --pack${C_0}  %s  (assembly check per variant combination)\n" "$P"
+  local combos; combos=$(python3 - "$P" <<'PYCOMBO'
+import itertools, json, os, sys
+P = sys.argv[1]
+vs = json.load(open(os.path.join(P, 'pack.json'))).get('variants') or {}
+dims = sorted(vs)
+choices = [sorted({d for d in vs[k].values()}, key=lambda x: (x is None, x or '')) for k in dims]
+for combo in itertools.product(*choices) if dims else [()]:
+    print(' '.join(f"{k}={v if v is not None else '-'}" for k, v in zip(dims, combo)) or 'base')
+PYCOMBO
+) || { bad "could not read pack.json variants"; return; }
+  local label i=0 cdir gdir axis out code
+  axis=$(grep -m1 -oE '"axis"[[:space:]]*:[[:space:]]*"[^"]+"' "$P/pack.json" | sed -E 's/.*"([^"]+)"$/\1/')
+  while IFS= read -r label; do
+    [ -z "$label" ] && continue
+    i=$((i+1)); cdir="$TMP/combo$i/$name"; gdir="$TMP/combo$i-guide/$axis-guide"
+    mkdir -p "$cdir/resources" "$gdir/resources"
+    cp "$P"/*.md "$P/pack.json" "$cdir/" 2>/dev/null
+    cp "$P"/resources/*.md "$cdir/resources/" 2>/dev/null
+    local kv dim dir f extra=""
+    for kv in $(printf '%s' "$label" | tr ' ' '\n'); do
+      dim="${kv%%=*}"; dir="${kv#*=}"
+      [ "$kv" = base ] || [ "$dir" = "-" ] && continue
+      for f in "$P/variants/$dim/$dir"/*.md; do
+        [ -f "$f" ] || continue
+        cp "$f" "$cdir/resources/"; extra="$extra
+$(basename "$f")"
+      done
+    done
+    # Put the variant files into the assembled copy's resources[] — the diff check between real files and declarations must know them
+    python3 - "$cdir/pack.json" "$extra" <<'PYRES'
+import json, sys
+p, extra = sys.argv[1], [x for x in sys.argv[2].split('\n') if x]
+j = json.load(open(p))
+have = {r['file'] for r in j.get('resources', [])}
+j['resources'] = j.get('resources', []) + [{'file': f, 'nav': 'variant'} for f in extra if f not in have]
+json.dump(j, open(p, 'w'), ensure_ascii=False, indent=2)
+PYRES
+    sec "variant combination [$label]"
+    code=0; out=$(ORANGEKIT_GATE_COMBO="$label" bash "$0" --pack "$cdir" 2>&1) || code=$?
+    if [ "$code" -eq 0 ]; then ok "pack check passed — $(printf '%s' "$out" | grep -E 'pass [0-9]+ ·' | tail -1 | sed 's/^ *//')"
+    else bad "pack check FAIL" "$(printf '%s' "$out" | grep '✗' | head -4 | sed 's/^ *//' | tr '\n' ';')"; fi
+    if [ -f "$P/HUB.md" ]; then
+      awk -v nm="$axis-guide" 'NR==1&&$0=="---"{print;fm=1;next} fm&&/^name:/{print "name: " nm;next} fm&&$0=="---"{fm=0} {print}' "$P/HUB.md" > "$gdir/SKILL.md"
+      cp "$cdir"/resources/*.md "$gdir/resources/"
+      code=0; out=$(ORANGEKIT_GATE_COMBO="$label" bash "$0" --guide "$gdir" 2>&1) || code=$?
+      if [ "$code" -eq 0 ]; then ok "hub assembly check passed — $(printf '%s' "$out" | grep -E 'pass [0-9]+ ·' | tail -1 | sed 's/^ *//')"
+      else bad "hub assembly FAIL" "$(printf '%s' "$out" | grep '✗' | head -4 | sed 's/^ *//' | tr '\n' ';')"; fi
+    fi
+  done <<< "$combos"
+  [ "$i" -gt 0 ] || bad "0 combinations to check"
+}
+
 run_pack() {
   local P="$1"
+  # A pack with variants·a hub is checked only as assembled units (above). The recursive call inside a combination skips this
+  if [ -z "${ORANGEKIT_GATE_COMBO:-}" ] && { grep -q '"variants"' "$P/pack.json" 2>/dev/null || [ -f "$P/HUB.md" ]; }; then
+    run_pack_combos "$P"; return
+  fi
   printf "\n${C_D}guide-gate --pack${C_0}  %s\n" "$P"
 
   [ -d "$P" ] || { printf "pack directory missing: %s\n" "$P" >&2; exit 2; }
@@ -1803,7 +1867,7 @@ run_pair() {
   sec "domain vocabulary"
   if grep -q '^## 0\. Domain vocabulary' "$CONTRACT"; then
     local vocab; vocab=$(awk '/^## 0\. Domain vocabulary/{f=1;next} /^## /{f=0} f' "$CONTRACT" \
-      | grep -E '^[[:space:]]*[-*]' \
+      | grep -E '^[[:space:]]*[-*][[:space:]]' \
       | grep -oE '`[A-Za-z_/][A-Za-z0-9_/-]*`' | tr -d '`' | sort -u)
     if [ -z "$vocab" ]; then
       bad "§0 domain vocabulary of the contract is empty" "fill in entities·collections·paths, each in backticks"
@@ -1955,6 +2019,7 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/tpllit/fxpack2"       0 "a word in template literal text is not symbol use"
   _fx_assert_pack "$fx/pk/appaxis/fxpack2"      0 "an app-axis (axis: app) pack is accepted"
   _fx_assert_pack "$fx/pk/wcok/fxpack2"         0 "naming the standard contract with tokens absent is a WARN, not a FAIL"
+  _fx_assert_pack "$fx/pk/vclean/fxpack2"       0 "assembled per variant combination and passes (pack hub included)"
 
   sec "positive pack fixtures (must be blocked)"
   _fx_assert_pack "$fx/pk/polnoex/fxpack2"   1 "no policy proof-example column"
@@ -1982,6 +2047,8 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/wcmissing/fxpack2"    1 "no wireContract declaration"
   _fx_assert_pack "$fx/pk/wcbadver/fxpack2"     1 "the wireContract edition differs from the canonical one"
   _fx_assert_pack "$fx/pk/wcrival/fxpack2"      1 "a rival error code the canonical contract does not have (UNAUTHORIZED)"
+  _fx_assert_pack "$fx/pk/vbad/fxpack2"         1 "a ledger definition is missing in only one variant"
+  _fx_assert_pack "$fx/pk/vnav/fxpack2"         1 "the pack hub left a variant file out of Navigation"
   # A space in the path — common in a project folder name (`My Projects`) or a Windows user home. If the file list
   # is split at spaces, the gate **reads 0 files and passes everything** (it does not FAIL, it goes blind)
   mkdir -p "$fx/pk/sp ace" && cp -R "$fx/pk/noimport" "$fx/pk/sp ace/" \
@@ -2100,8 +2167,14 @@ run_shipped_seams() {
     [ -n "$fe" ] && [ -n "$be" ] || { warn "seam $combo — could not read the pack reference"; continue; }
     n=$((n+1))
     proj="$TMP/seam-$combo"; mkdir -p "$proj"
+    # A seam with one axis moved to a pack hub needs notes to pick that pack's variants for the assembly to complete
+    # (IFS is newline·tab only, so expanding "--notes path" from one variable would not split — with no notes, pass empty JSON)
+    printf '{}\n' > "$proj/notes.json"
+    if grep -q '"notes"' "$sj"; then
+      python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1]))['notes']))" "$sj" > "$proj/notes.json" 2>/dev/null || true
+    fi
     if ! CLAUDE_PLUGIN_ROOT="$root" CLAUDE_PROJECT_DIR="$proj" \
-         bash "$inst" --frontend "$fe" --backend "$be" --seam "$combo" --no-cache >/dev/null 2>&1; then
+         bash "$inst" --frontend "$fe" --backend "$be" --seam "$combo" --no-cache --notes "$proj/notes.json" >/dev/null 2>&1; then
       bad "seam $combo — assembly failed"; continue
     fi
     local g ok_all=1
@@ -2114,7 +2187,10 @@ run_shipped_seams() {
         "$(bash "$0" --guide "$proj/.claude/skills/$g-guide" --assembly "$proj/.claude/skills/$g-guide/assembly.json" --plugin-guides "$PLUGIN_GUIDES" 2>&1 | grep '✗' | head -2 | sed 's/^  *//' | tr '\n' ';')"; ok_all=0; }
     done
     code=0
-    bash "$0" --pair --contract "$PLUGIN_GUIDES/seams/$combo/contract.md" \
+    # A seam without its own contract (a combination moved to the standard contract) is checked against the canonical one
+    local cfile="$PLUGIN_GUIDES/seams/$combo/contract.md"
+    [ -f "$cfile" ] || cfile="$PLUGIN_GUIDES/contracts/http-standard.md"
+    bash "$0" --pair --contract "$cfile" \
               --frontend "$proj/.claude/skills/frontend-guide" \
               --backend "$proj/.claude/skills/backend-guide" >/dev/null 2>&1 || code=$?
     [ "$code" -eq 0 ] || { bad "seam $combo --pair → exit $code" "the wire contract forked between the two sides"; ok_all=0; }
@@ -2397,6 +2473,35 @@ FXPJ
   wj="$fx/pk/wcmissing/fxpack2/pack.json"
   sed -i.bak '/"wireContract"/d' "$wj" && rm -f "$wj.bak"
   printf '\n```ts\nconst AUTH_CODE = %s\n```\n' "'UNAUTHORIZED'" >> "$fx/pk/wcrival/fxpack2/resources/b.md"
+
+  # Variants·pack hub — assembled and checked per combination. A defect present in only one variant and a hub that
+  # leaves out a variant file are invisible to a check that sees only the base resources (that file is not in the base resources/)
+  local vv vd
+  for vv in vclean vbad vnav; do
+    mkdir -p "$fx/pk/$vv" && cp -R "$b" "$fx/pk/$vv/" || return 1
+    vd="$fx/pk/$vv/fxpack2"
+    mkdir -p "$vd/variants/auth/a1" "$vd/variants/auth/a2"
+    python3 - "$vd" <<'PYFXV'
+import json, sys
+d = sys.argv[1]
+j = json.load(open(d + '/pack.json'))
+j['variants'] = {'auth': {'x1': 'a1', 'x2': 'a2'}}
+json.dump(j, open(d + '/pack.json', 'w'), ensure_ascii=False, indent=2)
+led = open(d + '/ledger.md').read()
+row = "| `boot` | b.md |"
+i = led.index(row); i = led.index('\n', i) + 1
+led = led[:i] + "| `authHeader` | auth.md | `src/auth.ts`. `authHeader(token: string) => Record<string, string>` | auth |\n" + led[i:]
+open(d + '/ledger.md', 'w').write(led)
+PYFXV
+    for vdir in a1 a2; do
+      printf '# Auth (%s)\n\n<!-- file: src/auth.ts -->\n```ts\nexport function authHeader(token: string): Record<string, string> {\n  return { Authorization: `Bearer ${token}` }\n}\n```\n' "$vdir" > "$vd/variants/auth/$vdir/auth.md"
+    done
+    printf -- '---\nname: fxpack2\ndescription: fixture hub\n---\n\n# Hub\n\n## Quick Start\n\nStart here.\n\n## Architecture Overview\n\nStructure.\n\n## Directory Structure\n\n```\nsrc/\n```\n\n## Core Principles\n\nPrinciples.\n\n## Common Imports\n\n```ts\nimport { boot } from "@/boot"\n```\n\n## Example\n\nBody.\n\n## Navigation Guide\n\n| Task | File |\n| --- | --- |\n| Schema | resources/a.md |\n| Boot | resources/b.md |\n| Auth | resources/auth.md |\n' > "$vd/HUB.md"
+  done
+  # vbad: a ledger definition is missing in only one variant — it breaks only for the consumer who receives that combination
+  printf '# Auth (a2)\n\nA variant missing its definition.\n' > "$fx/pk/vbad/fxpack2/variants/auth/a2/auth.md"
+  # vnav: the hub Navigation left out the variant file — that resource is unreachable in the assembled copy
+  sed -i.bak '/| Auth | resources\/auth.md |/d' "$fx/pk/vnav/fxpack2/HUB.md" && rm -f "$fx/pk/vnav/fxpack2/HUB.md.bak"
 
   # ⑯ a scoped package is not mistaken for a competing product (measured on node-nest — a false positive)
   # `@nestjs/platform-express` is Nest's default HTTP adapter, not a choice of Express.

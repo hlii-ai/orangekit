@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.34.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
 # Loading · Empty · Error States
 
 Every screen that draws data has at least three branches. A screen that implements only the success path goes
@@ -60,6 +60,8 @@ same props. Call them in a different shape per screen and the signature splits, 
 <!-- file: src/components/common/EmptyState.tsx -->
 ```tsx
 // src/components/common/EmptyState.tsx
+import type { ReactNode } from 'react';
+
 export type EmptyStateProps = { title?: string; description?: string; action?: ReactNode };
 
 export function EmptyState({ title = 'No items to display', description, action }: EmptyStateProps) {
@@ -96,7 +98,7 @@ export function ErrorState({ title = 'Something went wrong', message, error, onR
       {onRetry && (
         <Button variant="secondary" className="mt-4" onClick={onRetry}>Try again</Button>
       )}
-      {/* The only thread back to the server logs — if the user reports this value one request can be pinpointed */}
+      {/* The only thread back to the backend logs — if the user reports this value one request can be pinpointed */}
       {requestId && <p className="mt-3 text-xs text-slate-400">Request ID: {requestId}</p>}
     </div>
   );
@@ -140,7 +142,7 @@ export function toUserMessage(error: unknown): string {
       case 'CONFLICT':     return 'It was changed elsewhere first. Refresh and try again.';
       case 'VALIDATION_FAILED': return 'Please check your input again.';
       case 'PAYLOAD_TOO_LARGE': return 'The content is too large.';
-      case 'INTERNAL':     return 'Something went wrong on the server.';
+      case 'INTERNAL':     return 'Something went wrong on our end.';
       default: return error.status === 429
         ? 'Too many requests. Please try again shortly.'
         : error.message;

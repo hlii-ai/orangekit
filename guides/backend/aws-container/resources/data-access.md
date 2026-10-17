@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-container v3.12.0 -->
+<!-- orangekit-pack: backend/aws-container v3.35.0 -->
 # Data access (Drizzle ORM + RDS PostgreSQL)
 
 This covers only query patterns and **running** migrations.
@@ -57,15 +57,19 @@ Local `docker compose` runs `DB_SSL=false` (plaintext loopback), so it does not 
 
 This block is **canonical for the table definitions**. Every `tasks` citation in the other resource files points here.
 
+<!-- file: src/db/schema.ts -->
 ```ts
 // src/db/schema.ts
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+
+export const taskStatus = pgEnum('task_status', ['open', 'done'])   // exactly the values in the wire contract §0
 
 export const tasks = pgTable('tasks', {
   id: uuid('id').primaryKey().defaultRandom(),
   ownerId: text('owner_id').notNull(),          // the token's sub — text, in case the IdP is swapped
   title: text('title').notNull(),
   body: text('body').notNull().default(''),
+  status: taskStatus('status').notNull().default('open'),
   archivedAt: timestamp('archived_at', { withTimezone: true }),   // null = active
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -97,6 +101,9 @@ export type NewTask = typeof tasks.$inferInsert
 - Time is always `withTimezone: true` (`timestamptz`). A column with no timezone changes meaning the moment
   the deployment region changes
 - Pull the types out with `$inferSelect` / `$inferInsert` — do not hand-write the row type again
+- **Close enumerated values in the DB too.** Leave `status` as `text` and a path that skips Zod (manual SQL, another
+  entry point) inserts `'doing'`, and the frontend's `parseTask` blows up on that row with `BAD_SHAPE`.
+  `pgEnum` puts `CREATE TYPE task_status` into the migration
 
 ## A query always takes an `ownerId` (`src/db/queries/tasks.ts`)
 
@@ -105,7 +112,7 @@ This layer has no concept of authentication. Instead the signature enforces that
 ```ts
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { tasks } from '@/db/schema'
+import { tasks, type Task } from '@/db/schema'
 import type { UpdateTaskInput } from '@/schemas/tasks'
 
 export async function findOwnedTask(ownerId: string, id: string) {
@@ -117,7 +124,7 @@ export async function findOwnedTask(ownerId: string, id: string) {
 
 export async function listOwnedTasks(
   ownerId: string, limit: number,
-  cursor?: { createdAt: Date; id: string }, archived?: boolean,
+  cursor?: { createdAt: Date; id: string }, archived?: boolean, status?: Task['status'],
 ) {
   return db.select().from(tasks)
     .where(and(
@@ -126,6 +133,7 @@ export async function listOwnedTasks(
         ? sql`(${tasks.createdAt}, ${tasks.id}) < (${cursor.createdAt}, ${cursor.id})`
         : undefined,                                   // and() ignores undefined
       archived ? isNotNull(tasks.archivedAt) : isNull(tasks.archivedAt),  // unset = active only
+      status ? eq(tasks.status, status) : undefined,   // unset = any status
     ))
     .orderBy(desc(tasks.createdAt), desc(tasks.id))
     .limit(limit + 1)                                  // +1 decides whether a next page exists
@@ -135,6 +143,11 @@ export async function listOwnedTasks(
 `(created_at, id) < (...)` is PostgreSQL's row value comparison. It settles cursor pagination's tie handling
 in one condition. `tasks_owner_created_idx` is `(owner_id, created_at, id)`, so the index covers the whole
 sort key — drop the last two columns and ordering is performed again inside a tie group.
+
+Append a new filter **at the end of the arguments** (`status` is fifth). Insert it earlier and existing call sites' `archived`
+shifts into the `status` slot, and since both are optional, compilation can pass depending on the call shape.
+The `status` filter narrows by the owner index and then filters, so it needs no separate index — consider
+`(owner_id, status, created_at, id)` only when an owner has tens of thousands of rows and one status is read often.
 
 ## A mutation checks the affected rows
 

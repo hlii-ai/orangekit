@@ -1,11 +1,10 @@
-<!-- orangekit-pack: app/react-native v1.0.0 verified 2026-10-15 expo@57 react@19 react-native@0.86 typescript@6 @types/react@19 expo-router@57 expo-secure-store@57 expo-crypto@57 expo-linking@57 expo-constants@57 expo-location@57 expo-camera@57 expo-notifications@57 expo-updates@57 react-native-webview@13 react-native-safe-area-context@5 @tanstack/react-query@5 zustand@5 @react-native-async-storage/async-storage@2 @react-native-community/netinfo@12 jest-expo@57 @react-native/jest-preset@0.86 jest@29 @types/jest@29 @testing-library/react-native@14 -->
+<!-- orangekit-pack: app/react-native v3.35.0 verified 2026-10-15 expo@57 react@19 react-native@0.86 typescript@6 @types/react@19 expo-router@57 expo-secure-store@57 expo-crypto@57 expo-linking@57 expo-constants@57 expo-location@57 expo-camera@57 expo-notifications@57 expo-updates@57 expo-auth-session@57 expo-web-browser@57 react-native-webview@13 react-native-safe-area-context@5 @tanstack/react-query@5 zustand@5 @react-native-async-storage/async-storage@2 @react-native-community/netinfo@12 jest-expo@57 @react-native/jest-preset@0.86 jest@29 @types/jest@29 @testing-library/react-native@14 -->
 
 # react-native axis pack — hub fragment
 
-This is the **axis-local fragment to be inserted verbatim** when building a combination hub (`app-guide/SKILL.md`). Each fragment
-sits between `<!-- pack-slot: name -->` and `<!-- /pack-slot -->`, and holds whatever the backend axis turns out to be and
-whether the app is a shell or the product itself. Nothing here is a function of the combination or the shape — the table at the
-end of the file states what belongs to the seam.
+This is the **axis-local fragment inserted verbatim** into the hub (`HUB.md` → installed as `app-guide/SKILL.md`). Each fragment
+sits between `<!-- pack-slot: name -->` and `<!-- /pack-slot -->`, and holds for any backend that follows the wire contract
+`http-standard@1`, and whether the app is a shell or the product itself. Only what is a function of the shape is missing here — the table at the end of the file states what remains.
 
 <!-- pack-slot: directory-structure -->
 ## Directory Structure
@@ -24,8 +23,9 @@ src/
 │   │       └── [id].tsx        # Detail (deep link target)
 │   └── +not-found.tsx          # Keep test files outside src/app/ — files in the route directory are bundled as routes
 ├── config.ts                   # The **only** file that reads EXPO_PUBLIC_* environment values
-├── api/                        # Seam-owned — http.ts (client · ApiError) · tasks.ts (query hooks)
-├── auth/                       # Seam-owned — useAuth · sign-in/sign-out flows
+├── api/                        # http.ts (client · ApiError) · tasks.ts (query hooks) · outboxSend.ts
+├── auth/
+│   └── useAuth.ts              # Auth variant (self-issued · oidc) — useAuth · getAccessToken · refresh · endSession
 ├── lib/
 │   ├── tokenStore.ts           # expo-secure-store wrapper — tokens live here and nowhere else
 │   ├── safeInternalHref.ts     # Path validation for deep links·notification payloads
@@ -67,14 +67,14 @@ const useTaskFilter = create<{ onlyOpen: boolean; toggle: () => void }>()((set) 
 useEffect(() => { if (data) useTaskStore.getState().setTasks(data.pages.flatMap((p) => p.items)); }, [data]);
 ```
 
-### 2. HTTP goes through the seam's `http` and nothing else
+### 2. HTTP goes through `http` and nothing else
 The auth header·`Idempotency-Key`·`ApiError` normalization all live in one place, `http`. A raw call bypasses all three, and `ErrorView` cannot pick a message.
 
 ```ts
 // ✅ Even inside a query hook's queryFn, go through http
-const page = await http.get<Page<Task>>(`/tasks?cursor=${encodeURIComponent(cursor)}`);
+const page = await http.getPage<Task>(`/api/tasks?cursor=${encodeURIComponent(cursor)}`);
 // ❌ Raw fetch — the token·idempotency header·error normalization diverge
-const res = await fetch(`${config.apiBaseUrl}/tasks`);
+const res = await fetch(`${config.apiBaseUrl}/api/tasks`);
 ```
 
 ### 3. Tokens live in `tokenStore` only
@@ -132,10 +132,10 @@ if (onlineManager.isOnline()) {
   createTask.mutate({ title, key: newIdempotencyKey() });
 } else {
   // ✅ Offline, the queue only — enqueue creates the key (take both paths and the same mutation goes out twice under different keys)
-  await outbox.enqueue({ method: 'POST', path: '/tasks', body: { title } });
+  await outbox.enqueue({ method: 'POST', path: '/api/tasks', body: { title } });
 }
 // ❌ Generated inside mutationFn — a new key on every retry
-useMutation({ mutationFn: (title: string) => http.post('/tasks', { title }, { idempotencyKey: newIdempotencyKey() }) });
+useMutation({ mutationFn: (title: string) => http.post('/api/tasks', { title }, { idempotencyKey: newIdempotencyKey() }) });
 ```
 <!-- /pack-slot -->
 
@@ -164,8 +164,9 @@ import { LoadingView, EmptyView, ErrorView } from '@/components/ScreenStates';
 import { usePermission, type PermissionKind, type PermissionState } from '@/device/permissions';
 import { registerForPushAsync } from '@/device/push';
 import { isTrustedOrigin } from '@/webview/trustedOrigin';
-
-// http · ApiError · Page · Task · useTasksQuery · useAuth are appended by the seam (api-client.md · auth-and-session.md)
+import { http, ApiError, type Page } from '@/api/http';
+import { useTasksQuery, useTaskQuery, useCreateTask, useSetTaskStatus, taskKeys, type Task } from '@/api/tasks';
+import { useAuth } from '@/auth/useAuth'; // defined by the auth variant — screens use only status · signIn · signOut
 ```
 
 Import `Tabs` from `expo-router/js-tabs` — the `Tabs` export at the `expo-router` root is deprecated in the SDK 57 install. <!-- verified: the `@deprecated Use import { Tabs } from 'expo-router/js-tabs'` comment in expo-router@57 build/exports.d.ts -->
@@ -208,20 +209,17 @@ export default function TasksScreen() {
 ```
 
 - **Branch on the three states in order** — loading → error → empty → list. Drop the `isPending` branch and `data` is `undefined` on the first render, so `flatMap` throws.
-- **Pass `onRetry` only when a retry can change the outcome** — the template always passes it, but when you are separating out errors that come back the same however often you reload, like 401·403·404, branch on the `status` of the seam's `ApiError` and do not pass it (the button disappears). `ErrorView` picks the message with `toUserMessage` — never put `error.message` on screen.
+- **Pass `onRetry` only when a retry can change the outcome** — the template always passes it, but when you are separating out errors that come back the same however often you reload, like 401·403·404, branch on the `code` of `ApiError` and do not pass it (the button disappears). `ErrorView` picks the message with `toUserMessage` — never put `error.message` on screen.
 - **Long lists are `FlatList`** — `ScrollView` + `map` mounts every row at once. Guard `onEndReached` with `isFetchingNextPage` so the same page is not requested twice.
-- **Screens never touch HTTP·tokens** — data arrives only through the seam's `useTasksQuery()`. What `TaskRow` looks like is the project's design.
+- **Screens never touch HTTP·tokens** — data arrives only through `useTasksQuery()` (`api-client.md`). What `TaskRow` looks like is the project's design.
 <!-- /pack-slot -->
 
 ## What the seam fills in — what this pack does not have
 
-| Hub slot · seam file | Why it is a function of the combination (or the shape) |
+From 3.35.0, Architecture Overview · Quick Start · the HTTP·auth rows of Common Imports · `api-client.md` · `auth-and-session.md` (auth variant) ·
+`complete-example.md` · Navigation Guide **are filled by the pack** — the whole hub is `HUB.md`. There is one wire contract, `http-standard@1`,
+and only the auth method splits into variants (`variants/auth/self-issued` · `variants/auth/oidc`). What remains is one function of the shape.
+
+| Hub slot · seam file | Why it is a function of the shape |
 | --- | --- |
-| Architecture Overview | The trust boundary and the data source depend on the backend axis, and whether screens are native or a webview depends on the shape (`appShell`) |
-| Quick Start checklist | The pagination model·error code branching·auth refresh depend on the wire contract |
-| The HTTP client·auth rows of Common Imports | The authentication method and envelope parsing depend on the backend axis |
-| `api-client.md` | `http` · `ApiError` · `Page` · `useTasksQuery` · `sendOutboxOp` (the outbox's send function) — the envelope·error codes·whether the idempotency header is accepted are the wire contract |
-| `auth-and-session.md` | `useAuth` · the sign-in flow (IdP) · token refresh · the sign-out cleanup order — the auth provider is a function of the backend axis. The push token registration API call lives here too |
-| `complete-example.md` | An end-to-end example through one screen: entry → data load → an action that needs a permission → showing the result |
-| `shell-bridge.md` (only when the shape is `rn-webview`·`rn-native-screens`) | The web ↔ native message schema · which screens are webviews and which are native · screen transition rules. The message schema is a contract shared with the web screen axis. Origin validation uses the pack's `isTrustedOrigin` primitive — do not rewrite it. **Put the web-side CSP `frame-src` in the contract** — old Android WebViews cannot tell which iframe sent a message |
-| Navigation Guide | `pack.json` supplies the pack resource rows, and the seam adds the seam resource rows |
+| `shell-bridge.md` (only when the shape is `rn-webview`·`rn-native-screens` — generated per project) | The web ↔ native message schema · which screens are webviews and which are native · screen transition rules. The message schema is a contract shared with the web screen axis. Origin validation uses the pack's `isTrustedOrigin` primitive — do not rewrite it. **Put the web-side CSP `frame-src` in the contract** — old Android WebViews cannot tell which iframe sent a message. Even in a shell, the app's own sign-in is done by this pack's auth variant |

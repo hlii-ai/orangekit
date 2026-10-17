@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/aws-container v3.34.0 -->
+<!-- orangekit-pack: backend/aws-container v3.35.0 -->
 # Input validation (Zod 4) — request body, query, environment variables
 
 Every value coming from the browser is hostile input. Even when the SPA validates with the same schema,
@@ -15,13 +15,19 @@ import { z } from 'zod'
 
 export const TaskIdParam = z.object({ id: z.uuid() })
 
+const TaskStatus = z.enum(['open', 'done'])        // the same values as the DB's task_status enum
+
 // The field definition with no defaults is the source — defaults go only on the create schema
 const TaskFields = z.strictObject({
   title: z.string().trim().min(1).max(120),
   body: z.string().max(20_000),
+  status: TaskStatus,
 })
 
-export const CreateTaskInput = TaskFields.extend({ body: TaskFields.shape.body.default('') })
+export const CreateTaskInput = TaskFields.extend({
+  body: TaskFields.shape.body.default(''),
+  status: TaskStatus.default('open'),
+})
 
 export const UpdateTaskInput = TaskFields.partial().refine(
   (v) => Object.keys(v).length > 0,
@@ -32,6 +38,7 @@ export const ListTasksQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().max(200).optional(),       // base64url("<iso>|<uuid>")
   archived: z.stringbool().optional(),          // the "true"/"false" query string → boolean
+  status: TaskStatus.optional(),                // unset = any status
 })
 
 export type CreateTaskInput = z.infer<typeof CreateTaskInput>
@@ -42,13 +49,14 @@ export type ListTasksQuery = z.infer<typeof ListTasksQuery>
 - **Do not pull the PATCH schema out of the create schema with `.partial()`.** `.partial()` cannot remove
   `.default()` — `CreateTaskInput.partial().parse({})` yields `{ body: '' }`. Then
   ① the "at least one field" `refine` passes forever, so an empty PATCH is not refused, and ② `set({ ...patch })`
-  **overwrites a body you never touched with an empty string.** The default-free `TaskFields` has to be the source
+  **overwrites a body you never touched with an empty string.** The default-free `TaskFields` has to be the source —
+  `status` is the same: if the `'open'` default survives into PATCH, **a request that only edits the title reopens a completed task**
 - **Use `strictObject` by default**: when an unknown key passes silently, a value like `{ ownerId: "..." }`
   can ride straight into the `insert` (`.extend()` and `.partial()` preserve strict)
 - Put a `max()` on every string. An unbounded string is a memory and storage attack surface
 - Query parameters are always strings → numbers take `z.coerce.number()`, booleans `z.stringbool()`
-- **Always wire a declared query parameter all the way to the query function.** `archived` is consumed by
-  `listOwnedTasks(ownerId, limit, cursor, archived)` (`resources/data-access.md`) —
+- **Always wire a declared query parameter all the way to the query function.** `archived` and `status` are consumed by
+  `listOwnedTasks(ownerId, limit, cursor, archived, status)` (`resources/data-access.md`) —
   a parameter that is parsed and never read promises the client a feature that does not exist
 
 ## Parsing helpers (`src/http/validate.ts`)
@@ -112,6 +120,7 @@ Implement the duplicate check as `select` → `insert` if absent and two concurr
 When app code reads `process.env` directly, a typo or omission blows up **only on one path after deploy**.
 Keep one validated module and fail at boot.
 
+<!-- file: src/config/env.ts -->
 ```ts
 import { z } from 'zod'
 

@@ -1,9 +1,10 @@
-<!-- orangekit-pack: backend/fastify v3.33.0 -->
+<!-- orangekit-pack: backend/fastify v3.35.0 -->
 # Data access — Drizzle queries and the ownership condition
 
 This file owns the three files under `src/db/` (pool · table · queries) and how transactions and migrations run.
 Table design principles (normalization · index choice) belong to the T1 data modeling card, and the routes that
-call the queries are owned by the seam's `api-endpoints`.
+call the queries are owned by `resources/api-endpoints.md`. The auth tables (`users` · `refresh_tokens`) exist only
+when self-issued auth is used, and `resources/auth-boundaries.md` owns them.
 
 ## 1. Decision tree — which query shape to use
 
@@ -157,7 +158,7 @@ If the id is not a uuid, PG throws `22P02`; if the year is outside PostgreSQL's 
 **500**. The date has to survive a `toISOString()` round trip unchanged, and the year has to be 1970–9999
 <!-- verified: measured in audit A — before validation, decodeCursor turned a …_notuuid cursor into a 500; after adding validation, a 400 (2026-10-15) -->.
 
-The list route (seam) builds `nextCursor` only when `items.length === limit`. When the row count is an exact multiple
+The list route (`resources/api-endpoints.md` §5) builds `nextCursor` only when `data.length === limit`. When the row count is an exact multiple
 of limit, one extra empty page comes at the end — to avoid it, fetch `limit + 1` rows to decide whether a next page
 exists (this pack's `listTasks` does not).
 
@@ -192,8 +193,8 @@ describe('pagination', () => {
       const q: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
       const res = await app.inject({ url: `/api/tasks?limit=3${q}`, headers: authFor('alice') })
       expect(res.statusCode).toBe(200)
-      const body = res.json() as { items: { id: string }[]; nextCursor: string | null }
-      seen.push(...body.items.map((x) => x.id))
+      const body = res.json() as { data: { id: string }[]; nextCursor: string | null }
+      seen.push(...body.data.map((x) => x.id))
       cursor = body.nextCursor
     } while (cursor)
     expect(seen).toHaveLength(7)
@@ -242,14 +243,17 @@ import { env } from './src/env'
 
 export default defineConfig({
   dialect: 'postgresql',
-  schema: './src/db/schema.ts',
+  // *schema.ts — src/db/auth-schema.ts, added by the auth variant, joins the same migration flow
+  schema: './src/db/*schema.ts',
   out: './drizzle',
   dbCredentials: { url: env.DATABASE_URL },
 })
 ```
 
-The config imports `env` too — without `DATABASE_URL`, drizzle-kit stops with the same "invalid environment
-variables" error <!-- verified: ran drizzle-kit@0.31.11 — it read the config importing env.ts, and with DATABASE_URL unset printed the EnvSchema error -->.
+The config imports `env` too — without `DATABASE_URL` (and the required keys the auth variant adds), drizzle-kit
+stops with the same "invalid environment variables" error. Give the migration step the same environment as the app.
+The `schema` glob was not run
+<!-- unverified: did not run whether drizzle-kit@0.31's schema glob reads schema.ts and auth-schema.ts together — if it does not, write it as the array ['./src/db/schema.ts', './src/db/auth-schema.ts'] -->. The observation before that dates from the single-path days <!-- verified: ran drizzle-kit@0.31.11 — it read the config importing env.ts, and with DATABASE_URL unset printed the EnvSchema error -->.
 
 ```bash
 npx drizzle-kit generate --name add_due_date   # schema diff → drizzle/NNNN_*.sql (commit it)

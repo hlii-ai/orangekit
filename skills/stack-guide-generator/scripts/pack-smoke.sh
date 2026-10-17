@@ -1005,6 +1005,19 @@ FXJSX
   code=0; out=$(bash "$0" --pack "$fx/fixed" 2>&1) || code=$?
   if [ "$code" -eq 0 ]; then ok "post-repair safeReturnTo → exit 0 (no false positive)"
   else bad "the repaired shape was a false positive → exit $code" "$(printf '%s' "$out" | grep '✗' | head -2 | tr '\n' ';')"; fi
+
+  # Variants — when a vulnerable form exists in only one variant, a run over the base resources/ alone **never sees** that file
+  mkdir -p "$fx/vfx/resources" "$fx/vfx/variants/auth/a1" "$fx/vfx/variants/auth/a2"
+  printf '<!-- orangekit-pack: frontend/vfx v0 -->\n# vfx pack\n' > "$fx/vfx/PACK.md"
+  printf '{ "axis": "frontend", "name": "vfx", "pkgs": ["typescript@5"], "variants": { "auth": { "x1": "a1", "x2": "a2" } } }\n' > "$fx/vfx/pack.json"
+  printf '# Base\n' > "$fx/vfx/resources/base.md"
+  cp "$fx/fixed/resources/routing.md" "$fx/vfx/variants/auth/a1/routing.md"
+  cp "$fx/broken/resources/routing.md" "$fx/vfx/variants/auth/a2/routing.md"
+  code=0; out=$(bash "$0" --pack "$fx/vfx" 2>&1) || code=$?
+  if [ "$code" -eq 1 ] && printf '%s' "$out" | grep -q 'combination \[auth=a2\] FAIL'; then ok "a vulnerable form in only one variant is caught by the combination run → exit 1"
+  else bad "missed the vulnerable form in a variant → exit $code" "$(printf '%s' "$out" | grep -E '✗|combination' | head -3 | tr '\n' ';')"; fi
+  if printf '%s' "$out" | grep -q 'combination \[auth=a1\] passed'; then ok "the repaired variant passes (verdict per combination)"
+  else bad "the repaired variant combination did not pass"; fi
 }
 
 # ════════════════════════════════════════════════════════════════════
@@ -1032,8 +1045,51 @@ else
   mkdir -p "$OUT_DIR" || exit 2
 fi
 
+# A pack with variants (variants/<dimension>/<directory>/) is assembled and run per combination — the complete-file claims
+# of variant files are not in the base resources/, so a solo run **never compiles them** (same rule as guide-gate)
+run_smoke_combos() {
+  local P="$1" name; name=$(basename "$P")
+  local combos; combos=$(python3 - "$P" <<'PYCOMBO'
+import itertools, json, os, sys
+P = sys.argv[1]
+vs = json.load(open(os.path.join(P, 'pack.json'))).get('variants') or {}
+dims = sorted(vs)
+choices = [sorted({d for d in vs[k].values()}, key=lambda x: (x is None, x or '')) for k in dims]
+for combo in itertools.product(*choices):
+    print(' '.join(f"{k}={v if v is not None else '-'}" for k, v in zip(dims, combo)))
+PYCOMBO
+) || { bad "could not read pack.json variants"; return 0; }
+  local label i=0 cdir kv dim dir f out code
+  while IFS= read -r label; do
+    [ -z "$label" ] && continue
+    i=$((i+1)); cdir="$OUT_DIR/combo$i/$name"
+    mkdir -p "$cdir/resources"
+    cp "$P"/*.md "$P/pack.json" "$cdir/" 2>/dev/null
+    cp "$P"/resources/*.md "$cdir/resources/" 2>/dev/null
+    for kv in $label; do
+      dim="${kv%%=*}"; dir="${kv#*=}"
+      [ "$dir" = "-" ] && continue
+      for f in "$P/variants/$dim/$dir"/*.md; do [ -f "$f" ] && cp "$f" "$cdir/resources/"; done
+    done
+    python3 - "$cdir/pack.json" <<'PYNOVAR'
+import json, sys
+j = json.load(open(sys.argv[1])); j.pop('variants', None)
+json.dump(j, open(sys.argv[1], 'w'), ensure_ascii=False, indent=2)
+PYNOVAR
+    printf "\n${C_D}── variant combination [%s] ─────────────────────────────${C_0}\n" "$label"
+    local extra=""; [ "$ONLINE" -eq 1 ] && extra="--online"; [ "$NO_VECTORS" -eq 1 ] && extra="$extra --no-vectors"
+    code=0; out=$(bash "$0" --pack "$cdir" --out "$OUT_DIR/combo$i-work" $extra 2>&1) || code=$?
+    printf '%s\n' "$out" | grep -E '^\s+[✓✗!–-]' | sed 's/^/  /'
+    if [ "$code" -eq 0 ]; then ok "combination [$label] passed"; else bad "combination [$label] FAIL"; fi
+  done <<< "$combos"
+  # "variants": {} — a declaration that there are no combinations. 0 is not folded into a FAIL; run the base resources only
+  [ "$i" -gt 0 ] || run_smoke "$P"
+  return 0
+}
+
 case "$MODE" in
-  smoke)    [ -n "$PACK" ] || { printf -- "--pack <directory> is required\n" >&2; exit 2; }; run_smoke "$PACK" ;;
+  smoke)    [ -n "$PACK" ] || { printf -- "--pack <directory> is required\n" >&2; exit 2; }
+            if grep -q '"variants"' "$PACK/pack.json" 2>/dev/null; then run_smoke_combos "$PACK"; else run_smoke "$PACK"; fi ;;
   selftest) run_self_test ;;
   *)        printf "no mode: --pack or --self-test (see --help)\n" >&2; exit 2 ;;
 esac

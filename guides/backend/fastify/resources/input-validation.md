@@ -1,10 +1,10 @@
-<!-- orangekit-pack: backend/fastify v3.33.0 -->
+<!-- orangekit-pack: backend/fastify v3.35.0 -->
 # Input validation — route schemas and the Zod type provider
 
 This file owns the environment variable schema (`src/env.ts`) and the request and response schemas
 (`src/schemas/task.ts`). Turning a validation failure into a status code and field errors belongs to
-`error-handling.md`, and the route plugin bodies that attach the schemas to routes are owned by the seam's
-`api-endpoints`.
+`error-handling.md`, and the route plugin bodies that attach the schemas to routes are owned by
+`resources/api-endpoints.md`.
 
 ## 1. Decision tree — where validation happens
 
@@ -20,13 +20,16 @@ Do not call `Schema.parse(req.body)` again inside the handler — the type provi
 
 ## 2. Environment variables (`src/env.ts`)
 
-This is the **only** module in the application code that reads `process.env` (policy `env-single-entry`). Every key
-has a default and only `DATABASE_URL` is required — which is why `drizzle.config.ts` can import this module too.
+This is the **only** module in the application code that reads `process.env` (policy `env-single-entry`). Of the
+base keys only `DATABASE_URL` is required. The auth keys differ per auth method, so `resources/auth-boundaries.md`
+defines them as `AuthEnvSchema` in `src/auth-env.ts`, and they are **merged and validated in one go** here — there is
+still only one place that reads.
 
 <!-- file: src/env.ts -->
 ```ts
 // src/env.ts
 import { z } from 'zod'
+import { AuthEnvSchema } from './auth-env'
 
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -37,7 +40,7 @@ export const EnvSchema = z.object({
   DB_POOL_MAX: z.coerce.number().int().min(1).default(10),
   BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10_000),
-})
+}).extend(AuthEnvSchema.shape)
 export type Env = z.infer<typeof EnvSchema>
 
 const parsed = EnvSchema.safeParse({ ...process.env })
@@ -110,10 +113,10 @@ attaches `withTypeProvider<ZodTypeProvider>()` (`project-structure.md` §2). Typ
 `FastifyPluginAsyncZod` and `req.body` and `req.query` become the schema's **output type**.
 
 ```ts
-// src/http/routes/tasks.ts (owned by the seam) — the schema wiring of a single route
+// src/http/routes/tasks.ts — the schema wiring of a single route (in full in resources/api-endpoints.md §5)
 app.get('/', {
-  schema: { querystring: TaskQuerySchema, response: { 200: z.object({ items: z.array(TaskViewSchema), nextCursor: z.string().nullable() }) } },
-}, async (req) => listTasks(req.user!.id, req.query).then((items) => ({ items, nextCursor: null })))
+  schema: { querystring: TaskQuerySchema, response: { 200: z.object({ data: z.array(TaskViewSchema), nextCursor: z.string().nullable() }) } },
+}, async (req) => ({ data: await listTasks(ownerOf(req.user), req.query), nextCursor: null }))
 ```
 
 <!-- verified: fastify-type-provider-zod@7.0.0 inject — ?limit=7&evil=1 arrived at the handler as req.query {"limit":7} (number), and the body {"title":"  spaced  "} as {"title":"spaced","status":"open"} (2026-10-15) -->

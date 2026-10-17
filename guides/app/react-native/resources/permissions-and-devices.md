@@ -1,9 +1,9 @@
-<!-- orangekit-pack: app/react-native v1.0.0 -->
+<!-- orangekit-pack: app/react-native v3.35.0 -->
 # Permissions and device features — runtime permissions · location · camera · push tokens
 
 This file owns `src/device/permissions.ts` (`usePermission`) and `src/device/push.ts` (`registerForPushAsync`),
 plus the judgment of "when to ask for a permission and what to do when it is denied". The call that **registers** the push token
-**with the server** is a backend contract, so it belongs to the seam's `auth-and-session.md`. The path validation function for
+**with the server** belongs to the project's API spec, and the place it is called from is the auth variant's `auth-and-session.md`. The path validation function for
 notification payloads, `safeInternalHref`, is owned by `navigation.md` — here it is only imported.
 
 ## 1. Decision tree — when to ask
@@ -178,8 +178,8 @@ The `Camera` object is marked `@hidden` in the installed d.ts but is an exported
 
 ## 6. Push tokens (`src/device/push.ts`)
 
-This goes only as far as **issuing** the token. Registering it with the server, and unregistering on sign-out, is done by the seam's
-`auth-and-session.md` (which API to send it to and how it links to the user are the backend contract).
+This goes only as far as **issuing** the token. Registering it with the server, and unregistering on sign-out, is done from
+`auth-and-session.md`'s place (which API to send it to and how it links to the user are the backend contract).
 
 <!-- file: src/device/push.ts -->
 ```ts
@@ -223,14 +223,14 @@ export async function registerForPushAsync(): Promise<string | null> {
 - The `projectId` lookup order (`easConfig.projectId` → `expoConfig.extra.eas.projectId`) is the same as the library's internals
   <!-- verified: expo-notifications@57.0.23 build/getExpoPushTokenAsync.js — throws ERR_NOTIFICATIONS_NO_EXPERIENCE_ID when absent -->
 - `getExpoPushTokenAsync` makes a request to the Expo server — it throws on offline·server error·native registration failure, and that is
-  propagated as is. The caller (the seam) catches it and calls again on the next activation
+  propagated as is. The caller (the auth flow) catches it and calls again on the next activation
 - **When to call it**: the moment "Get notifications" is pressed, or at app start **only when it is already `granted`** (token refresh).
   This function goes as far as asking, so on the start path the caller first decides by reading only:
 
 ```ts
-// src/auth/… — the seam's boot path (after the sign-in check)
+// src/auth/… — the auth variant's boot path (after the sign-in check)
 const { granted } = await Notifications.getPermissionsAsync(); // read only — no dialog
-// Fold failures to null and retry on the next activation — if there is a token, send it to the server registration API (seam-owned)
+// Fold failures to null and retry on the next activation — if there is a token, send it to the server registration API (owned by the project's API spec)
 const token = granted ? await registerForPushAsync().catch(() => null) : null;
 ```
 

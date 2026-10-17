@@ -1,10 +1,10 @@
-<!-- orangekit-pack: app/react-native v1.0.0 -->
+<!-- orangekit-pack: app/react-native v3.35.0 -->
 # Navigation — file routes · protected groups · deep link validation
 
 This file owns the skeletons of `src/app/_layout.tsx` · `(app)/_layout.tsx` · `(app)/tasks/_layout.tsx`, plus `src/lib/safeInternalHref.ts` ·
 `src/lib/useNotificationRouting.ts`.
-The state transitions of `useAuth` and the sign-out cleanup order are owned by the seam's `auth-and-session.md`; in a hybrid shell, **which
-screens are webviews** and the web ↔ native message schema are owned by the seam's `shell-bridge.md` — the rules in this file hold the same
+The state transitions of `useAuth` and the sign-out cleanup order are owned by the auth variant's `auth-and-session.md`; in a hybrid shell, **which
+screens are webviews** and the web ↔ native message schema are owned by `shell-bridge.md`, generated per project — the rules in this file hold the same
 for native routes whether the app is a shell or the product itself.
 
 ## 1. Decision tree — where does a screen go
@@ -128,10 +128,10 @@ const first = (v: string | string[] | undefined): string | undefined => (Array.i
 
 export default function TaskDetailScreen() {
   const id = first(useLocalSearchParams<{ id: string | string[] }>().id);
-  // Call the detail query hook (owned by the seam's api-client.md) **above** this return with `enabled: !!id` —
+  // Call the detail query hook (api-client.md's useTaskQuery) **above** this return with `enabled: !!id` —
   // put it after the return and the hook count changes with whether id exists, so React raises a hook-order error
   if (!id) return <EmptyView title="Task not found" />;
-  return null; // rendering the detail is project screen code
+  return null; // the full detail render is complete-example.md §2
 }
 ```
 

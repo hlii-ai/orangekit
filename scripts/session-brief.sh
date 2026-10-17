@@ -261,12 +261,48 @@ if [ -n "${PLUG_VER:-}" ]; then
     done
     FIXES=""
   fi
-  [ -n "$FIXES" ] && printf -- '- There are guide fixes under the same stack premise (plugin v%s ↔ installed%s) — `bash "%s/scripts/install-guide.sh" --frontend <pack> --backend <pack> [--app <app>]`\n' \
+  [ -n "$FIXES" ] && printf -- '- There are guide fixes under the same stack premise (plugin v%s ↔ installed%s) — `bash "%s/scripts/install-guide.sh" --frontend <pack> --backend <pack> [--app <app>] --notes .orangekit/preset-notes.json`\n' \
     "$PLUG_VER" "$FIXES" "$PLUGIN_ROOT"
   [ -n "$PINNED" ] && printf -- '- %s: the plugin pack has moved to a different stack major — **not updating**. Move it across with `/stack-guide-generator` when you raise the dependency\n' \
     "$(printf '%s' "$PINNED" | sed 's/^ //')"
   [ -n "$CPIN" ] && printf -- '- %s: the plugin pack moved to the standard wire contract and diverges from the installed seam — **not updating**. For a prebuilt seam, add `--seam <combination>` to the update command; for a generated seam, move it across when you regenerate it with `/stack-guide-generator`\n' \
     "$(printf '%s' "$CPIN" | sed 's/^ //')"
+
+  # The project raised a dependency major but the guide still teaches the old one — once code has piled up,
+  # the baseline is **the major the project actually installed**, not the registry latest (stack-guide-generator Step 2-B).
+  # In 0.x the minor acts as the major (same rule as guide-freshness.sh)
+  if [ -f "$ORANGEKIT_ROOT/package.json" ] && command -v python3 >/dev/null 2>&1; then
+    for AJ in "$ORANGEKIT_ROOT"/.claude/skills/*/assembly.json; do
+      [ -f "$AJ" ] || continue
+      GD=$(dirname "$AJ"); GN=$(basename "$GD")
+      [ -f "$GD/SKILL.md" ] || continue
+      DEPUP=$(python3 - "$GD/SKILL.md" "$ORANGEKIT_ROOT/package.json" 2>/dev/null <<'PYDEP' || true
+import json, re, sys
+def key(v):
+    m = re.match(r'\D*(\d+)(?:\.(\d+))?', v or '')
+    if not m: return None
+    a, b = int(m.group(1)), int(m.group(2) or 0)
+    return (0, b) if a == 0 else (a, 0)
+def show(k): return f"0.{k[1]}" if k[0] == 0 else str(k[0])
+txt = open(sys.argv[1], encoding='utf-8').read()
+m = re.search(r'pkgs=([^>]*)', txt)
+if not m: sys.exit(0)
+have = {}
+for spec in m.group(1).split():
+    n, _, v = spec.rpartition('@')
+    if n and v: have[n] = key(v)
+pj = json.load(open(sys.argv[2], encoding='utf-8'))
+deps = {**pj.get('devDependencies', {}), **pj.get('dependencies', {})}
+out = []
+for n, g in have.items():
+    p = key(str(deps.get(n, '')).lstrip('^~>=< '))
+    if g and p and p > g: out.append(f"{n} {show(g)}→{show(p)}")
+print(' · '.join(out))
+PYDEP
+)
+      [ -n "$DEPUP" ] && printf -- '- %s: the project raised a dependency (%s) — the guide teaches the old major. Ask `/stack-guide-generator` for a refresh and it moves only the affected resources\n' "$GN" "$DEPUP"
+    done
+  fi
 
   # T1 rule cards have no stack premise (code-change discipline · reversibility · lessons) — the latest is always right
   #

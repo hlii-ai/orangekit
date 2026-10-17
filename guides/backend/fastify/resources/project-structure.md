@@ -1,9 +1,10 @@
-<!-- orangekit-pack: backend/fastify v3.33.0 -->
+<!-- orangekit-pack: backend/fastify v3.35.0 -->
 # Project structure — the encapsulation context is the boundary
 
 This file owns the assembly order of `buildApp` (`src/app.ts`) and **what plugin encapsulation lets reach where**.
-The route plugin bodies (`src/http/routes/`) are the seam's share, and the boot and signal wiring (`src/index.ts`)
-is owned by `operations.md`.
+The route plugin bodies (`src/http/routes/`) are owned by `resources/api-endpoints.md`, the auth plugin
+(`src/http/auth-plugin.ts`) by `resources/auth-boundaries.md`, and the boot and signal wiring (`src/index.ts`) by
+`resources/operations.md`.
 
 ## 1. Decision tree — which context does this code go in
 
@@ -14,6 +15,8 @@ In Fastify, "where do I register it" is the same question as "how far does it ap
 | validation and serialization compilers | root (`buildApp`) | child contexts inherit them — set them once |
 | `setErrorHandler` · `setNotFoundHandler` | root | there must be one envelope. If a child overrides it, that child alone emits a different envelope |
 | auth hook (`requireAuth`) | **inside the route plugin** | on a sibling it does not reach; at the root it blocks even the health checks |
+| CORS · auth endpoints (`authPlugin`) | root (a plugin wrapped in `fp`) | preflight requests (OPTIONS) have to reach every path. **It does not carry the `requireAuth` hook** |
+| request ID header (`x-request-id`) | root `onRequest` | it has to be on every response, including 404 · parser failures · 204 |
 | ops endpoints (`/healthz` · `/readyz`) | root, **outside** the auth plugin | the load balancer has no token |
 | DB client | module (`src/db/client.ts`) | carry it as a decorator and the query functions have to take the app |
 | a decorator several plugins share | a plugin wrapped in `fastify-plugin` | the only legitimate place to break encapsulation on purpose (§4) |
@@ -26,10 +29,12 @@ through `app.inject()`, so opening a port would make the tests contend for ports
 <!-- file: src/app.ts -->
 ```ts
 // src/app.ts
+import { randomUUID } from 'node:crypto'
 import Fastify, { type RouteOptions } from 'fastify'
 import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod'
 import { env } from './env'
 import { AppError } from './http/app-error'
+import { authPlugin } from './http/auth-plugin'
 import { errorHandler } from './http/error-handler'
 import { tasksRoutes } from './http/routes/tasks'
 import { healthz, readyz } from './ops/health'
@@ -40,6 +45,8 @@ export async function buildApp(opts: { logger?: boolean; onRoute?: (route: Route
   const app = Fastify({
     logger: opts.logger === false ? false : loggerOptions,
     bodyLimit: env.BODY_LIMIT_BYTES,
+    // The default is an in-process sequence (req-1), so instances collide. Incoming headers are not trusted
+    genReqId: () => randomUUID(),
   }).withTypeProvider<ZodTypeProvider>()
 
   // Tests enumerate the registered routes — the hook must come before registration to see them all
@@ -53,10 +60,17 @@ export async function buildApp(opts: { logger?: boolean; onRoute?: (route: Route
     throw new AppError('NOT_FOUND', 'Route not found')
   })
 
+  // The request ID goes into a response header — set at the root so it can be traced even on a bodiless 204 or 404
+  app.addHook('onRequest', async (req, reply) => {
+    reply.header('x-request-id', req.id)
+  })
+
   // Ops endpoints live at the root, outside the auth context
   app.get('/healthz', healthz)
   app.get('/readyz', readyz)
 
+  // CORS + auth endpoints (differ per variant). The requireAuth hook is not here — it is inside the route plugin
+  await app.register(authPlugin)
   // Each domain's routes are their own encapsulated plugin — the auth hook is set inside it
   await app.register(tasksRoutes, { prefix: '/api/tasks' })
   return app
@@ -107,7 +121,7 @@ the prefix to. A route registered with `{ prefix: '/api' }` was 404 at `/api/x` 
 
 | layer | takes | knows nothing about |
 | --- | --- | --- |
-| `src/http/routes/*` (seam) | `req.user` · the parsed `req.body`/`req.query`/`req.params` | SQL · tables |
+| `src/http/routes/*` | `req.user` · the parsed `req.body`/`req.query`/`req.params` | SQL · tables |
 | `src/services/*` | `ownerId` + domain values | `FastifyRequest` · status codes |
 | `src/db/*` | `ownerId` + parsed values | anything HTTP (policy `db-layer-knows-no-http` in `data-access.md`) |
 

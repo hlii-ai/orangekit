@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.34.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
 # TypeScript Standards · Frontend Testing
 
 ## Table of contents
@@ -43,22 +43,24 @@ types, only transpiles, so type errors pass the build.
 
 ## 2. Environment variable types
 
+<!-- file: src/vite-env.d.ts -->
 ```ts
-// src/vite-env.d.ts
+// src/vite-env.d.ts — the Vite scaffold file. Without the reference below, `import.meta.env` is a type error
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_API_BASE_URL: string;
-  readonly VITE_OIDC_AUTHORITY: string;
-  readonly VITE_OIDC_CLIENT_ID: string;
-  readonly VITE_OIDC_LOGOUT_URL: string;   // the issuer's own logout URL (auth-and-session.md §6)
+  readonly VITE_API_BASE_URL: string;      // the API origin — do not append the path (/api/...)
+  // Used only by the OIDC variant. Leave these empty for the self-issued variant (auth-and-session.md)
+  readonly VITE_OIDC_AUTHORITY?: string;
+  readonly VITE_OIDC_CLIENT_ID?: string;
+  readonly VITE_OIDC_LOGOUT_URL?: string;  // for an issuer that does not publish end_session_endpoint
 }
 interface ImportMeta { readonly env: ImportMetaEnv }
 ```
 
 <!-- file: src/config.ts -->
 ```ts
-// src/config.ts — app code (http.ts·oidcConfig.ts included) never reads import.meta.env directly.
+// src/config.ts — app code (http.ts·auth/session.ts included) never reads import.meta.env directly.
 // Values are **read at the call site with a literal key** and passed in — do import.meta.env[name]
 // inside a function and Vite's static substitution never happens, so a production build gets all undefined.
 function required(name: string, value: string | undefined): string {
@@ -68,16 +70,19 @@ function required(name: string, value: string | undefined): string {
 
 export const config = {
   apiBaseUrl: required('VITE_API_BASE_URL', import.meta.env.VITE_API_BASE_URL),
+  // Needed only when the auth variant is OIDC — whether it is required is decided at boot by that variant's session.ts
   oidc: {
-    authority: required('VITE_OIDC_AUTHORITY', import.meta.env.VITE_OIDC_AUTHORITY),
-    clientId: required('VITE_OIDC_CLIENT_ID', import.meta.env.VITE_OIDC_CLIENT_ID),
-    logoutUrl: required('VITE_OIDC_LOGOUT_URL', import.meta.env.VITE_OIDC_LOGOUT_URL),
+    authority: import.meta.env.VITE_OIDC_AUTHORITY ?? '',
+    clientId: import.meta.env.VITE_OIDC_CLIENT_ID ?? '',
+    logoutUrl: import.meta.env.VITE_OIDC_LOGOUT_URL ?? '',
   },
 } as const;
 ```
 
 Throwing at boot makes a missing value obvious immediately. Defer it to first use and it is only
-discovered by entering a particular screen. This file is the **only place** `import.meta.env` appears.
+discovered by entering a particular screen. This file is the **only place** `import.meta.env` appears. The `oidc` values do not
+throw here — that would make a self-issued project require variables it does not use. Instead the OIDC
+adapter checks for empty values at module load and produces the same boot failure.
 
 ## 3. Narrowing types at the API boundary
 
@@ -85,21 +90,33 @@ discovered by entering a particular screen. This file is the **only place** `imp
 contract changes, and the error blows up deep inside a screen. Put a **narrowing function** at the boundary and
 pass it through the `http` client's `parse` option so that it **actually runs**.
 
+<!-- file: src/features/tasks/api/tasks.types.ts -->
 ```ts
-// features/tasks/api/tasks.types.ts
+// src/features/tasks/api/tasks.types.ts — the domain types and their narrowing function live in one file
+import { ApiError } from '@/lib/api/errors';
+
+export type TaskStatus = 'open' | 'done';
+/** The four wire fields of contract §0 are all there is — do not invent fields */
+export type Task = { id: string; title: string; status: TaskStatus; createdAt: string };
+export type TaskFilter = { status: TaskStatus | 'all' };
+export type CreateTaskInput = { title: string };
+
 export function assertTask(v: unknown): asserts v is Task {
   const t = v as Record<string, unknown> | null;
-  if (!t || typeof t.id !== 'string' || typeof t.title !== 'string') {
+  if (!t || typeof t.id !== 'string' || typeof t.title !== 'string'
+      || (t.status !== 'open' && t.status !== 'done') || typeof t.createdAt !== 'string') {
     throw new ApiError(500, 'BAD_SHAPE', 'The response shape differs from the contract.');
   }
 }
 export const parseTask = (v: unknown): Task => { assertTask(v); return v; };
+```
 
-// ✅ Call site — the narrowing sits on the request path
-http.getPage<Task>('/tasks?limit=20', { parse: parseTask });
+```ts
+// ✅ Call site — the narrowing sits on the request path (data-fetching.md §4)
+http.getPage<Task>('/api/tasks?limit=20', { parse: parseTask });
 
 // ❌ Called without parse — it becomes `as T` inside the client, so a field the server drops passes silently
-http.getPage<Task>('/tasks?limit=20');
+http.getPage<Task>('/api/tasks?limit=20');
 ```
 
 There is no need to check every field. Checking **only the fields the screen truly depends on** catches most
@@ -140,14 +157,20 @@ function label(s: TicketStatus): string {
 | HTTP | MSW (`setupServer`), mocked at the network layer | `src/test/msw/` |
 
 ```ts
-// vitest.config.ts
-test: { environment: 'jsdom', setupFiles: ['./src/test/setup.ts'], globals: true }
+// vitest.config.ts (or the test block of vite.config.ts)
+test: {
+  environment: 'jsdom', setupFiles: ['./src/test/setup.ts'], globals: true,
+  // config.ts throws at import time when VITE_API_BASE_URL is missing — define it here so tests run even in a fresh scaffold with no .env
+  env: { VITE_API_BASE_URL: 'http://localhost:3000' },
+}
 ```
 
 <!-- file: src/test/setup.ts -->
 ```ts
 // src/test/setup.ts
 import '@testing-library/jest-dom/vitest';
+import { cleanup } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll } from 'vitest';
 import { server } from './msw/server';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));  // an unmocked request is made to fail
@@ -162,15 +185,27 @@ import { http, HttpResponse } from 'msw';
 
 // Handlers must honour the **envelope contract** too. Get the shape wrong here and only the tests pass while the real thing breaks
 export const handlers = [
-  http.get('*/tasks', () => HttpResponse.json({ data: [], nextCursor: null })),
-  http.post('*/tasks', async ({ request }) => {
+  http.get('*/api/tasks', () => HttpResponse.json({ data: [], nextCursor: null })),
+  http.post('*/api/tasks', async ({ request }) => {
     const body = (await request.json()) as { title: string };
-    return HttpResponse.json({ data: { id: 't1', ...body, status: 'open' } }, { status: 201 });
+    return HttpResponse.json(
+      { data: { id: 't1', title: body.title, status: 'open', createdAt: '2026-10-01T00:00:00.000Z' } },
+      { status: 201 },
+    );
   }),
   // Failure cases are overridden with server.use() inside that one test only
   // HttpResponse.json({ error: { code: 'VALIDATION_FAILED', message: '...',
   //   details: { title: ['At least 2 characters'] } }, requestId: 'req_1' }, { status: 400 })
 ];
+```
+
+<!-- file: src/test/msw/server.ts -->
+```ts
+// src/test/msw/server.ts — setup.ts owns the lifetime, and each test owns its failure responses via server.use()
+import { setupServer } from 'msw/node';
+import { handlers } from './handlers';
+
+export const server = setupServer(...handlers);
 ```
 
 Why MSW rather than stubbing `fetch` directly: the header assembly·error normalization in `http.ts` are
@@ -181,6 +216,11 @@ verified along with it, so when the test passes the real path passes too.
 <!-- file: src/test/renderWithProviders.tsx -->
 ```tsx
 // src/test/renderWithProviders.tsx
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryRouter, RouterProvider } from 'react-router';
+import { render } from '@testing-library/react';
+
 export function renderWithProviders(ui: ReactNode, { route = '/' } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -215,9 +255,8 @@ it('refreshes the list when a task is created', async () => {
   // Loading → data: findBy* waits until it appears
   expect(await screen.findByRole('heading', { name: 'Tasks' })).toBeInTheDocument();
 
-  await user.click(screen.getByRole('button', { name: 'New task' }));
   await user.type(screen.getByLabelText('Title'), 'Write the report');
-  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await user.click(screen.getByRole('button', { name: 'New task' }));   // the form from complete-example.md §1
 
   expect(await screen.findByText('Write the report')).toBeInTheDocument();
 });

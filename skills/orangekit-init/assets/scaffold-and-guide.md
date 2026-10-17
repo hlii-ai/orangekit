@@ -61,8 +61,14 @@ mkdir -p .orangekit && cat > .orangekit/preset-notes.json <<'JSON'
   "policyEngine": <true|false>, "language": "<TypeScript|JavaScript>",
   "deliveryModel": "<web|hybrid|cross-platform|native|api-only>", "clientKind": "<browser|app>",
   "pwa": <true|false>, "appShell": "<hybrid only>", "nativeStack": "<when there is an app axis>",
-  "appNotes": "<app preset notes — when there is an app axis>" }
+  "appNotes": "<app preset notes — when there is an app axis>",
+  "authKind": "<self-issued|oidc|baas|any other value>" }
 JSON
+
+`authKind` records the auth answer from Step 4.5 **folded into this vocabulary** — it is the key a pack picks its auth variant by:
+`self-issued` (the server handles sign-in and issues tokens itself — its own JWT) · `oidc` (an external IdP — Cognito · Auth0 · Keycloak ·
+Identity Platform and the like; the server only verifies tokens) · `baas` (Supabase Auth · Firebase Auth). If none of the three fits,
+write the answer as-is in lowercase-hyphen form — the installer leaves a value the pack lacks as a generation target, so do not force a fold.
 
 SEAM=""
 [ -d "${CLAUDE_PLUGIN_ROOT}/guides/seams/<frontend>+<backend>" ] && SEAM="--seam <frontend>+<backend>"
@@ -87,26 +93,41 @@ The single `status:` line at the end of the output is the whole result:
   not it deletes it. It is the side that knows what is left per axis
 - **Exit code 1** (gate FAIL) means that axis has been moved down to `.orangekit/failed-guides/`.
   Just report it and **let init continue** — the T1 rule cards already work without a guide
-- **The baseline comparison is the script's job too** (on by default). If the output shows a major
-  bump, do not judge by hand — **report it verbatim**. Do not ask whether to regenerate: the user has
-  no way to know whether the guide is stale, so they answer by feel, and the question becomes per-session noise
+- **The baseline comparison is the script's job too** (on by default, first install only). Assembly always finishes on the
+  major the pack **verified**; when the registry has a higher major, the script records `refresh:<axis>` in what is left
+  and the package · majors · affected resources in `stale`. Do not judge by hand — carry it into the one question below
 
 #### If work remains — ask one thing and stop
 
 ```
 Settled combination: <frontend> × <backend>
 Guide status: frontend=<status> · backend=<status>
-Remaining: <the need from guide-job.json, verbatim> — build it now, or in the next session?
+Remaining: <the need from guide-job.json, verbatim>
 Expected cost: generating <number of seam:* entries in need> seam(s) — measured at about 1 hour for 2 axes (audit included),
                longer on Windows (Git Bash). Hundreds of thousands of tokens per background agent.
+Latest majors: <if there is stale, list "package declared→latest" per axis. Mark a pack premise with ⚠>
+               — applying it rewrites only the <sum of stale files> affected resources in the installed guide
 (init itself is complete. The T1 rule cards and the assembled pack resources already work without the guides)
+
+  1. Build now + apply the latest majors     (slowest · latest)
+  2. Build now · pin to the verified majors   (only when there is stale — fast)
+  3. In the next session
 ```
+
+With no `stale`, merge 1 and 2 into a single "build now". If the only remaining work is `refresh:*` (a combination whose
+seams already exist), state the cost line only as the number of affected resources.
+
+**If 2 is chosen, drop `refresh:*` from need and show the pin command** — a guide is right only when what it teaches matches
+what the project installs. Print the install line built from the pack's `pkgs` majors as-is
+(e.g. `npm i react@18 react-dom@18 vite@5`). When the project raises a dependency later, `/stack-guide-generator`
+moves only the affected resources of the installed guide (that skill's "Step 2-B: refresh").
 
 **Do not drop the expected-cost line, and do not shrink the numbers.** The measurement (`dev/docs/skill-review/contract-first-e2e-2026-08-22.md`:
 generating 2 axes took 37 minutes + 17 minutes of audit, macOS) is the basis. There is a real case where "about 20 minutes" was said without
 basis, the user chose to build now, and then waited an hour — the value of this question lies in letting the user choose with the accurate cost in view.
 
 If they say to continue, call `stack-guide-generator` — **there is no need to marshal arguments.**
+If 2 was chosen, delete `refresh:*` from need in `guide-job.json` before the call (leave `stale` in place as the record).
 That skill starts by reading `.orangekit/guide-job.json` and closes the file when it finishes.
 Otherwise stop here. The `session-brief` hook reports unfinished work in the next session.
 

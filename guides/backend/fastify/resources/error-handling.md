@@ -1,10 +1,10 @@
-<!-- orangekit-pack: backend/fastify v3.33.0 -->
+<!-- orangekit-pack: backend/fastify v3.35.0 -->
 # Error handling — one domain code yields both the status and the envelope
 
 This file owns `src/http/errors.ts` (the status table · normalization · SQLSTATE detection). `AppError` · `ErrorCode`
-(`src/http/app-error.ts`) and the envelope-emitting `errorHandler` (`src/http/error-handler.ts`) are **owned by the
-seam** — because the envelope shape is a function of the wire contract. This file only supplies the axis-local
-parts those two lean on.
+(`src/http/app-error.ts`) and the envelope-emitting `errorHandler` (`src/http/error-handler.ts`) are owned by
+`resources/api-endpoints.md` — the envelope shape is a function of the wire contract (HTTP standard v1). This file
+supplies the parts those two lean on (the table · normalization · log fields).
 
 ## 1. Judgment — what does this failure go out as
 
@@ -15,6 +15,7 @@ parts those two lean on.
 | broken JSON · empty JSON body | `FastifyError` | `code` `FST_ERR_CTP_INVALID_JSON_BODY` · `FST_ERR_CTP_EMPTY_JSON_BODY` | `VALIDATION_FAILED` |
 | body over the limit | `FastifyError` | `FST_ERR_CTP_BODY_TOO_LARGE` | `PAYLOAD_TOO_LARGE` |
 | a Content-Type with no parser | `FastifyError` | `FST_ERR_CTP_INVALID_MEDIA_TYPE` | `UNSUPPORTED_MEDIA_TYPE` |
+| a rate-limiter plugin's rejection (when attached) | anything + `statusCode` 429 | `statusCode === 429` | `RATE_LIMITED` |
 | a unique violation | `DrizzleQueryError` | `cause.code === '23505'` | `CONFLICT` |
 | a response schema mismatch · anything else | anything | — | `INTERNAL` |
 
@@ -40,6 +41,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   CONFLICT: 409,
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
+  RATE_LIMITED: 429,
   INTERNAL: 500,
 }
 
@@ -85,20 +87,22 @@ const FASTIFY_CODES: Record<string, ErrorCode> = {
 // Normalize an unknown throw into an AppError. errorHandler calls this first
 export function toAppError(e: unknown): AppError {
   if (e instanceof AppError) return e
-  const err = e as { code?: unknown; validation?: ValidationIssue[] } | null
+  const err = e as { code?: unknown; statusCode?: unknown; validation?: ValidationIssue[] } | null
   if (err && Array.isArray(err.validation)) {
     return new AppError('VALIDATION_FAILED', 'Invalid input', fieldErrors(err.validation))
   }
   if (isUniqueViolation(e)) return new AppError('CONFLICT', 'Already exists')
   const mapped = typeof err?.code === 'string' ? FASTIFY_CODES[err.code] : undefined
   if (mapped) return new AppError(mapped, 'The request could not be processed')
+  // A limiter's 429 has only one meaning, so decide by status (the self-issued variant puts `@fastify/rate-limit` on `/api/auth` — that 429 lands here)
+  if (err?.statusCode === 429) return new AppError('RATE_LIMITED', 'Too many requests')
   // The cause's message never goes in the response — a DrizzleQueryError's message is the full SQL
   return new AppError('INTERNAL', 'Internal server error')
 }
 ```
 
-Because `ERROR_STATUS` is typed `Record<ErrorCode, number>`, if the seam adds a code to `ErrorCode` without updating
-the table it is **a compile error**. Leave it as `Record<string, number>` and a missing code silently becomes
+Because `ERROR_STATUS` is typed `Record<ErrorCode, number>`, adding a code to `ErrorCode` (`resources/api-endpoints.md`)
+without updating the table is **a compile error**. Leave it as `Record<string, number>` and a missing code silently becomes
 `undefined` → 500.
 
 ## 3. The real shape of validation issues — for an unknown key the path is `/`
@@ -146,14 +150,14 @@ paths. `errorLogFields` reduces a DB error to the SQLSTATE, constraint name, and
 ## 5. Handlers throw — failures are not written with `reply.code().send()`
 
 ```ts
-// src/http/routes/tasks.ts (owned by the seam)
+// src/http/routes/tasks.ts
 // ❌ The handler builds the failure envelope — the same 404 goes out in a different shape from the root envelope
 if (!task) return reply.code(404).send({ message: 'not found' })
 // ✅ Throw, and the root errorHandler applies the table and the envelope
 if (!task) throw new AppError('NOT_FOUND', 'Task not found')
 ```
 
-`setNotFoundHandler` throws too (`project-structure.md` §2) — a missing route and a missing resource share an
+`setNotFoundHandler` throws too (`resources/project-structure.md` §2) — a missing route and a missing resource share an
 envelope. `reply` is used only for **the status and headers of a success response** (201 + `Location`, 204).
 
 ## 6. Do not leak existence
@@ -166,7 +170,9 @@ envelope. `reply` is used only for **the status and headers of a success respons
 
 The log level is decided by **the final status**: `info` for 4xx, `error` for 5xx — a unique violation that ends as a
 409 is `info`. Log 4xx as `error` and scanner traffic drowns out the alerts. The "missing or not owned" line is
-logged by the route (seam) with `req.log.info` right before it throws `NOT_FOUND`.
+logged by the route (`resources/api-endpoints.md` §5) with `req.log.info` right before it throws `NOT_FOUND`.
+
+The `statusCode === 429` branch: we observed in the scratch that a 429 `Error` thrown by `@fastify/rate-limit@11.2.1` reaches `setErrorHandler` with `statusCode` 429 (2026-10-17). This pack's `toAppError` code itself was not run <!-- unverified: the 429 branch of toAppError was not run in this pack -->.
 
 `FASTIFY_CODES` holds only the four codes we observed. A request-stage error not in the table (a bad Content-Length
 and the like) falls through to `INTERNAL` — recorded in `knownGaps` in `pack.json`.
@@ -194,7 +200,7 @@ describe('input · error envelope', () => {
   it('create → 201 + Location, recreating the same title → 409', async () => {
     const first = await app.inject({ method: 'POST', url: '/api/tasks', headers: authFor('alice'), payload: { title: 'one' } })
     expect(first.statusCode).toBe(201)
-    expect(first.headers.location).toBe(`/api/tasks/${first.json().id}`)
+    expect(first.headers.location).toBe(`/api/tasks/${first.json().data.id}`)
     const dup = await app.inject({ method: 'POST', url: '/api/tasks', headers: authFor('alice'), payload: { title: 'one' } })
     expect(dup.statusCode).toBe(409)
     expect(dup.json().error.code).toBe('CONFLICT')
@@ -211,7 +217,7 @@ describe('input · error envelope', () => {
     const t = await seedTask('alice', { title: 'unchanged', status: 'done' })
     const res = await app.inject({ method: 'PATCH', url: `/api/tasks/${t.id}`, headers: authFor('alice'), payload: { title: 'changed' } })
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toMatchObject({ title: 'changed', status: 'done' })
+    expect(res.json().data).toMatchObject({ title: 'changed', status: 'done' })
   })
 
   it('a tampered cursor and a NUL character are a 400, not a 500', async () => {

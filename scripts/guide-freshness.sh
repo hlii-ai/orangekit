@@ -82,7 +82,19 @@ resolve_latest() { # $1=name $2=registry → the latest version string, or empty
   case "$reg" in
     npm)
       command -v npm >/dev/null 2>&1 || return 0
-      npm view "$name" version --fetch-timeout "$((NETTIMEOUT*1000))" --no-audit --no-fund 2>/dev/null | tail -1
+      local v
+      v=$(npm view "$name" version --fetch-timeout "$((NETTIMEOUT*1000))" --no-audit --no-fund 2>/dev/null | tail -1)
+      # Some packages have a prerelease on the `latest` tag (measured: prisma latest = 8.0.0-rc.23). Counting that
+      # as latest reports "the pack premise changed" for a major that has not shipped — fall back to the highest stable release
+      case "$v" in *-*)
+        v=$(npm view "$name" versions --json --fetch-timeout "$((NETTIMEOUT*1000))" 2>/dev/null | python3 -c "
+import json,re,sys
+try: vs=json.load(sys.stdin)
+except Exception: sys.exit(0)
+vs=[x for x in (vs if isinstance(vs,list) else [vs]) if re.fullmatch(r'\d+\.\d+\.\d+',x)]
+print(max(vs,key=lambda x:tuple(map(int,x.split('.')))) if vs else '')" 2>/dev/null || true) ;;
+      esac
+      printf '%s\n' "$v"
       ;;
     pypi)
       command -v curl >/dev/null 2>&1 || return 0
