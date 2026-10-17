@@ -133,13 +133,26 @@ without asking. If it cannot be judged (lookup failure · offline), say "latest 
 ask — undecidable is folded neither into "risen" nor into "latest".
 
 ```
-The guides are complete (on the majors the pack verified).
-Latest majors: <result of guide-freshness.sh --guide on the completed install — "package declared→latest" per axis,
-               a pack premise (pack.json fixesVariants) marked ⚠> — applying rewrites only <total> affected files
+The guides are complete. They are currently written for the versions below.
 
-  1. Update to the latest majors        (affected files only · shorter than generation)
-  2. Keep the verified majors           (shows the install command pinned to them)
+Packages with a newer version (<N>):
+| Guide | Package | Guide now | Latest | Files to rewrite |
+| --- | --- | --- | --- | --- |
+| frontend | react | 18 | 19.3.1 | 4 |
+| frontend | vite | 5 | 8.3.4 | 2 |
+| backend | fastify-plugin ⚠ | 5 | 6.0.1 | 2 |
+⚠ the framework itself changes, so the rewrite is larger
+
+  1. Update to the latest versions — react 19 · vite 8 · fastify-plugin 6 (rewrites only <total> files)
+  2. Keep the current versions — shows the install command pinned to react 18 · vite 5 · fastify-plugin 5
 ```
+
+**Always write versions as numbers.** "Major" or "latest major" alone does not tell the user what changes or by how much
+(a real complaint). The table values come straight from the TSV of `guide-freshness.sh --guide --json` — "Guide now" is the declared
+major, "Latest" is the latest stable version, "Files to rewrite" is the file count in the last column. Put **the package names and
+version numbers themselves** into both options too (with many rows: the 5 with the most affected files + "and N more"). Keep rows
+with 0 files (tools like typescript) in the table as "0 — only the version label changes". In sentences the user sees, say "version",
+not "major".
 
 If 1, run `stack-guide-generator`'s "Step 2-B: refresh". If 2, print the install line built from the pack's `pkgs` majors as-is
 (e.g. `npm i react@18 react-dom@18 vite@5`) — a guide is right only when what it teaches matches what the project installs.

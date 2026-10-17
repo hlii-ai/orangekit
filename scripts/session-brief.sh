@@ -300,7 +300,7 @@ for n, g in have.items():
 print(' · '.join(out))
 PYDEP
 )
-      [ -n "$DEPUP" ] && printf -- '- %s: the project raised a dependency (%s) — the guide teaches the old major. Ask `/stack-guide-generator` for a refresh and it moves only the affected resources\n' "$GN" "$DEPUP"
+      [ -n "$DEPUP" ] && printf -- '- %s: the project raised a dependency version (guide version→project version: %s) — the guide is still written for the earlier version. Ask `/stack-guide-generator` for a refresh and it rewrites only the files where that package appears\n' "$GN" "$DEPUP"
     done
   fi
 

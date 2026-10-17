@@ -1,5 +1,15 @@
 # Lessons
 
+## [category: workflow] Writing only "major" leaves the user unable to tell what changes — write the version numbers
+
+- Date: 2026-10-17
+- Situation: init's latest-version question was designed and reported as "update to the latest majors / keep the verified majors".
+  The user pointed out that "major" alone is not understandable and the versions must be stated.
+- Mistake: internal verdict vocabulary (major rise · declared major) was used verbatim as the wording of the user's options. Even with
+  numbers somewhere in a table, abstract option labels leave the user unsure what they are choosing.
+- Lesson: a question that asks the user to choose puts concrete values **in the options themselves** (package name · current version →
+  latest version · scope of impact). Keep verdict vocabulary in internal documents only.
+
 ## [category: tooling] The typecheck had not run once in months — "install failed → skip"
 
 - date: 2026-10-17
