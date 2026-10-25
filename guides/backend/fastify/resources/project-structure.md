@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Project structure — the encapsulation context is the boundary
 
 This file owns the assembly order of `buildApp` (`src/app.ts`) and **what plugin encapsulation lets reach where**.

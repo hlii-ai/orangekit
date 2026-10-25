@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # Auth & Session — self-issued tokens (email · password + httpOnly refresh cookie)
 
 This is the **auth adapter** for the method where the API server handles login · refresh · logout itself under `/api/auth`.

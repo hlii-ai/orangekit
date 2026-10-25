@@ -12,7 +12,7 @@
 #
 # Usage:
 #   install-guide.sh --frontend <pack|none> --backend <pack|none> [--app <app|none>] [--seam <combo>]
-#                    [--gate] [--notes <file>] [--dry-run] [--force] [--no-freshness]
+#                    [--gate] [--notes <file>] [--dry-run] [--force] [--no-freshness] [--rules-only]
 #
 #   --frontend react-vite     uses guides/frontend/react-vite
 #   --backend  supabase       uses guides/backend/supabase
@@ -29,6 +29,9 @@
 #   --save-seam <combo>         puts a seam that has just passed audit into the cache (called right after generation)
 #   --no-cache                  neither reads nor writes the cache
 #   --self-test                 proves "an unfinished pack is not assembled" with a synthetic pack
+#   --rules-only                installs only the stack rule file (pack RULES.md → .claude/rules/stack-<axis>-<pack>.md).
+#                               No guide skill assembly, no record of work left, no gate — this is init's default.
+#                               The detailed guide is opt-in (guide A/B: no score difference, and an example overrode a convention)
 #   --no-freshness              turns the freshness verdict off. On by default (scripts/guide-freshness.sh)
 #                               — it runs only on a first install, and with no network it reports undecided
 #
@@ -72,7 +75,7 @@ G="$PLUGIN_ROOT/guides"
 STALE_TSV="$(mktemp)"; VGAP_TSV="$(mktemp)"; trap 'rm -f "$STALE_TSV" "$VGAP_TSV"' EXIT
 FE=""; BE=""; SEAM=""; DRY=0; FORCE=0; SAVE_SEAM=""; NO_CACHE=0; CHECK_FRESH=1
 GATE=0; NOTES=""; AXIS_STATE=""; FE_STATE=skip; BE_STATE=skip; SELFTEST=0
-APP=""; APP_STATE=skip
+APP=""; APP_STATE=skip; RULES_ONLY=0
 PLUGIN_VER=$(grep -m1 -oE '"version"[[:space:]]*:[[:space:]]*"[0-9.]+"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
 PLUGIN_VER="${PLUGIN_VER:-0.0.0}"
 CACHE_ROOT="${ORANGEKIT_SEAM_CACHE:-$HOME/.claude/orangekit/seam-cache}"
@@ -90,6 +93,7 @@ while [ $# -gt 0 ]; do
     --check-freshness) CHECK_FRESH=1; shift ;;   # backward compatibility — this is the default now
     --self-test) SELFTEST=1; shift ;;
     --dry-run)  DRY=1; shift ;;
+    --rules-only) RULES_ONLY=1; shift ;;
     --force)    FORCE=1; shift ;;
     # --help is the whole header comment. Pinning the range to numbers truncates it the moment the header grows
     -h|--help)  awk 'NR>1 && /^#/{sub(/^# ?/,"");print;next} NR>1{exit}' "$0"; exit 0 ;;
@@ -322,6 +326,17 @@ contract_drift() { # $1=axis $2=pack → prints "installed → pack" when they d
   return 0
 }
 
+# ── Stack rule file ───────────────────────────────────────────────────
+# What must be followed is injected as a `paths:` rule, not as a skill (where the model decides whether to read it).
+# The name takes a `stack-` prefix so it never collides with `rules/`. It is installed **before** the pin check and
+# assembly — an axis whose stack premise is pinned still has to receive the must-follow rules
+put_rules_card() { # $1=axis $2=pack $3=pack directory
+  [ -f "$3/RULES.md" ] || return 0
+  printf '  [%s-guide]  core card → .claude/rules/stack-%s-%s.md\n' "$1" "$1" "$2"
+  [ "$DRY" -eq 0 ] && mkdir -p "$PROJECT_ROOT/.claude/rules"
+  put "$3/RULES.md" "$PROJECT_ROOT/.claude/rules/stack-$1-$2.md"
+}
+
 # ── Assembling one axis ───────────────────────────────────────────────
 # Leaves AXIS_STATE: complete (through SKILL.md) · resources (waiting for a seam) · generate (no pack, or unfinished)
 #                    · pinned (left untouched because the stack premise is pinned)
@@ -353,7 +368,11 @@ assemble() { # $1=frontend|backend|app  $2=pack name
 
   # A missing or unfinished pack is not a failure but **the generation path**. Cutting off here throws away the other axis's assembly too
   if [ ! -d "$packdir" ]; then
-    printf '  [%s-guide]  no pack (%s) — recording it as a full generation target\n' "$axis" "$pack"
+    if [ "$RULES_ONLY" -eq 1 ]; then
+      printf '  [%s-guide]  no pack (%s) — no stack rule file. Only the universal rules (security.md) apply\n' "$axis" "$pack"
+    else
+      printf '  [%s-guide]  no pack (%s) — recording it as a full generation target\n' "$axis" "$pack"
+    fi
     return 0
   fi
   local miss; miss=$(pack_missing "$packdir")
@@ -362,6 +381,9 @@ assemble() { # $1=frontend|backend|app  $2=pack name
     printf '             Not assembling; recording it as a **full generation target** (half a pack is worse than no pack)\n'
     return 0
   fi
+
+  put_rules_card "$axis" "$pack" "$packdir"
+  if [ "$RULES_ONLY" -eq 1 ]; then AXIS_STATE=rules; return 0; fi
 
   # Freshness verdict — **it runs only on a first install.**
   # An existing project has already pinned its stack (the PINNED block below), and information that shakes
@@ -766,6 +788,10 @@ run_self_test() {
   done
   # Only full carries b.md as declared. half declares it without carrying it (= an unfinished pack with only L0 frozen)
   printf '<!-- orangekit-pack: frontend/full v1.0.0 -->\n\n# B\n' > "$t/guides/frontend/full/resources/b.md"
+  # Both carry a core card — if an unfinished pack's card were installed, the assembly block would be only half a block
+  for p in full half; do
+    printf -- '---\npaths:\n  - "src/**"\n---\n<!-- orangekit-pack: frontend/%s v1.0.0 -->\n\n# %s core card\n' "$p" "$p" > "$t/guides/frontend/$p/RULES.md"
+  done
 
   _st() { # $1=pack $2=expected state $3=label [rest=extra arguments]
     local pk="$1" want="$2" label="$3" got; shift 3
@@ -782,7 +808,52 @@ run_self_test() {
 
   printf '\ninstall-guide --self-test\n\n'
   _st full "resources" "a complete pack is assembled (resources, since there is no seam)"
+  # Core card — it must be installed even with no seam (resources state). What must be followed may not wait on generation
+  local card="$proj/.claude/rules/stack-frontend-full.md"
+  if cmp -s "$t/guides/frontend/full/RULES.md" "$card"; then
+    printf '  ✓ the core card is installed into .claude/rules/ (even while waiting for a seam)\n'; pass=$((pass+1))
+  else
+    printf '  ✗ the core card was not installed, or differs from the source\n'; fail=$((fail+1))
+  fi
+  # A card the project edited is preserved at the same stamp — overwriting it silently erases the project's decision
+  printf '\n- a rule the project added\n' >> "$card"
+  out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" bash "$0" --frontend full --no-freshness --no-cache 2>&1) || true
+  if grep -q 'a rule the project added' "$card"; then
+    printf '  ✓ an edited card at the same stamp is preserved\n'; pass=$((pass+1))
+  else
+    printf '  ✗ the edited card was overwritten\n'; fail=$((fail+1))
+  fi
+  # An axis whose stack premise is pinned still receives the core card — the pin blocks pack skill updates, not must-follow rules
+  printf -- '---\nname: frontend-guide\n---\n<!-- orangekit-guide: assembled pkgs=zod@3 -->\n' > "$proj/.claude/skills/frontend-guide/SKILL.md"
+  rm -f "$card"
+  out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" bash "$0" --frontend full --no-freshness --no-cache 2>&1) || true
+  if printf '%s' "$out" | grep -q 'state: frontend=pinned' && cmp -s "$t/guides/frontend/full/RULES.md" "$card"; then
+    printf '  ✓ an axis whose stack premise is pinned still receives the core card\n'; pass=$((pass+1))
+  else
+    printf '  ✗ no core card on a pinned axis (or it was not judged pinned)\n'; fail=$((fail+1))
+  fi
+
+  # --rules-only (init's default) — the rule file only. With no skill, no work left and no gate, no "guide generation unfinished" notice appears
+  _st full "rules" "--rules-only installs only the rule file" --rules-only
+  if cmp -s "$t/guides/frontend/full/RULES.md" "$proj/.claude/rules/stack-frontend-full.md" \
+     && [ ! -e "$proj/.claude/skills/frontend-guide" ] && [ ! -e "$proj/.orangekit/guide-job.json" ]; then
+    printf '  ✓   …the card is there, and there is no skill directory and no guide-job.json\n'; pass=$((pass+1))
+  else
+    printf '  ✗   …the card is missing, or a skill or guide-job.json appeared\n'; fail=$((fail+1))
+  fi
+  _st nopack "generate" "--rules-only installs nothing for an axis with no pack" --rules-only
+  if [ ! -e "$proj/.orangekit/guide-job.json" ] && [ ! -e "$proj/.claude/skills" ]; then
+    printf '  ✓   …it is not recorded as a generation target (the detailed guide is opt-in)\n'; pass=$((pass+1))
+  else
+    printf '  ✗   …an axis with no pack left guide-job.json or a skill behind\n'; fail=$((fail+1))
+  fi
+
   _st half "generate"  "an unfinished pack is not assembled (declared but missing)"
+  if [ -e "$proj/.claude/rules/stack-frontend-half.md" ]; then
+    printf '  ✗ an unfinished pack, yet its core card was installed\n'; fail=$((fail+1))
+  else
+    printf '  ✓ an unfinished pack does not install its core card either\n'; pass=$((pass+1))
+  fi
 
   # An unfinished pack must install **nothing** — leaving half behind is not a block
   if [ -d "$proj/.claude/skills/frontend-guide" ]; then
@@ -1089,7 +1160,9 @@ if _axis_on "$APP"; then assemble app "$APP"; APP_STATE="$AXIS_STATE"; fi
 printf '\n  new %d · updated %d · kept %d\n' "$installed" "$updated" "$skipped"
 
 gate_failed=0
-if [ "$GATE" -eq 1 ] && [ "$DRY" -eq 1 ]; then
+if [ "$RULES_ONLY" -eq 1 ]; then
+  :   # no skill was assembled, so there is nothing to gate
+elif [ "$GATE" -eq 1 ] && [ "$DRY" -eq 1 ]; then
   printf '  (--dry-run — not running the gate)\n'
 elif [ "$GATE" -eq 1 ]; then
   if [ "$FE_STATE" = complete ]; then
@@ -1104,7 +1177,12 @@ elif [ "$GATE" -eq 1 ]; then
 fi
 
 printf '\n  state: frontend=%s · backend=%s · app=%s\n' "$FE_STATE" "$BE_STATE" "$APP_STATE"
-printf '    complete=skill finished · resources=waiting for a seam · generate=needs generating · pinned=premise pinned · skip=not applicable\n'
-write_job
+printf '    complete=skill finished · resources=waiting for a seam · generate=needs generating · pinned=premise pinned · skip=not applicable · rules=rule file only\n'
+# --rules-only records no work left — the detailed guide is opt-in, not "unfinished". An existing job file is left untouched too
+if [ "$RULES_ONLY" -eq 1 ]; then
+  printf '    The detailed guide skill was not installed (opt-in) — if needed, run again without --rules-only, or /stack-guide-generator\n'
+else
+  write_job
+fi
 if [ "$gate_failed" -eq 1 ]; then exit 1; fi
 exit 0

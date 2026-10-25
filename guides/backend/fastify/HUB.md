@@ -10,6 +10,7 @@ This guide covers a server where **the application connects to PostgreSQL over a
 row-level policy engine, so the routes' auth hook and the queries' ownership condition are the only boundary.
 
 If the project has its own API spec (e.g. `dev/docs/api/`), that is canonical, and the wire values in this guide (paths · codes · statuses) are pattern examples.
+Id types and table column conventions are the same — follow the existing tables and `.claude/rules/code-conventions.md`; the example's `uuid` id is the choice for a new project.
 The example values follow the standard HTTP contract v1 — success `{ data }` · list `{ data, nextCursor }`, failure
 `{ error: { code, message, details? }, requestId }`, cursor pagination, someone else's resource is 404, `Authorization: Bearer`.
 The auth method (self-issued · external IdP) was chosen at install time — the title of `resources/auth-boundaries.md` says which.

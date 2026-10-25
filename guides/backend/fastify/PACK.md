@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 verified 2026-10-15 fastify@5 fastify-plugin@5 fastify-type-provider-zod@7 zod@4 drizzle-orm@0.45 drizzle-kit@0.31 jose@6 @fastify/cookie@11 @fastify/cors@11 @fastify/rate-limit@11 pg@8 @types/pg@8 typescript@5 tsx@4 vitest@3 @types/node@24 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 verified 2026-10-15 fastify@5 fastify-plugin@5 fastify-type-provider-zod@7 zod@4 drizzle-orm@0.45 drizzle-kit@0.31 jose@6 @fastify/cookie@11 @fastify/cors@11 @fastify/rate-limit@11 pg@8 @types/pg@8 typescript@5 tsx@4 vitest@3 @types/node@24 -->
 
 # fastify axis pack — hub fragments
 

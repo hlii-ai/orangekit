@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Operations — boot · health checks · draining · logging
 
 This file owns `src/index.ts` (boot · signals) and `src/ops/` (health checks · logger options · shutdown). The

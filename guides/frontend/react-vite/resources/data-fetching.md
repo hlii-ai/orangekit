@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # Data Fetching — HTTP client · query keys · query/mutation hooks
 
 All data is an HTTP call to your own API and passes through **four layers** (screen → hook → endpoint function → http

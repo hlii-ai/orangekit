@@ -19,6 +19,29 @@ There are currently 3 prebuilt pairs (`nextjs`×`supabase`, `react-vite`×`aws-c
 > This holds not only for body sections but **equally for the resource layer**: when a new resource category appears in an original, or
 > a stack-independent deepening category is added to an existing resource, reflect it in the resource slot table below too.
 
+## Stack core card — what must be followed lives only here
+
+**The card is the canonical part of the guide. The skill is a reference.** Whether to read a skill body is the model's call — in
+measurement (guide A/B, 2026-10) it skipped it 2 times out of 3 on easy tasks. A `paths:` card is injected by the harness when a
+matching file is read (3/3). Generic pattern prose did not raise scores, and a guide example value (a UUID id) overrode a project
+convention. **The better models get, the more generic prose becomes an anchor with no benefit.**
+
+Each pack or generated guide has one card per axis (`guides/<axis>/<pack>/RULES.md` → on install `.claude/rules/stack-<axis>-<pack>.md`).
+
+| Admission condition (all of them) | Content |
+| --- | --- |
+| Class | `[consistency]` a decision point · `[security]` where this stack leaks · `[performance]` integrity or performance that breaks silently — outside these three it is not on the card |
+| Why models get it wrong | One "— why models get it wrong:" line per item. If you cannot give the reason, the model already knows it |
+| Evidence | `<!-- evidence: <policy id · measurement doc · vector · guide-ab item> · model-gap: observed\|not-observed -->` |
+| No duplication | Do not rewrite the universal rules (`security.md` · `data-modeling.md` · `code-change.md`) — write only **how** this stack gets them wrong |
+
+- **A consistency item is a decision point, not a value.** Write it like "path prefix · id type · envelope · status codes follow existing
+  code and the spec; if there is none, decide once and write it in `code-conventions.md`". Do not nail the pack's example values (`/api` · `{ data }`) onto the card
+- The first line is "the project spec and `code-conventions.md` take precedence over this card"
+- Budget: body (frontmatter and comments excluded) **at most 3,000 characters · 12 items.** Over budget, do not pick items — drop the less important ones
+- Keep a `model-gap: not-observed` item only when the security or integrity damage is large. **When the model changes, measure again with a
+  no-guide arm and drop the not-observed items that passed first** — a card that only grows becomes a general guide again
+
 ## Separating structure from content
 
 - **Structure (stack-independent)**: section skeleton · order · format. Every item in the table below. Not changeable at generation time
@@ -62,6 +85,13 @@ There are currently 3 prebuilt pairs (`nextjs`×`supabase`, `react-vite`×`aws-c
 A slot is **a coverage obligation, not a file obligation.** Give each required slot a dedicated file or
 merge it into another file — even when merged, the Navigation Guide must carry a row for that task.
 Keep to the file-count budget (6~10) by merging. A slot name is a concept; file names are named task-first.
+
+> **The bar for filling a slot (2026-10-22)** — a slot is a reference place one looks up to read "how is this wired on this stack".
+> **Do not write generic patterns, library usage or tutorial-style explanation the model already knows.** What stays in a slot is only
+> ① wiring true only on this stack and version (encapsulation boundaries · config keys · version idioms) ② code that proves a card item
+> ③ symbols the pack's policies and ledger require. What must be followed goes on the "Stack core card" above, not in a slot — in a slot alone it may go unread.
+> **State at the spot that an example's chosen values (id type · path prefix · envelope · status codes) are "the choice for a new project"** —
+> an example that gets read acts more strongly than a rule file (guide A/B re-measurement: the example's `uuid('id')` beat "follow the existing code").
 
 **frontend-guide required slots, 7:**
 

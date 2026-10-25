@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.35.0 verified 2026-10-17 react@18 react-dom@18 @types/react@18 @types/react-dom@18 vite@5 typescript@5 react-router@7 @tanstack/react-query@5 zustand@5 tailwindcss@3.4 react-error-boundary@6 sonner@2 msw@2 vitest@3 @testing-library/react@16 @testing-library/dom@10 @testing-library/user-event@14 @testing-library/jest-dom@7 clsx@2 tailwind-merge@2 eslint-plugin-import@2 oidc-client-ts@3 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 verified 2026-10-17 react@18 react-dom@18 @types/react@18 @types/react-dom@18 vite@5 typescript@5 react-router@7 @tanstack/react-query@5 zustand@5 tailwindcss@3.4 react-error-boundary@6 sonner@2 msw@2 vitest@3 @testing-library/react@16 @testing-library/dom@10 @testing-library/user-event@14 @testing-library/jest-dom@7 clsx@2 tailwind-merge@2 eslint-plugin-import@2 oidc-client-ts@3 -->
 
 # react-vite axis pack — hub fragment
 

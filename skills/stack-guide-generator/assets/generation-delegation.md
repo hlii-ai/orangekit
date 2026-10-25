@@ -74,7 +74,11 @@ Generation rules (instruct the subagent with these verbatim):
 4. Organize resources/ according to the spec's **resource slot table** — cover that guide's required slots (7 for frontend · backend, 6 for app)
    with dedicated files or by merging (leave a slot you are unsure of empty, but state it in the report), and
    split into the 6~10 files derived from the slot count, mapping every one of them in the Navigation Guide
-5. Output location: the project's `.claude/skills/frontend-guide/` · `.claude/skills/backend-guide/` · `.claude/skills/app-guide/`
+   **What must be followed goes on the core card, not in a resource** — follow the admission conditions (class · why models get it wrong ·
+   evidence · no duplication) and the budget of the spec's "Stack core card". Generic patterns and library usage the model already knows
+   go neither in resources nor on the card
+5. Output location: the project's `.claude/skills/frontend-guide/` · `.claude/skills/backend-guide/` · `.claude/skills/app-guide/`,
+   plus one core card per axis at `.claude/rules/stack-<axis>-<stack name>.md` (for an axis with a pack the installer already put it there — do not write it)
 6. **Run the gate yourself before returning** — reach **0 FAILs** with `guide-gate.sh --guide <path> --generated`
    and then return. Do not fix WARNs and REVIEWs; **report them with a reason attached**
    - **The generator's scope cap: writing + the gate, and no further.** Installing packages (`npm i` and the like) · `tsc` · starting a DB ·

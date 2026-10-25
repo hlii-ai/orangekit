@@ -209,7 +209,8 @@ If there is no `## Canvas` section, there is no canvas, and `MASTER.md` (+ `page
 canonical source, composition included — do not go hunting for a canvas.
 
 The canonical source for stack practice (component boundaries, class merging, file placement) is the
-project's `frontend-guide` skill. Example (the Next.js combination):
+project's existing code and `.claude/rules/stack-frontend-*.md`, plus the `frontend-guide` skill if the detailed guide
+is installed. Example (the Next.js combination):
 - Server/Client Component separation
 - Component declarations with the `function` keyword
 - The `cn()` utility + Tailwind CSS styling
@@ -265,7 +266,7 @@ The items `ui-probe` measures in Step 6 are marked *(measured)* — a person loo
 ## Reference documents
 
 - Quick reference: [references/quick-reference.md](references/quick-reference.md)
-- Frontend guidelines: `.claude/skills/frontend-guide/SKILL.md` (generated per stack)
+- Frontend guidelines: `.claude/skills/frontend-guide/SKILL.md` (when the detailed guide was installed as opt-in)
 - Design judgement norms: `.claude/rules/ui-design.md` (auto-loaded when editing UI files) — §6 is the canonical source for the render proof
 - Render probe: [scripts/ui-probe.sh](scripts/ui-probe.sh) (`--help` for usage)
 - Token comparison: [scripts/design-sync.sh](scripts/design-sync.sh) (`--help` for usage)

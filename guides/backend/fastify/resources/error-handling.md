@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Error handling — one domain code yields both the status and the envelope
 
 This file owns `src/http/errors.ts` (the status table · normalization · SQLSTATE detection). `AppError` · `ErrorCode`

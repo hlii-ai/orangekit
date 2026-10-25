@@ -124,5 +124,5 @@ Harness enforcement: the `build-gate` hook (Stop) blocks a turn that changed sou
 | 3 | API handlers/routers | Detects contract violations |
 | 4 | Type guards/converters | Safety of boundary data |
 
-The concrete paths follow the project's frontend/backend-guide skills (generated for the actual stack).
+The concrete paths follow the test placement of the existing code. If the detailed guide skills (frontend/backend-guide) are installed, follow them.
 

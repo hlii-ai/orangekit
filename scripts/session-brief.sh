@@ -312,7 +312,16 @@ PYDEP
   # skips Step 7 the rules never arrive. This is the only place that knows that.
   # On a glob miss ls exits 1 — the pipefail+ERR trap kills the whole hook.
   # It dies exactly when "0 rule cards", so it goes silent in the very situation it meant to report. The || true guard is mandatory.
-  RCOUNT=$(orangekit_num "$({ ls -1 "$ORANGEKIT_ROOT"/.claude/rules/*.md 2>/dev/null || true; } | wc -l)")
+  # RCOUNT counts **only the plugin card names present in the project**. Counting the whole directory lets project cards
+  # (project-structure · code-conventions) and stack rule files (stack-*.md) fill the count and hide a missing T1 card
+  t1_present() {
+    local n=0 f
+    for f in "$PLUGIN_ROOT"/rules/*.md; do
+      if [ -f "$f" ] && [ -f "$ORANGEKIT_ROOT/.claude/rules/$(basename "$f")" ]; then n=$((n+1)); fi
+    done
+    printf '%s' "$n"
+  }
+  RCOUNT=$(orangekit_num "$(t1_present)")
   PCOUNT=$(orangekit_num "$({ ls -1 "$PLUGIN_ROOT"/rules/*.md 2>/dev/null || true; } | wc -l)")
 
   # Auto-install of what is missing — two boundaries are kept:
@@ -323,7 +332,7 @@ PYDEP
   # Leaving installation to a skill instruction alone means the norms never arrive when the model skips Step 7.
   if [ -f "$ORANGEKIT_ROOT/orangekit.config.json" ] && [ "$RCOUNT" -lt "$PCOUNT" ]; then
     CLAUDE_PROJECT_DIR="$ORANGEKIT_ROOT" bash "$PLUGIN_ROOT/scripts/install-rules.sh" --missing-only --quiet 2>/dev/null || true
-    RCOUNT=$(orangekit_num "$({ ls -1 "$ORANGEKIT_ROOT"/.claude/rules/*.md 2>/dev/null || true; } | wc -l)")
+    RCOUNT=$(orangekit_num "$(t1_present)")
   fi
 
   # The not-installed warning uses the config gate too. An unconfigured project is already handled by the /orangekit-init nudge
@@ -383,7 +392,7 @@ fi
 
 # ── 3.5 Nudge for an unconfigured project (the earliest interactive contact after install) ───
 if [ ! -f "$ORANGEKIT_ROOT/orangekit.config.json" ]; then
-  printf -- '- unconfigured project — pick the tech stack (backend and DB included) with `/orangekit-init` and a stack-matched guide is generated\n'
+  printf -- '- unconfigured project — pick the tech stack (backend and DB included) with `/orangekit-init` and the stack rule files are installed (the detailed guide is optional)\n'
 fi
 
 # ── 3.6 Self-test entry point (a consumer project has no scripts/ — the absolute path is the only truth) ──

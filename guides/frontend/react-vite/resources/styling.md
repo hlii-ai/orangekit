@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.12.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # Styling (Tailwind CSS v3)
 
 Tailwind utilities are the **only** styling system in this project. Do not mix in CSS Modules, styled-components,
@@ -92,50 +92,6 @@ const toneClass = {
 
 Use `safelist` only in the genuinely rare case where a class has to be built from a value in a server response.
 A growing `safelist` is not a data problem but a design problem.
-
-## 5. `@apply` only as an exception
-
-```css
-/* ✅ When the third-party markup is not ours to change */
-.ProseMirror p { @apply my-2 leading-relaxed text-slate-700; }
-
-/* ❌ Reinventing our component as a class — the component already does that job */
-.btn-primary { @apply inline-flex h-10 items-center rounded-md bg-brand-600 px-4 text-white; }
-```
-
-The unit of reuse is a **React component**, not a CSS class. A class built with `@apply` has neither
-props nor types, and it is hard to trace where it is used.
-
-## 6. Layout and responsiveness
-
-```tsx
-// Mobile first — the unprefixed value is the small screen, prefixes are the larger ones
-<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-
-// Spacing goes through gap. space-x/y is a margin between children, so it breaks on wrap·reordering
-<div className="flex flex-wrap items-center gap-2">
-```
-
-- An arbitrary value (`w-[137px]`) is for one-off fine-tuning only. Appearing twice means promoting it to `theme.extend`
-- Try flex/grid before absolute positioning
-- Text truncation is `truncate` (one line) / `line-clamp-2` (several lines)
-
-## 7. The accessibility baseline
-
-```tsx
-// Do not remove the focus ring. To hide it for mouse users only, use focus-visible
-className="focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
-
-// Give an icon-only button an accessible name
-<button aria-label="Delete task"><TrashIcon className="h-4 w-4" aria-hidden /></button>
-
-// Hidden visually only (display:none disappears from the screen reader too)
-<span className="sr-only">Current page</span>
-```
-
-- Body text contrast is `text-slate-700` or stronger (`text-slate-400` is for placeholders only)
-- Never express state with color alone — put an icon or text alongside it
-- The minimum touch target for anything interactive is `h-10 w-10` (40px) or larger
 
 ## Misuse list ① — do not use v4 idioms in v3
 

@@ -29,6 +29,7 @@ to carry further real defects.
 | 5 | **Generator ≠ verifier** | The generating agent self-reported a pass on every item each time, yet an independent audit found defects |
 | 6 | **Audit reports are also subject to reconfirmation** | Some of the auditor's findings were misjudgements (spec compliance ruled a violation) |
 | 7 | **Do not run up against the budget ceiling** | In a file that has reached 300 lines, the next change lets the budget, not the author, pick what gets deleted |
+| 8 | **What must be followed goes on the card; what the model already knows goes nowhere** | The guide A/B (measured, 2026-10): generic patterns did not raise scores, the skill body went unread on easy tasks, and a 1.65KB card scored the same as the full guide. Spec "Stack core card" |
 
 ## Step 0: Is there a handed-off job (if there is, that is the input)
 
@@ -296,6 +297,8 @@ So the main session fills in `assets/wire-contract.template.md` (the 5-item form
 **file** and pastes **the full file verbatim into both sides** rather than summarizing. Step 4's `--pair`
 compares both against that same file, so the text handed over and the text checked must be the same. Even when generating only one side,
 if the counterpart already exists, read it and fill in the same form (skip only when there is none).
+**If the project has its own spec (`dev/docs/api/` etc.), copy from it instead of inventing** — there is a measured case where
+an invented contract created fields that did not exist and cost one more repair round.
 **app-guide receives the same contract file** — the app is a client calling the same API too. For a hybrid
 RN shell, add one more section to the contract file for **web ↔ native bridge messages** and paste it into both frontend-guide and
 app-guide (`--pair` compares only frontend and backend, so this section is checked by the Step 5 audit).

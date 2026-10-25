@@ -457,7 +457,7 @@ Without this step, values produced by measurement, inference or normalization be
 Confirmation summary — recording this as-is:
   Product form   hybrid (app shell: RN shell + native screens)      clientKind = app
   Web screens    react-vite   · TypeScript · npm · apps/web
-  App            react-native · TypeScript · npm · apps/mobile      → guide generation target
+  App            react-native · TypeScript · npm · apps/mobile      → stack rule file installed (detailed guide optional in Step 9.5)
   Backend        fastify      · PostgreSQL · Drizzle · Auth0 (custom) · AWS · apps/api
   Project cmds   build: npm run build -ws   test: npm test -ws   lint: npm run lint -ws
   Repo           monorepo · shared packages/
@@ -467,7 +467,7 @@ Confirmation summary — recording this as-is:
 - **Mark the source on every row** — only when it is visible where values the user did not pick (measured · preset · recommended)
   came from can a wrong one be spotted. In particular, **a value inferred from reading a design document is marked as inferred, not ⓜ**
 - **Changes to defaults such as language (TypeScript/JavaScript) and UI toolkit are taken here** — they are not asked separately
-- Say so for a `custom` or `undecided` axis — it means the guide is a generation target or deferred
+- Say so for a `custom` or `undecided` axis — it means there is no stack rule file (universal rules only), and the detailed guide is generated or deferred if chosen
 
 **Right after showing the table, ask with `AskUserQuestion` — do not ask in text and end the turn.**
 Ending with "tell me if anything needs fixing" leaves the user waiting without knowing what to type
@@ -567,7 +567,7 @@ are **project-owned** — they hold this project's real structure and convention
 > `code-conventions.md` in the plugin's `rules/`** — the moment you do, the unstamped target is read
 > as `0.0.0` and the project's copy is overwritten (a `.bak` remains, but it is a silent loss).
 
-### Step 8–9.5: dev/ · .gitignore · securing the stack guides
+### Step 8–9.5: dev/ · .gitignore · stack rule files (the detailed guide is opt-in)
 
 **Read `assets/scaffold-and-guide.md` and follow it exactly.**
 
@@ -582,11 +582,14 @@ Files created:
   ✅ .claude/rules/ (N plugin rule cards + project-specific project-structure · code-conventions)
   ✅ dev/ directory structure
 
-Guides (copy the `status:` line from Step 9.5 verbatim — do not report a half as finished):
-  ✅ .claude/skills/<axis>-guide      — skill complete (complete)
-  ⏳ .claude/skills/<axis>-guide/     — resources only · awaiting the seam (resources)
-  ⏳ <axis>                           — needs generating (generate) — app values with no pack (flutter etc.) land here
-  ·  <axis>                           — not chosen (undecided) — guide deferred
+Stack rule files (copy the `status:` line from Step 9.5 verbatim):
+  ✅ .claude/rules/stack-<axis>-<pack>.md — installed (rules)
+  ·  <axis>                               — no pack (generate) — universal rules only
+  ·  <axis>                               — not chosen (undecided)
+
+Detailed guide skills (opt-in):
+  ·  not installed — ask for "generate guides" if needed          ← when "No" was chosen
+  ✅/⏳ .claude/skills/<axis>-guide — the `status:` line of the detailed guide path verbatim  ← when "Yes" was chosen (do not report a half as finished)
 
 Verification:
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh"

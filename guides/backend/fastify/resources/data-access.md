@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Data access — Drizzle queries and the ownership condition
 
 This file owns the three files under `src/db/` (pool · table · queries) and how transactions and migrations run.
@@ -47,7 +47,7 @@ import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'driz
 export const taskStatus = pgEnum('task_status', ['open', 'done'])
 
 export const tasks = pgTable('tasks', {
-  id: uuid('id').primaryKey().defaultRandom(),
+  id: uuid('id').primaryKey().defaultRandom(),   // the choice for a new project — if the existing tables use serial, follow that
   ownerId: text('owner_id').notNull(),
   title: text('title').notNull(),
   status: taskStatus('status').notNull().default('open'),

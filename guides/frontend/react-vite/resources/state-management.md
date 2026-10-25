@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.12.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # State Management (Zustand v5 + where state belongs)
 
 This stack has four places state can live. **Picking the wrong place** is the cause of most state

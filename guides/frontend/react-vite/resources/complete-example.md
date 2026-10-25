@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # Complete Example — task list · create · status transition · detail (404)
 
 This walks one feature from start to finish. The data layer (`tasks.types` · `tasks.api` · `tasks.queries`) already exists as

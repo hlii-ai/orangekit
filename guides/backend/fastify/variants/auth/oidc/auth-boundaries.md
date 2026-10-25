@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Auth boundary — external IdP (OIDC access token verification only)
 
 In this variant an external IdP (Cognito · Auth0 · Keycloak · Identity Platform and the like) issues the tokens. Login ·

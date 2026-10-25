@@ -1108,6 +1108,67 @@ check_known_gaps() {   # $1 directory  $2 manifest (pack.json or seam.json)
   return 0
 }
 
+# ── Stack core card (RULES.md) ────────────────────────────────────────
+# What must be followed is injected as a `paths:` rule, not as a skill (spec "Stack core card"). A card that only grows
+# becomes a general guide again, so the admission conditions (class · why models get it wrong · evidence · model-gap)
+# and the budget are blocked by machine. A pack with no card is a WARN — so existing packs are not bound to FAIL while
+# packs switch over one at a time.
+check_core_card() {
+  local P="$1" c="$1/RULES.md"
+  sec "stack core card (RULES.md)"
+  [ -f "$c" ] || { warn "no core card" "if what must be followed lives only in the skill body, the model may not read it — move it into RULES.md"; return 0; }
+  local out
+  out=$(python3 - "$c" "$P/$PACK_POLICIES_NAME" "$P/PACK.md" <<'PYCARD'
+import re, sys, os
+card, pol, packmd = sys.argv[1:4]
+s = open(card, encoding='utf-8').read()
+def emit(kind, msg, hint=''): print(f"{kind}\t{msg}\t{hint}")
+m = re.match(r'^---\n(.*?)\n---\n', s, re.S)
+if not m or not re.search(r'^paths:\s*\n(\s+- .+\n?)+', m.group(1) + '\n', re.M):
+    emit('bad', 'no paths: list in the frontmatter', 'a card without paths is resident every session — narrow it to the axis source paths')
+stamp = re.search(r'orangekit-pack: (\S+) (v\d+\.\d+\.\d+)', s)
+pstamp = None
+try: pstamp = re.search(r'orangekit-pack: (\S+) (v\d+\.\d+\.\d+)', open(packmd, encoding='utf-8').read())
+except OSError: pass
+if not stamp: emit('bad', 'no orangekit-pack stamp', 'the installer judges updates by the stamp — without it consumers never receive an update')
+elif pstamp and stamp.groups() != pstamp.groups():
+    emit('bad', f'card stamp {stamp.group(1)} {stamp.group(2)} ≠ PACK.md {pstamp.group(1)} {pstamp.group(2)}', 'it must be the same edition as the pack to be updated with it')
+body = re.sub(r'^---\n.*?\n---\n', '', s, flags=re.S)
+body = re.sub(r'<!--.*?-->', '', body, flags=re.S).strip()
+if 'code-conventions.md' not in body.split('\n## ')[0]:
+    emit('bad', 'the opening lacks "the project spec and code-conventions.md take precedence"', 'guide example values override project conventions (guide-ab T-D UUID)')
+n = len(body)
+emit('bad' if n > 3000 else 'ok', f'card body {n}/3000 characters', 'over budget: drop the less important items')
+items = [l for l in s.splitlines() if l.lstrip().startswith('- [')]
+emit('bad' if len(items) > 12 else 'ok', f'items {len(items)}/12', '')
+if not items: emit('bad', '0 items', 'no item starts with a class tag [consistency]·[security]·[performance]')
+polids = set(re.findall(r'^\| `([A-Za-z0-9-]+)` \|', open(pol, encoding='utf-8').read(), re.M)) if pol and os.path.exists(pol) else set()
+for i, l in enumerate(items, 1):
+    head = re.sub(r'\s+', ' ', l.strip())[:60]
+    if not re.match(r'\s*- \[(consistency|security|performance)\]', l): emit('bad', f'item {i} has no class tag: {head}', 'outside [consistency]·[security]·[performance] it does not belong on the card')
+    if 'why models get it wrong:' not in l: emit('bad', f'item {i} lacks "why models get it wrong": {head}', 'if you cannot give the reason, the model already knows it')
+    ev = re.search(r'<!-- evidence: (.*?) · model-gap: (observed|not-observed) -->', l)
+    if not ev: emit('bad', f'item {i} has no evidence/model-gap comment: {head}', '<!-- evidence: … · model-gap: observed|not-observed -->')
+    else:
+        # `policies a · b · resources/x.md §3` — after `policies`, read ids **only while bare ids follow**.
+        # Stop at a path or prose (reading those as ids was a measured false positive). Ids may mix case (getUser-not-getSession)
+        ids, run = [], False
+        for seg in ev.group(1).split(' · '):
+            seg = seg.strip(); mm = re.match(r'policies ([A-Za-z0-9-]+)(?:\s|$)', seg + ' ')
+            if mm: ids.append(mm.group(1)); run = True
+            elif run and re.fullmatch(r'[A-Za-z0-9-]+', seg): ids.append(seg)
+            else: run = False
+        for one in ids:
+            if polids and one not in polids: emit('bad', f'item {i} evidence policy `{one}` is not in {pol.split("/")[-1]}', 'when the policy the evidence points at is gone, the item has no evidence either')
+PYCARD
+  )
+  while IFS=$'\t' read -r kind msg hint; do
+    [ -n "$kind" ] || continue
+    case "$kind" in ok) ok "$msg";; bad) bad "$msg" "$hint";; esac
+  done <<< "$out"
+  return 0
+}
+
 check_pack_meta() {
   local P="$1" j="$1/pack.json"
   sec "pack metadata (pack.json)"
@@ -1797,6 +1858,7 @@ run_pack() {
   cut -f3 "$TMP/code.tsv" > "$TMP/code.txt"
 
   check_pack_meta "$P"
+  check_core_card "$P"
   check_pack_contract "$P"
   check_known_gaps "$P" "$P/pack.json"
   check_budget "$P"
@@ -2020,6 +2082,9 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/appaxis/fxpack2"      0 "an app-axis (axis: app) pack is accepted"
   _fx_assert_pack "$fx/pk/wcok/fxpack2"         0 "naming the standard contract with tokens absent is a WARN, not a FAIL"
   _fx_assert_pack "$fx/pk/vclean/fxpack2"       0 "assembled per variant combination and passes (pack hub included)"
+  _fx_assert_pack "$fx/pk/cardok/fxpack2"       0 "a core card that meets the admission conditions"
+  _fx_assert_pack "$fx/pk/cardpolok/fxpack2"    0 "card evidence: a path after several policies is not read as an id"
+  _fx_assert_pack "$fx/pk/cardmixed/fxpack2"    0 "card evidence: a mixed-case policy id is not truncated"
 
   sec "positive pack fixtures (must be blocked)"
   _fx_assert_pack "$fx/pk/polnoex/fxpack2"   1 "no policy proof-example column"
@@ -2049,6 +2114,13 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/wcrival/fxpack2"      1 "a rival error code the canonical contract does not have (UNAUTHORIZED)"
   _fx_assert_pack "$fx/pk/vbad/fxpack2"         1 "a ledger definition is missing in only one variant"
   _fx_assert_pack "$fx/pk/vnav/fxpack2"         1 "the pack hub left a variant file out of Navigation"
+  _fx_assert_pack "$fx/pk/cardnopaths/fxpack2"  1 "the core card has no paths: (resident every session)"
+  _fx_assert_pack "$fx/pk/cardnoreason/fxpack2" 1 "a card item lacks \"why models get it wrong\""
+  _fx_assert_pack "$fx/pk/cardnoev/fxpack2"     1 "a card item has no evidence/model-gap"
+  _fx_assert_pack "$fx/pk/cardbadpol/fxpack2"   1 "card evidence points at a policy that does not exist"
+  _fx_assert_pack "$fx/pk/cardbig/fxpack2"      1 "card over budget (body · item count)"
+  _fx_assert_pack "$fx/pk/cardstamp/fxpack2"    1 "card stamp ≠ PACK.md"
+  _fx_assert_pack "$fx/pk/cardnoprio/fxpack2"   1 "the card opening has no project-precedence sentence"
   # A space in the path — common in a project folder name (`My Projects`) or a Windows user home. If the file list
   # is split at spaces, the gate **reads 0 files and passes everything** (it does not FAIL, it goes blind)
   mkdir -p "$fx/pk/sp ace" && cp -R "$fx/pk/noimport" "$fx/pk/sp ace/" \
@@ -2450,6 +2522,41 @@ FXPJ
   for m in polnoex polbadex polrealex secorigin secprefix secok secrefer ledgerbad reqexport fvbad vocab dupfence noproof noshape badarity noimport reqnosig polnohdr jsonfence polbadfile ghostres jstypedef jstypedefgone secintercept fvscope fvscopebad envclass envclassbad multisym tpllit appaxis badaxis wcok wcmissing wcbadver wcrival; do
     mkdir -p "$fx/pk/$m" && cp -R "$b" "$fx/pk/$m/" || return 1
   done
+  # Core card — one sound card, and each defect breaks exactly one thing (caught for another reason, it is not a fixture)
+  local cm
+  for cm in cardok cardpolok cardmixed cardnopaths cardnoreason cardnoev cardbadpol cardbig cardstamp cardnoprio; do
+    mkdir -p "$fx/pk/$cm" && cp -R "$b" "$fx/pk/$cm/" || return 1
+    cat > "$fx/pk/$cm/fxpack2/RULES.md" <<'FXCARD'
+---
+paths:
+  - "src/**"
+---
+<!-- orangekit-pack: backend/fxpack2 v0.0.0 -->
+
+# fxpack2 core card
+
+The project spec and `.claude/rules/code-conventions.md` take precedence over this card.
+
+## Performance
+
+- [performance] Reject NUL in text input. — why models get it wrong: it validates length only <!-- evidence: guide-ab T-D · model-gap: observed -->
+FXCARD
+  done
+  local c
+  # Sound citations — a path after several policies is not read as an id · a mixed-case id is not truncated
+  c="$fx/pk/cardpolok/fxpack2/RULES.md";    sed -i.bak 's#evidence: guide-ab T-D#evidence: policies zod-present · no-console · resources/a.md §1#' "$c"
+  c="$fx/pk/cardmixed/fxpack2/RULES.md";    sed -i.bak 's#evidence: guide-ab T-D#evidence: policies getUser-not-x#' "$c"
+  printf '| `getUser-not-x` | forbid | guide | `getSessionX\\(` | — | `getSessionX()` | `a.getSessionX(1)` | a mixed-case id |\n' >> "$fx/pk/cardmixed/fxpack2/policies.md"
+  c="$fx/pk/cardnopaths/fxpack2/RULES.md";  sed -i.bak '1,4d' "$c"
+  c="$fx/pk/cardnoreason/fxpack2/RULES.md"; sed -i.bak 's/ — why models get it wrong: it validates length only//' "$c"
+  c="$fx/pk/cardnoev/fxpack2/RULES.md";     sed -i.bak 's/ <!-- evidence: guide-ab T-D · model-gap: observed -->//' "$c"
+  c="$fx/pk/cardbadpol/fxpack2/RULES.md";   sed -i.bak 's/evidence: guide-ab T-D/evidence: policies no-such-policy/' "$c"
+  c="$fx/pk/cardstamp/fxpack2/RULES.md";    sed -i.bak 's/fxpack2 v0.0.0/fxpack2 v9.9.9/' "$c"
+  c="$fx/pk/cardnoprio/fxpack2/RULES.md";   sed -i.bak 's/^The project spec.*$/Follow this card./' "$c"
+  c="$fx/pk/cardbig/fxpack2/RULES.md"
+  awk 'BEGIN{ for (i=0; i<13; i++) printf "- [performance] padding item %d — a sentence that pushes the card over its budget, repeated to make it long enough. — why models get it wrong: padding <!-- evidence: guide-ab · model-gap: observed -->\n", i }' >> "$c"
+  rm -f "$fx"/pk/card*/fxpack2/RULES.md.bak
+
   # A fixture that adds c.md must carry it in pack.json too, or it is not blocked by the intended check.
   # Without that it is caught first by 'resources[] mismatch' and the fixture ends up proving something else.
   local v

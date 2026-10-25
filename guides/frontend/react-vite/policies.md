@@ -1,4 +1,4 @@
-<!-- orangekit-pack-policies: frontend/react-vite v3.35.0 -->
+<!-- orangekit-pack-policies: frontend/react-vite v3.36.0 -->
 
 # react-vite pack — cross-file invariants
 

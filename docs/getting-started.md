@@ -121,7 +121,7 @@ Presets are chosen on three axes — web screens, app and backend. Any axis can 
 
 The app axis has one pre-built pack, `react-native` — its `app-guide` is assembled from the pack and only the combination-specific seam is generated. Other app values generate the whole `app-guide`.
 
-The **combination** decides the guides. Three combinations ship pre-built guides —
+`/orangekit-init` installs the **stack rule files** (`.claude/rules/stack-<axis>-<pack>.md`) by default and asks once whether to build the detailed guide skills — the default is no. If you choose them, the **combination** decides the guides. Three combinations ship pre-built guides —
 `nextjs` × `supabase`, `react-vite` × `aws-container` and `vue` × `node-api` — and every
 other combination generates project-owned guides. The system picks without asking.
 See `docs/presets.md`.

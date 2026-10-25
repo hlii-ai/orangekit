@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Auth flow — self-issued (login · refresh rotation · logout)
 
 This file owns **the side that hands tokens out**: `src/services/auth-service.ts` (passwords · refresh tokens) ·

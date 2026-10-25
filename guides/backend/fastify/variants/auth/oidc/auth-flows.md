@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Auth flow — external IdP (who logs the user in, and what the server prepares)
 
 This file owns the flow in which tokens travel **outside the server**, and what the server prepares in order to

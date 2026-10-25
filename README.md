@@ -2,7 +2,7 @@
 
 AI Native Dev Harness for Claude Code — reversibility-axis workflow, self-testing hooks, graph instrumentation.
 
-![version](https://img.shields.io/badge/version-1.4.2-blue)
+![version](https://img.shields.io/badge/version-1.5.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## What it is
@@ -116,7 +116,7 @@ A Phase number marks order, not obligation — when the 4 entry conditions hold,
 | Layer | Count | Contents |
 |------|-----|------|
 | **Hooks** | 5 scripts / 6 registrations | SessionStart · PreToolUse · Stop · PreCompact · SessionEnd · PostToolUse |
-| **Rules** | T0 41 lines + T1 9 cards 1,090 lines | T0 is injected by a hook at all times (plugin-owned). Of T1, `workflow-routing` is **always on, every session**; the rest load conditionally on a path match |
+| **Rules** | T0 41 lines + T1 9 cards 1,105 lines | T0 is injected by a hook at all times (plugin-owned). Of T1, `workflow-routing` is **always on, every session**; the rest load conditionally on a path match |
 | **Agents** | 2 | `orangekit-planner` (no writes) · `orangekit-reviewer` (read-only) |
 | **Skills** | 26 | Survey · planning · implementation · verification · security · PR workflow + stack guide generator + skill enhancer (the 5 marketing skills are split into `orangekit-marketing`, the 1 harness evaluation skill into the `orangekit-harness` plugin) |
 | **Presets** | 3-axis 5+5+11 | Web screens: nextjs·react-vite·vue·vanilla·none / App: react-native·flutter·ios-swift·android-kotlin·native-dual / Backend: supabase·firebase·aws-serverless·aws-container·gcp-serverless·fastapi·node-api·node-nest·fastify·rust-axum·none |
@@ -216,19 +216,23 @@ Adding configuration turns on:
 - per-project secret patterns
 - build/test command recognition (`build-gate` then names the concrete command)
 
-## Stack guides — the preset is a default, the combination is a choice
+## Stack guides — rule files by default, the detailed guide is a choice
 
 A preset does not pin the backend. `/orangekit-init` confirms the backend type (BaaS · self-built on
-cloud · framework built-in), the cloud, the DB (PostgreSQL, MongoDB and so on), data access and auth, then
-generates the `frontend-guide` and `backend-guide` skills matching the settled combination into the
-project's `.claude/skills/` (`stack-guide-generator`). Only the three combinations with a pre-built version (`nextjs`×`supabase`,
+cloud · framework built-in), the cloud, the DB (PostgreSQL, MongoDB and so on), data access and auth, then,
+for a stack that has a pack, installs the **stack rule files** (`.claude/rules/stack-<axis>-<pack>.md` — the consistency ·
+security · integrity items that must be followed). **The detailed guide skills (`frontend-guide` · `backend-guide`) are asked
+about once by init and built into the project's `.claude/skills/` only if you choose them** (`stack-guide-generator`) — in
+measurement the detailed guide did not raise scores, and there was a case where an example's chosen value overrode an
+existing convention (guide A/B, 2026-10).
+If you choose the detailed guide: only the three combinations with a pre-built version (`nextjs`×`supabase`,
 `react-vite`×`aws-container`, `vue`×`node-api`) use the plugin original as-is. Whether to use a pre-built version or
 generate one is **decided by the system from the combination; it does not ask.** When the stack changes,
 regenerate with `/stack-guide-generator`.
 
 ## Available Presets
 
-| Preset | Stack | Skills |
+| Preset | Stack | If you choose the detailed guide |
 |--------|-------|--------|
 | `nextjs` × `supabase` | Next.js 15 + Supabase + Tailwind + shadcn/ui | Uses the pre-built version |
 | `react-vite` × `aws-container` | React+Vite SPA + ECS/Fargate + RDS PostgreSQL + Drizzle | Uses the pre-built version |
@@ -285,7 +289,7 @@ It checks with `doctor --default` after each step as it goes, and preserves proj
 | Item | v2 | v3 |
 |------|-----|-----|
 | Hooks | 11 (many void from output-format violations such as Stop's `decision`/`reason`) | **5, every one self-testing** |
-| Rules | the generator copied them into `.claude/rules/` (3 unconditionally loaded + 11 conditional) | **T0 41 lines + T1 1,090 lines, installation demonstrated by `install-rules.sh`. The always-on/conditional split is kept** |
+| Rules | the generator copied them into `.claude/rules/` (3 unconditionally loaded + 11 conditional) | **T0 41 lines + T1 1,105 lines, installation demonstrated by `install-rules.sh`. The always-on/conditional split is kept** |
 | Verification strength | S/M/L size judgement | **reversibility axis (decided by path)** |
 | Phase | P0~P6 (`.claude/rules/task-workflow.md` loaded always) | **P0~P6 kept** — moved to `workflow-routing.md`, the always-loaded property preserved |
 | Agents | no frontmatter, access to every tool | **full contract + least privilege** |

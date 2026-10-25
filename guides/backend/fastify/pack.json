@@ -2,7 +2,7 @@
   "axis": "backend",
   "name": "fastify",
   "displayName": "Fastify API server (Fastify 5 + Drizzle + PostgreSQL)",
-  "packVersion": "3.35.0",
+  "packVersion": "3.36.0",
   "verified": "2026-10-15",
   "extractedFrom": "Newly created — a scratch reference implementation (Fastify 5.12.7 · drizzle-orm 0.45.4 · embedded PostgreSQL 18.4) was built and run first, and its files were then moved into the fences. No other pack was opened, not even as a format reference (only assets/pack-resource-template.md was used)",
   "backendType": "cloud-server",

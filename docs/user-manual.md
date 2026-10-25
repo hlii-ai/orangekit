@@ -164,7 +164,7 @@ The code has already grown while the rule cards are empty.
 
 | Order | Command | What |
 | --- | --- | --- |
-| 1 | `/orangekit-init` | pick the tech stack (frontend · backend · DB · auth) and generate matching guides |
+| 1 | `/orangekit-init` | pick the tech stack (frontend · backend · DB · auth) and install the stack rule files (the detailed guide is optional) |
 | 2 | `/codebase-survey` | **measure the actual code** and update the `project-structure` and `code-conventions` cards |
 | 3 | `doctor` | self-test that the installation actually happened |
 

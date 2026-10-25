@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # Auth & Session — external IdP (OIDC Authorization Code + PKCE)
 
 This is the **auth adapter** for the method where an external IdP issues the tokens and the API server **only verifies** them with JWKS.

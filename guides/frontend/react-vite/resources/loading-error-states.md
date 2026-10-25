@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # Loading · Empty · Error States
 
 Every screen that draws data has at least three branches. A screen that implements only the success path goes

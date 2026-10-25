@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # API endpoints — route plugin · response envelope · error envelope
 
 This file owns `src/http/app-error.ts` (`AppError` · `ErrorCode`) · `src/http/error-handler.ts` (`errorHandler`) ·

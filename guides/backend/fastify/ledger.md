@@ -1,4 +1,4 @@
-<!-- orangekit-pack-ledger: backend/fastify v3.35.0 -->
+<!-- orangekit-pack-ledger: backend/fastify v3.36.0 -->
 
 # fastify pack — symbol ledger (L0 declaration)
 

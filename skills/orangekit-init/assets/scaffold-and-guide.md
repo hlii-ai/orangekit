@@ -33,10 +33,17 @@ Add the following entry to `.gitignore` (skip if already present):
 .orangekit/
 ```
 
-### Step 9.5: Secure the stack guides (no questions · does not hold init up)
+### Step 9.5: Install the stack rule files · the detailed guide is opt-in (1 question)
 
-**init does not wait for the guides.** A combination that finishes by assembly is completed here;
-if generation is needed, the script registers the job.
+**init's default is to install the stack rule files only.** What must be followed (consistency decision points · where security
+leaks on this stack · integrity that breaks silently) goes from the pack's `RULES.md` into `.claude/rules/stack-<axis>-<pack>.md`
+and is injected automatically through `paths:`. A stack with no pack has no rule file either, and only the universal rules
+(`security.md` and the other T1 cards) apply. **The detailed guide skills (hub · resources) are built only when the user chooses them.**
+
+> Basis (the measured guide A/B, 2026-10): the scores on 4 tasks were the same with and without the detailed guide, and a case
+> appeared where a skill example's chosen value (a UUID id) overrode an existing convention. Meanwhile, the pitfalls the model
+> missed (NUL · values leaking into error logs) were blocked by a small rule file.
+> Generation takes about 1 hour for 2 axes — init is not tied to something whose benefit was not measured.
 
 > Basis: one measured generation run took **54 minutes before repairs** (`dev/docs/skill-review/contract-first-e2e-2026-08-22.md`)
 > and even at the end both auditors ruled it uninstallable. There is no reason to tie the first impression of installing to that time —
@@ -75,11 +82,46 @@ SEAM=""
 
 # Pass the axis values exactly as in the config's presets — custom is a generation target; undecided and none are skipped
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-guide.sh" \
+  --frontend <presets.frontend> --backend <presets.backend> --app <presets.app> \
+  --rules-only --notes .orangekit/preset-notes.json
+```
+
+`preset-notes.json` is written even when only the rule files are installed — if the detailed guide is chosen later, the same file picks the variants (auth method etc.).
+The single `status:` line at the end of the output is the whole result:
+
+| Status | Meaning |
+| --- | --- |
+| `rules` | there is a pack — its rule file was installed (if the pack has no `RULES.md`, there is nothing to install) |
+| `generate` | the pack is missing or unfinished — no stack rule file, only the universal rules apply |
+| `skip` | that axis is `none` or `undecided` (not chosen) |
+
+`--rules-only` does not write `.orangekit/guide-job.json` — the detailed guide is a choice, not unfinished work.
+
+#### The detailed guide question (once · default No)
+
+```
+Stack rule files installed: <list of installed .claude/rules/stack-*.md, or "none — universal rules only">
+
+Also build the detailed guide skills (frontend/backend/app-guide — a wiring and examples reference)?
+  Expected time: a few minutes of assembly for an axis with a pack, about 30 minutes per axis if a seam is needed, about 1 hour for an axis with no pack
+  Note: in measurement the detailed guide did not raise scores, and there was a case where an example's chosen value overrode an existing convention
+
+  1. No (recommended) — start with the rule files only. Ask for "generate guides" later and they will be built
+  2. Yes — build them now
+```
+
+**If 1, stop here.** Leave one line in the completion report: "Detailed guide: not installed (opt-in) — ask for "generate guides" if needed".
+**If 2, run the "Detailed guide path" below exactly as before.**
+
+#### Detailed guide path (when opt-in was chosen)
+
+Call it again without `--rules-only` — the rule files are already the same edition, so they stay as "same — skipped":
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-guide.sh" \
   --frontend <presets.frontend> --backend <presets.backend> --app <presets.app> $SEAM \
   --gate --notes .orangekit/preset-notes.json
 ```
-
-The single `status:` line at the end of the output is the whole result:
 
 | Status | Meaning | What to do here |
 | --- | --- | --- |
@@ -104,7 +146,7 @@ the changed pack, or leaves the seam files alone on the old version so one guide
 the single major the pack **verified**, and the completed install is raised afterwards — the targets are recomputed from the
 completed install too, so pack files · seam files · the hub are all caught.
 
-**① The generation question** — only when need contains `seam:*` · `frontend` · `backend` · `app`:
+**① The generation question** — only after the detailed guide was chosen, and when need contains `seam:*` · `frontend` · `backend` · `app`:
 
 ```
 Settled combination: <frontend> × <backend>

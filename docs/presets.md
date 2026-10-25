@@ -142,7 +142,8 @@ The axis packs currently held are **4 frontend** (`nextjs` · `react-vite` · `v
 With these 13, **44 of the 45 choices receive at least one axis as a finished product** —
 the only one that receives nothing is `none` × `none`.
 
-**init does not wait for the guide.** If generation is needed it leaves a job in `.orangekit/guide-job.json`
+**init's default is to install only the stack rule files** (`install-guide.sh --rules-only`). The detailed guide skills are asked
+about once by init and built only if chosen. Even then init does not wait for the guide — if generation is needed it leaves a job in `.orangekit/guide-job.json`
 and exits, installing only after generation, audit, and repair are done — half-finished guides are not installed.
 If the session is cut off, the next session's briefing reports the unfinished work.
 

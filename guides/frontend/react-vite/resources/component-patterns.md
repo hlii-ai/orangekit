@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.12.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # Component Patterns
 
 Rules for where a component goes in a React 18 + TypeScript SPA, when it is promoted to shared,
@@ -90,39 +90,7 @@ export function Button({ size = 'md', variant = 'primary', className, ...rest }:
 With a `tailwind-merge`-based `cn()` the later class wins, so this distinction survives only as a
 documented agreement — it is caught in code review.
 
-## 5. Designing props
-
-```tsx
-// ✅ Gather states into a union instead of splitting them across several booleans
-type Status = 'idle' | 'loading' | 'success' | 'error';
-type Props = { status: Status };
-
-// ❌ Impossible states become expressible (isLoading && isError becomes possible)
-type Props = { isLoading: boolean; isError: boolean; isSuccess: boolean };
-```
-
-- When wrapping a native element, extend `ComponentPropsWithoutRef<'button'>` so that `aria-*`,
-  `type` and `onClick` are accepted automatically
-- Name callbacks `onXxx`, and follow the `value`/`defaultValue` convention for values
-- When the component does not need to decide what goes inside, use a `ReactNode` slot
-  (`actions`, `footer`, `icon`) — it extends better than taking a string·icon name as a prop
-- When there are more than five options and they are mutually exclusive, split the component
-
-## 6. Compute derived state during render
-
-Deriving a value from props with `useState` + `useEffect` renders a value that is one frame late, and in
-React 18 StrictMode (development) the effect runs twice, so the symptom becomes erratic.
-
-```tsx
-// ✅ Computed during render (useMemo if it is expensive)
-const visible = useMemo(() => tasks.filter((t) => t.status !== 'done'), [tasks]);
-
-// ❌ Synchronizing state through an effect — one render behind, and now there are two sources
-const [visible, setVisible] = useState<Task[]>([]);
-useEffect(() => { setVisible(tasks.filter((t) => t.status !== 'done')); }, [tasks]);
-```
-
-## 7. Lists and keys
+## 5. Lists and keys
 
 ```tsx
 // ✅ The stable identifier the server gave you
@@ -132,13 +100,13 @@ useEffect(() => { setVisible(tasks.filter((t) => t.status !== 'done')); }, [task
 {tasks.map((t, i) => <TaskCard key={i} task={t} />)}
 ```
 
-## 8. Optimize after measuring
+## 6. Optimize after measuring
 
 `memo`/`useMemo`/`useCallback` cost comparison time and memory. The default is not to use them; attach them
 after confirming the real re-render cost in the React DevTools Profiler. Two cases may be attached without
 measuring: ① a callback/object passed to a `memo`'d child, ② list items numbering in the hundreds or more.
 
-## 9. Extend by composition (slots instead of a prop explosion)
+## 7. Extend by composition (slots instead of a prop explosion)
 
 Keep adding props as options accumulate and the component absorbs the demands of every call site.
 Open a slot and the component owns **only layout and tokens**, while the call site decides the content.

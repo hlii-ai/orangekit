@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Testing — `app.inject` and a real PostgreSQL
 
 This file owns the Vitest configuration · the test DB guard · the fixtures (`src/test/`) and **the shape of the tests

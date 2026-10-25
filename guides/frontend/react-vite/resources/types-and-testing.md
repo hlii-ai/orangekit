@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # TypeScript Standards · Frontend Testing
 
 ## Table of contents
@@ -6,11 +6,9 @@
 1. The tsconfig baseline
 2. Environment variable types
 3. Narrowing types at the API boundary
-4. Writing domain types
-5. Test tools and placement
-6. The render helper
-7. Test patterns
-8. Misuse list
+4. Test tools and placement
+5. The render helper
+6. Misuse list
 
 ---
 
@@ -122,32 +120,7 @@ http.getPage<Task>('/api/tasks?limit=20');
 There is no need to check every field. Checking **only the fields the screen truly depends on** catches most
 contract breakage right here. Never omit `parse` on an endpoint whose response a screen actually reads.
 
-## 4. Writing domain types
-
-```ts
-// ✅ A discriminated union — impossible combinations disappear from the type (the completion time exists only when done)
-type TicketStatus = 'open' | 'in_progress' | 'done';
-type Ticket =
-  | { id: string; title: string; status: 'done'; completedAt: string }
-  | { id: string; title: string; status: 'open' | 'in_progress'; completedAt?: never };
-
-// ✅ Turn a missing branch into a compile error
-function label(s: TicketStatus): string {
-  switch (s) {
-    case 'open': return 'Waiting';
-    case 'in_progress': return 'In progress';
-    case 'done': return 'Done';
-    default: { const _never: never = s; return _never; }
-  }
-}
-```
-
-- Do not use `any`. Take an unknown value as `unknown` and narrow it
-- Use a literal union + an `as const` object instead of `enum` (no runtime code is left in the bundle)
-- When the server response type (`TaskResponse`) differs from the screen model (`Task`), put the mapping function in the API layer
-- Component props inherit native attributes by extending `ComponentPropsWithoutRef<'button'>`
-
-## 5. Test tools and placement
+## 4. Test tools and placement
 
 | Target | Tool | Location |
 | --- | --- | --- |
@@ -211,7 +184,7 @@ export const server = setupServer(...handlers);
 Why MSW rather than stubbing `fetch` directly: the header assembly·error normalization in `http.ts` are
 verified along with it, so when the test passes the real path passes too.
 
-## 6. The render helper
+## 5. The render helper
 
 <!-- file: src/test/renderWithProviders.tsx -->
 ```tsx
@@ -242,32 +215,7 @@ export function renderWithProviders(ui: ReactNode, { route = '/' } = {}) {
 loading state, so failures appear sporadically. Reset the Zustand store too, with
 `beforeEach(() => useUiStore.getState().reset())`.
 
-## 7. Test patterns
-
-```tsx
-// A route module exports the screen as `Component` (routing.md §1) — import it under a different name
-import { Component as TaskListPage } from '@/features/tasks/pages/TaskListPage';
-
-it('refreshes the list when a task is created', async () => {
-  const user = userEvent.setup();
-  renderWithProviders(<TaskListPage />, { route: '/tasks' });
-
-  // Loading → data: findBy* waits until it appears
-  expect(await screen.findByRole('heading', { name: 'Tasks' })).toBeInTheDocument();
-
-  await user.type(screen.getByLabelText('Title'), 'Write the report');
-  await user.click(screen.getByRole('button', { name: 'New task' }));   // the form from complete-example.md §1
-
-  expect(await screen.findByText('Write the report')).toBeInTheDocument();
-});
-```
-
-- Query priority: `getByRole` > `getByLabelText` > `getByText` > `getByTestId` (last resort)
-- Assert from the user's point of view. Do not inspect a hook's internal state·call counts
-- Wait for async with `findBy*`/`waitFor`. Never call `act()` yourself
-- Always test at least one error path — return a 500 for that one test with `server.use()`
-
-## 8. Misuse list
+## 6. Misuse list
 
 ### ① Idiom conversion table
 

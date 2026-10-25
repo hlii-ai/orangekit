@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Complete example — one task from migration to response
 
 This file shows in one pass the whole path a single `Task` travels, and it owns the test that runs through that path,

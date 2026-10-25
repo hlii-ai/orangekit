@@ -2,7 +2,7 @@
   "axis": "frontend",
   "name": "react-vite",
   "displayName": "React 18 + Vite 5 SPA",
-  "packVersion": "3.35.0",
+  "packVersion": "3.36.0",
   "verified": "2026-10-17",
   "extractedFrom": "skills/react-aws-frontend-guide (v3.11.0)",
 

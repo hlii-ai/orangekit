@@ -1,5 +1,28 @@
 # Lessons
 
+## [category: workflow] "The skill was never invoked" was a wrong summary — measure exposure, tool calls and reads separately
+
+- Date: 2026-10-22
+- Situation: Reporting the guide A/B results, I said "the guide skill was invoked 0 times out of 18" and used that as the basis
+  for recommending the switch to rules. The user asked, "how could a skill not be invoked?"
+- Mistake: I counted only `Skill` tool calls in the transcripts. In fact the guide skill was registered and exposed in the init
+  event, and the model read it directly with `cat .claude/skills/backend-guide/SKILL.md` (1/3 to 3/3 per task). I concluded
+  "failed to reach" from a single metric.
+- Lesson: Count skill reach as ① exposure (the init event's `skills`) ② tool calls ③ direct file reads, separately. The conclusion
+  was not "it was not read" but "whether to read it is the model's call" — when there is only one metric, first write down what that metric cannot see.
+
+## [category: skill] Before deleting a resource section, check "the definition survives", not "the name appears elsewhere"
+
+- Date: 2026-10-22
+- Device: guides/frontend/react-vite (pack slimming)
+- Situation: Before removing the generic-prose sections, I checked whether any ledger symbol appeared only in those sections, found 0,
+  and deleted them. The `--pack` gate FAILed on **no definition** for `Field` · `DataTable` (component-patterns §9 at the time) and `ListSkeleton`
+  (loading-error-states §2).
+- Mistake: The appearances in other files were uses; the definitions lived only in the deleted sections. I judged that a definition
+  exists from a name appearing.
+- Lesson: The pre-check before deleting a pack section is to run the gate (`guide-gate.sh --pack`) as-is — do not imitate the ledger
+  definition verdict by hand. A section that holds a definition is wiring the pack examples use, even if it looks like generic prose.
+
 ## [category: workflow] Writing only "major" leaves the user unable to tell what changes — write the version numbers
 
 - Date: 2026-10-17

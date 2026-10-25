@@ -1,4 +1,4 @@
-<!-- orangekit-pack-policies: backend/fastify v3.35.0 -->
+<!-- orangekit-pack-policies: backend/fastify v3.36.0 -->
 
 # fastify pack — cross-file invariants
 

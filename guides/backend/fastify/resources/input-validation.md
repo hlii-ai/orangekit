@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Input validation — route schemas and the Zod type provider
 
 This file owns the environment variable schema (`src/env.ts`) and the request and response schemas

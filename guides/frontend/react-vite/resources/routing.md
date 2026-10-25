@@ -1,4 +1,4 @@
-<!-- orangekit-pack: frontend/react-vite v3.35.0 -->
+<!-- orangekit-pack: frontend/react-vite v3.36.0 -->
 # Routing (React Router v7 · library mode)
 
 In a Vite SPA, React Router is used **as a library only** — no framework mode, no file-based

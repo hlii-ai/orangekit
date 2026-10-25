@@ -1,4 +1,4 @@
-<!-- orangekit-pack: backend/fastify v3.35.0 -->
+<!-- orangekit-pack: backend/fastify v3.36.0 -->
 # Auth boundary — self-issued (login · refresh rotation · bearer verification)
 
 In this variant the server issues tokens itself at `/api/auth`. This file owns **the boundary** (environment keys ·

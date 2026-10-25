@@ -7,7 +7,7 @@ paths:
   - "drizzle/**"
   - "dev/docs/database/**"
 ---
-<!-- orangekit-rule-version: 3.32.3 -->
+<!-- orangekit-rule-version: 3.36.0 -->
 
 # Data Modeling Card
 
@@ -146,7 +146,7 @@ Stay consistent with the existing schema:
 Mandatory checks when creating a new table:
 
 - [ ] `CREATE TABLE` + inline constraints (PK, FK, CHECK, NOT NULL, DEFAULT)
-- [ ] `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` + at least one policy (only on stacks that use row level security — policy details live in that stack's backend-guide auth/permission boundary resource. On a stack without RLS, the application-layer ownership check is the only boundary)
+- [ ] `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` + at least one policy (only on stacks that use row level security — policy details live in that stack's backend-guide auth/permission boundary resource (if the detailed guide is installed). On a stack without RLS, the application-layer ownership check is the only boundary)
 - [ ] Create an index on FK columns (`idx_{table}_{fk_column}`)
 - [ ] Add an index on frequently used WHERE/ORDER BY columns
 - [ ] A GIN index on JSONB columns (when searching inside them is needed)

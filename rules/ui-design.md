@@ -5,7 +5,7 @@ paths:
   - "**/app/**/page.{tsx,jsx}"
   - "**/app/**/layout.{tsx,jsx}"
 ---
-<!-- orangekit-rule-version: 3.28.0 -->
+<!-- orangekit-rule-version: 3.36.0 -->
 <!--
   Why paths was narrowed. `**/*.{tsx,jsx,vue,svelte}` is **nearly every frontend file**
   in React·Next, so this card came in on every edit, including ones with nothing to do with deciding
@@ -26,7 +26,7 @@ only **the step that asks whether the choice is specific to this brief** stays. 
 whatever search ranked first becomes the result.
 
 Boundaries: **picking** a style·palette·font **out of data** is the `ui-ux-design` skill,
-**framework practice** (the Server/Client boundary·class merging·file placement) is `frontend-guide`,
+**framework practice** (the Server/Client boundary·class merging·file placement) is the existing code and `stack-frontend-*.md` (`frontend-guide` if the detailed guide is installed),
 and this card handles the **judgement** — before writing, §1~§5 (is that choice specific to this brief),
 after writing, §6 (did it come out as planned).
 
