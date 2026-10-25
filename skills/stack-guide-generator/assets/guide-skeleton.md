@@ -39,6 +39,8 @@ Each pack or generated guide has one card per axis (`guides/<axis>/<pack>/RULES.
   code and the spec; if there is none, decide once and write it in `code-conventions.md`". Do not nail the pack's example values (`/api` · `{ data }`) onto the card
 - The first line is "the project spec and `code-conventions.md` take precedence over this card"
 - Budget: body (frontmatter and comments excluded) **at most 3,000 characters · 12 items.** Over budget, do not pick items — drop the less important ones
+- A **project-owned card** (a stack with no pack — `guide-gate.sh --rules-card`) has no policy table, so its evidence differs:
+  `<!-- evidence: <official URL> · installed: <package>@<version> · checked: <YYYY-MM-DD> -->`. Model knowledge is not evidence — the procedure is in `rules-authoring.md`
 - Keep a `model-gap: not-observed` item only when the security or integrity damage is large. **When the model changes, measure again with a
   no-guide arm and drop the not-observed items that passed first** — a card that only grows becomes a general guide again
 

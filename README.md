@@ -2,7 +2,7 @@
 
 AI Native Dev Harness for Claude Code — reversibility-axis workflow, self-testing hooks, graph instrumentation.
 
-![version](https://img.shields.io/badge/version-1.5.0-blue)
+![version](https://img.shields.io/badge/version-1.6.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## What it is
@@ -229,6 +229,11 @@ If you choose the detailed guide: only the three combinations with a pre-built v
 `react-vite`×`aws-container`, `vue`×`node-api`) use the plugin original as-is. Whether to use a pre-built version or
 generate one is **decided by the system from the combination; it does not ask.** When the stack changes,
 regenerate with `/stack-guide-generator`.
+
+For a stack with no pack (`rust-axum` · `flutter` · `custom` and the like), init asks once: **rule file only · rule file + detailed guide · create nothing**.
+If you choose the rule file, it holds only the items whose difference between the installed version and the model's knowledge was
+**confirmed against the official docs** (URL · check date · installed version required), and if no item can be backed with evidence the file is not created.
+The file is project-owned, so a plugin update does not overwrite it.
 
 ## Available Presets
 

@@ -92,10 +92,33 @@ The single `status:` line at the end of the output is the whole result:
 | Status | Meaning |
 | --- | --- |
 | `rules` | there is a pack — its rule file was installed (if the pack has no `RULES.md`, there is nothing to install) |
-| `generate` | the pack is missing or unfinished — no stack rule file, only the universal rules apply |
+| `generate` | the pack is missing or unfinished — no stack rule file, only the universal rules apply. It is the subject of the three-way question below |
 | `skip` | that axis is `none` or `undecided` (not chosen) |
 
 `--rules-only` does not write `.orangekit/guide-job.json` — the detailed guide is a choice, not unfinished work.
+
+#### The question is asked once — three-way if the `status:` line has `generate`, two-way if not
+
+**When there is a `generate` axis (a stack with no pack · custom)** — group those axes and ask only once.
+"Detailed guide only" measured weakest, so it is left out of the options.
+
+```
+<axis> <stack> has no prebuilt rules. How should the guide for this stack be made?
+ 1. Rule file only (recommended · about 5-10 min) — applied automatically when the matching code is edited; lowest cost and the same score in measurement
+    No examples or wiring, and only items backed by the official docs go in (it needs web lookups, and if no item has evidence the file is not created)
+ 2. Rule file + detailed guide (about 1 hour) — examples and wiring to look up and read / costly to generate, and there was a case where an example's value overrode an existing convention
+ 3. Create nothing — only the universal rules (L1) apply
+```
+
+- **1** — call `stack-guide-generator` in **rules mode** for each `generate` axis (its "Mode" section · `assets/rules-authoring.md`).
+  Do not create `.orangekit/guide-job.json` — it is a 5-10 minute synchronous job, and no file is written before the gate passes, so there is nothing to clean up.
+  Zero items with evidence is not a failure — carry "no item with evidence — only the universal rules apply" into the report
+- **2** — do 1 first, then run the "Detailed guide path" below
+- **3** — stop here. Leave "<axis> — only the universal rules apply" in the completion report
+- An axis with a pack already received its rule file, so it drops out of this question. When axes with and without a pack are mixed, the question names **only the axes without one**
+- The generated card is project-owned (no stamp), so `install-guide.sh` does not overwrite it on the next run
+
+**When there is no `generate` axis** — every axis either received a rule file from a pack or is `skip`. Ask only the two-way question below.
 
 #### The detailed guide question (once · default No)
 

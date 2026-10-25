@@ -467,7 +467,7 @@ Confirmation summary — recording this as-is:
 - **Mark the source on every row** — only when it is visible where values the user did not pick (measured · preset · recommended)
   came from can a wrong one be spotted. In particular, **a value inferred from reading a design document is marked as inferred, not ⓜ**
 - **Changes to defaults such as language (TypeScript/JavaScript) and UI toolkit are taken here** — they are not asked separately
-- Say so for a `custom` or `undecided` axis — it means there is no stack rule file (universal rules only), and the detailed guide is generated or deferred if chosen
+- Say so for a `custom` or `undecided` axis — it means there is no prebuilt rule file. For `custom`, Step 9.5 asks you to choose among a rule file (backed by the official docs) · rule file + detailed guide · create nothing
 
 **Right after showing the table, ask with `AskUserQuestion` — do not ask in text and end the turn.**
 Ending with "tell me if anything needs fixing" leaves the user waiting without knowing what to type
@@ -584,7 +584,8 @@ Files created:
 
 Stack rule files (copy the `status:` line from Step 9.5 verbatim):
   ✅ .claude/rules/stack-<axis>-<pack>.md — installed (rules)
-  ·  <axis>                               — no pack (generate) — universal rules only
+  ✅ .claude/rules/stack-<axis>-<stack>.md — generated from the official docs (project-owned)   ← when "rule file only" was chosen in the three-way question
+  ·  <axis>                               — no pack (generate) — universal rules only      ← when "create nothing" was chosen, or no item had evidence
   ·  <axis>                               — not chosen (undecided)
 
 Detailed guide skills (opt-in):

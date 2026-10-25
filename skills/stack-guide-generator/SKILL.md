@@ -1,12 +1,12 @@
 ---
 name: stack-guide-generator
-description: Generates frontend-guide/backend-guide skills into the project's .claude/skills/, matched to the project's tech stack combination (frontend · backend type · cloud · DB · data access · auth). Use when orangekit-init calls it after the stack has been chosen, when the user asks to "generate guides", for a "stack guide", or to "change the tech stack", and when starting on a stack no preset covers (AWS · MongoDB · SvelteKit and the like).
+description: Writes a stack rule file (.claude/rules/stack-*.md) for a stack with no pack (Rust · Flutter · SvelteKit and the like), backed by the official docs (default), and on request generates detailed guide skills (frontend/backend/app-guide) into the project's skills directory. Use when orangekit-init calls it after the stack has been chosen, or when the user asks for "stack rules", to "generate guides", for a "stack guide", or to "change the tech stack".
 ---
 
 # Stack Guide Generator
 
-Generates a project-owned guide skill from the confirmed stack combination.
-The structure follows the `assets/guide-skeleton.md` generation spec; the content is filled from knowledge of the combination.
+Creates a project-owned asset for the confirmed stack — by default a **stack rule file**, on request a **detailed guide skill**.
+A guide skill's structure follows the `assets/guide-skeleton.md` generation spec; the content is filled from knowledge of the combination.
 
 > **Principle: build the body first, verify it, and only then install.** The failure mode this
 > skill replaces is producing a skill (a placeholder) whose description promises what the body cannot keep.
@@ -14,7 +14,18 @@ The structure follows the `assets/guide-skeleton.md` generation spec; the conten
 > **`dev/docs/skill-review/` is the canonical source for measured evidence** — wall clock, tokens, defect classes, and
 > reversibility verdicts all live there. Only **rules** live here. A copy is a source of drift.
 
-## Process principles (derived from the 2026-08-21 A/B measurement)
+## Mode — the rule file is the default
+
+| Mode | When | What to follow |
+| --- | --- | --- |
+| **rules** (default) | init chose "rule file only" for an axis with no pack · a request for "stack rules" · a call that names no mode | **Read `assets/rules-authoring.md` and follow it as written.** Skip Steps 0~7 below |
+| **full** (detailed guide) | `.orangekit/guide-job.json` exists · the user explicitly asked for a "detailed guide" or "generate guides" | Steps 0~7 below |
+
+Rule generation writes **only items backed by evidence from outside the model (official doc URL · check date · installed version)**, and creates no file if it cannot back even one.
+The evidence is a measurement: the detailed guide did not raise scores and a small rule file scored the same (guide A/B, 2026-10),
+and the universal rules (L1) alone blocked the known pitfalls (T-D "L1 only", 3 runs at 23/23, 2026-10-25). Full mode stays because pack authoring (Step 2-A) uses those assets.
+
+## Process principles (derived from the 2026-08-21 A/B measurement) — full mode
 
 The generation method alone does not produce quality. **Generation + a verification loop are one set.** The evidence is
 A/B v1~v3 in `dev/docs/skill-review/` — in every round, artifacts that had "self-reported a pass" turned out

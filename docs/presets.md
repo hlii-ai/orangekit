@@ -147,6 +147,10 @@ about once by init and built only if chosen. Even then init does not wait for th
 and exits, installing only after generation, audit, and repair are done — half-finished guides are not installed.
 If the session is cut off, the next session's briefing reports the unfinished work.
 
+**For an axis with no pack**, init asks one three-way question — rule file only (recommended) · rule file + detailed guide · create nothing. The rule file holds
+only items backed by the official docs (`guide-gate.sh --rules-card` checks the URL · date · installed version), and if there is no evidence it is not created. It is
+project-owned (no stamp), so the installer does not overwrite it.
+
 > Rationale: one measured generation run took **54 minutes before repair**, and at the end of it both auditors
 > still ruled it not installable (`dev/docs/skill-review/contract-first-e2e-2026-08-22.md`). There is no reason
 > to tie the first impression of an install to that duration — a guide is needed when the first component is

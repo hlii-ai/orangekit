@@ -17,6 +17,10 @@
 #   guide-gate.sh --pack <pack-directory>
 #       Checks an axis pack before assembly. Runs only the checks that close inside the axis, and explicitly
 #       reports what it skipped for being a function of the combination (requires satisfaction·--pair).
+#   guide-gate.sh --rules-card <file>
+#       Checks a project-owned stack rule file (.claude/rules/stack-*.md). It applies the same budget, class tags,
+#       "why models get it wrong" and precedence sentence as a pack card, but requires evidence (official URL ·
+#       check date · installed version) instead of a policy table and a stamp.
 #   guide-gate.sh --pair --contract <contract-file> --frontend <dir> --backend <dir>
 #   guide-gate.sh --self-test   synthetic fixtures only (fast — run it on every harness change)
 #   guide-gate.sh --regress     + actually checks every shipped pack and every pre-built seam.
@@ -1114,13 +1118,19 @@ check_known_gaps() {   # $1 directory  $2 manifest (pack.json or seam.json)
 # and the budget are blocked by machine. A pack with no card is a WARN — so existing packs are not bound to FAIL while
 # packs switch over one at a time.
 check_core_card() {
-  local P="$1" c="$1/RULES.md"
+  local P="$1" c="$1/RULES.md" mode="pack"
+  # project: $1 is not a pack directory but a project-owned rule file — no policies, no stamp; the evidence is an official URL
+  [ "${2:-}" = "project" ] && { c="$1"; P=""; mode="project"; }
   sec "stack core card (RULES.md)"
-  [ -f "$c" ] || { warn "no core card" "if what must be followed lives only in the skill body, the model may not read it — move it into RULES.md"; return 0; }
+  if [ ! -f "$c" ]; then
+    if [ "$mode" = "project" ]; then bad "rule file missing: $c"
+    else warn "no core card" "if what must be followed lives only in the skill body, the model may not read it — move it into RULES.md"; fi
+    return 0
+  fi
   local out
-  out=$(python3 - "$c" "$P/$PACK_POLICIES_NAME" "$P/PACK.md" <<'PYCARD'
+  out=$(python3 - "$c" "${P:+$P/$PACK_POLICIES_NAME}" "${P:+$P/PACK.md}" "$mode" <<'PYCARD'
 import re, sys, os
-card, pol, packmd = sys.argv[1:4]
+card, pol, packmd, mode = sys.argv[1:5]
 s = open(card, encoding='utf-8').read()
 def emit(kind, msg, hint=''): print(f"{kind}\t{msg}\t{hint}")
 m = re.match(r'^---\n(.*?)\n---\n', s, re.S)
@@ -1130,8 +1140,8 @@ stamp = re.search(r'orangekit-pack: (\S+) (v\d+\.\d+\.\d+)', s)
 pstamp = None
 try: pstamp = re.search(r'orangekit-pack: (\S+) (v\d+\.\d+\.\d+)', open(packmd, encoding='utf-8').read())
 except OSError: pass
-if not stamp: emit('bad', 'no orangekit-pack stamp', 'the installer judges updates by the stamp — without it consumers never receive an update')
-elif pstamp and stamp.groups() != pstamp.groups():
+if mode == 'pack' and not stamp: emit('bad', 'no orangekit-pack stamp', 'the installer judges updates by the stamp — without it consumers never receive an update')
+elif mode == 'pack' and pstamp and stamp.groups() != pstamp.groups():
     emit('bad', f'card stamp {stamp.group(1)} {stamp.group(2)} ≠ PACK.md {pstamp.group(1)} {pstamp.group(2)}', 'it must be the same edition as the pack to be updated with it')
 body = re.sub(r'^---\n.*?\n---\n', '', s, flags=re.S)
 body = re.sub(r'<!--.*?-->', '', body, flags=re.S).strip()
@@ -1147,6 +1157,13 @@ for i, l in enumerate(items, 1):
     head = re.sub(r'\s+', ' ', l.strip())[:60]
     if not re.match(r'\s*- \[(consistency|security|performance)\]', l): emit('bad', f'item {i} has no class tag: {head}', 'outside [consistency]·[security]·[performance] it does not belong on the card')
     if 'why models get it wrong:' not in l: emit('bad', f'item {i} lacks "why models get it wrong": {head}', 'if you cannot give the reason, the model already knows it')
+    if mode == 'project':
+        # no policy table — the evidence comes only from outside the model: an official doc URL · the check date · the installed version the item holds for
+        pe = re.search(r'<!-- evidence: (.*?) -->', l); pt = pe.group(1) if pe else ''
+        if not re.search(r'https://\S+', pt): emit('bad', f'item {i} evidence has no official doc URL (https://…): {head}', 'an item written from model knowledge alone is circular — attach the changelog or migration doc URL')
+        elif not re.search(r'checked: \d{4}-\d{2}-\d{2}', pt): emit('bad', f'item {i} evidence has no check date: {head}', 'checked: YYYY-MM-DD — docs change')
+        elif not re.search(r'installed: \S+@\S+', pt): emit('bad', f'item {i} evidence has no installed version: {head}', 'installed: <package>@<version> — without knowing which version it holds for, staleness after an upgrade cannot be judged')
+        continue
     ev = re.search(r'<!-- evidence: (.*?) · model-gap: (observed|not-observed) -->', l)
     if not ev: emit('bad', f'item {i} has no evidence/model-gap comment: {head}', '<!-- evidence: … · model-gap: observed|not-observed -->')
     else:
@@ -1166,6 +1183,14 @@ PYCARD
     [ -n "$kind" ] || continue
     case "$kind" in ok) ok "$msg";; bad) bad "$msg" "$hint";; esac
   done <<< "$out"
+  return 0
+}
+
+# A project-owned stack rule file — written by stack-guide-generator for a stack with no pack. It gets the same admission
+# conditions as a pack card, but with no policy table and no pack stamp only the evidence format differs (check_core_card project)
+run_rules_card() {
+  printf "\n${C_D}guide-gate --rules-card${C_0}  %s\n" "$1"
+  check_core_card "$1" project
   return 0
 }
 
@@ -2121,6 +2146,20 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/cardbig/fxpack2"      1 "card over budget (body · item count)"
   _fx_assert_pack "$fx/pk/cardstamp/fxpack2"    1 "card stamp ≠ PACK.md"
   _fx_assert_pack "$fx/pk/cardnoprio/fxpack2"   1 "the card opening has no project-precedence sentence"
+
+  # Project-owned rule file — it enters with evidence (URL · date · installed version), no policies, no stamp
+  _fx_build_rulecards "$fx" || { bad "rule card fixture build failed"; return; }
+  sec "project rule cards (--rules-card)"
+  _fx_assert_rules "$fx/rc/rcok.md"       0 "a project card with evidence (passes with no stamp or policies)"
+  _fx_assert_rules "$fx/rc/rcnourl.md"    1 "evidence has no official URL (a pack-format evidence carried over)" "official doc URL"
+  _fx_assert_rules "$fx/rc/rcnodate.md"   1 "evidence has no check date"                                         "check date"
+  _fx_assert_rules "$fx/rc/rcnover.md"    1 "evidence has no installed version"                                  "installed version"
+  _fx_assert_rules "$fx/rc/rcnoreason.md" 1 "an item lacks \"why models get it wrong\" (the shared check is alive)" "why models get it wrong"
+  _fx_assert_rules "$fx/rc/rcnopaths.md"  1 "no paths: (the shared check is alive)"                              "paths"
+  _fx_assert_rules "$fx/rc/rcnoprio.md"   1 "the opening has no project-precedence sentence (shared check)"      "opening"
+  _fx_assert_rules "$fx/rc/rcbig.md"      1 "over budget (the shared check is alive)"                            "/12"
+  _fx_assert_rules "$fx/rc/rcnoitem.md"   1 "0 items"                                                            "0 items"
+  _fx_assert_rules "$fx/rc/none.md"       1 "the rule file does not exist"                                       "rule file missing"
   # A space in the path — common in a project folder name (`My Projects`) or a Windows user home. If the file list
   # is split at spaces, the gate **reads 0 files and passes everything** (it does not FAIL, it goes blind)
   mkdir -p "$fx/pk/sp ace" && cp -R "$fx/pk/noimport" "$fx/pk/sp ace/" \
@@ -2292,6 +2331,51 @@ _fx_review_assert() {
     if printf '%s' "$out" | grep -q "$needle"; then bad "'$needle' REVIEW false positive on a harmless pack"
     else ok "no block-proof REVIEW on a harmless pack"; fi
   fi
+  return 0
+}
+
+# --rules-card fixtures — one sound card, and each defect breaks exactly one thing.
+# exit 1 alone does not tell whether it was blocked for the intended reason (another defect caught first is also 1) — compare the reason on the ✗ line.
+_fx_assert_rules() {
+  local file="$1" want="$2" label="$3" needle="${4:-}" out code=0
+  out=$(bash "$0" --rules-card "$file" 2>&1) || code=$?
+  if [ "$code" -ne "$want" ]; then
+    bad "$label → exit $code (expected $want)" "$(printf '%s' "$out" | grep -E '✗|pass ' | head -3 | tr '\n' ';')"; return 0
+  fi
+  if [ -n "$needle" ] && ! printf '%s' "$out" | grep '✗' | grep -q -- "$needle"; then
+    bad "$label → exit $code but not for the intended reason ('$needle')" "$(printf '%s' "$out" | grep '✗' | head -2 | sed 's/^  *//' | tr '\n' ';')"; return 0
+  fi
+  ok "$label → exit $code"
+}
+
+_fx_build_rulecards() {
+  local d="$1/rc"; mkdir -p "$d" || return 1
+  local ev='<!-- evidence: https://example.com/docs/migrate-v5 · installed: fxlib@5.2.0 · checked: 2026-10-25 -->'
+  cat > "$d/rcok.md" <<FXRC
+---
+paths:
+  - "src/**"
+---
+
+# fxlib 5 rules
+
+The project spec and \`.claude/rules/code-conventions.md\` take precedence over this card.
+
+## Performance
+
+- [performance] State the host explicitly in listen. — why models get it wrong: the v4 idiom $ev
+FXRC
+  local m
+  for m in rcnourl rcnodate rcnover rcnoreason rcnopaths rcnoprio rcbig rcnoitem; do cp "$d/rcok.md" "$d/$m.md" || return 1; done
+  sed -i.bak 's#<!-- evidence: .* -->#<!-- evidence: guide-ab T-D · model-gap: observed -->#' "$d/rcnourl.md"
+  sed -i.bak 's# · checked: [0-9-]*##' "$d/rcnodate.md"
+  sed -i.bak 's# · installed: [^ ]*##' "$d/rcnover.md"
+  sed -i.bak 's# — why models get it wrong: the v4 idiom##' "$d/rcnoreason.md"
+  sed -i.bak '1,4d' "$d/rcnopaths.md"
+  sed -i.bak 's/^The project spec.*$/Follow this card./' "$d/rcnoprio.md"
+  sed -i.bak '/^- \[performance\]/d' "$d/rcnoitem.md"
+  awk -v ev="$ev" 'BEGIN{ for (i=0; i<13; i++) printf "- [performance] padding item %d — a sentence that pushes the card over its budget. — why models get it wrong: padding %s\n", i, ev }' >> "$d/rcbig.md"
+  rm -f "$d"/*.bak
   return 0
 }
 
@@ -3163,6 +3247,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --guide)     MODE="guide"; GUIDE="${2:-}"; shift 2 || exit 2 ;;
     --pack)      MODE="pack";  GUIDE="${2:-}"; shift 2 || exit 2 ;;
+    --rules-card) MODE="rulescard"; GUIDE="${2:-}"; shift 2 || exit 2 ;;
     --pair)      MODE="pair"; shift ;;
     --self-test) MODE="selftest"; shift ;;
     --regress)   MODE="selftest"; REGRESS=1; shift ;;
@@ -3178,7 +3263,7 @@ while [ $# -gt 0 ]; do
     --pack-ledger-name)   PACK_LEDGER_NAME="${2:-}"; shift 2 || exit 2 ;;   # --self-test only
     --pack-policies-name) PACK_POLICIES_NAME="${2:-}"; shift 2 || exit 2 ;; # --self-test only
     --generated) GENERATED=1; shift ;;
-    -h|--help)   sed -n '2,28p' "$0" | sed -E 's/^#[[:space:]]?//'; exit 0 ;;
+    -h|--help)   sed -n '2,32p' "$0" | sed -E 's/^#[[:space:]]?//'; exit 0 ;;
     *)           printf "unknown option: %s (see --help)\n" "$1" >&2; exit 2 ;;
   esac
 done
@@ -3186,9 +3271,10 @@ done
 case "$MODE" in
   guide) [ -n "$GUIDE" ] || { printf -- "--guide <directory> is required\n" >&2; exit 2; }; run_guide "$GUIDE" ;;
   pack)  [ -n "$GUIDE" ] || { printf -- "--pack <directory> is required\n" >&2; exit 2; };  run_pack "$GUIDE" ;;
+  rulescard) [ -n "$GUIDE" ] || { printf -- "--rules-card <file> is required\n" >&2; exit 2; }; run_rules_card "$GUIDE" ;;
   pair)  run_pair ;;
   selftest) run_self_test ;;
-  *)     printf "no mode: --guide · --pack · --pair (see --help)\n" >&2; exit 2 ;;
+  *)     printf "no mode: --guide · --pack · --rules-card · --pair (see --help)\n" >&2; exit 2 ;;
 esac
 
 printf "\n${C_D}────────────────────────────────────────────${C_0}\n"

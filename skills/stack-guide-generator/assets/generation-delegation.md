@@ -78,7 +78,8 @@ Generation rules (instruct the subagent with these verbatim):
    evidence · no duplication) and the budget of the spec's "Stack core card". Generic patterns and library usage the model already knows
    go neither in resources nor on the card
 5. Output location: the project's `.claude/skills/frontend-guide/` · `.claude/skills/backend-guide/` · `.claude/skills/app-guide/`,
-   plus one core card per axis at `.claude/rules/stack-<axis>-<stack name>.md` (for an axis with a pack the installer already put it there — do not write it)
+   plus one core card per axis at `.claude/rules/stack-<axis>-<stack name>.md` (for an axis with a pack the installer already put it there — do not write it. For an axis with no pack, the generator does not write the card either — a card written from model knowledge is not evidence.
+   The main session makes it separately with `rules-authoring.md`)
 6. **Run the gate yourself before returning** — reach **0 FAILs** with `guide-gate.sh --guide <path> --generated`
    and then return. Do not fix WARNs and REVIEWs; **report them with a reason attached**
    - **The generator's scope cap: writing + the gate, and no further.** Installing packages (`npm i` and the like) · `tsc` · starting a DB ·
