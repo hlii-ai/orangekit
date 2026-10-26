@@ -11,7 +11,7 @@ paths:
   - "alembic/**"
   - "**/*.sql"
 ---
-<!-- orangekit-rule-version: 3.38.0 -->
+<!-- orangekit-rule-version: 3.39.0 -->
 
 # Data Modeling Card
 

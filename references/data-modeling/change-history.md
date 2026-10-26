@@ -1,4 +1,4 @@
-<!-- orangekit-rule-version: 3.38.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
+<!-- orangekit-rule-version: 3.39.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
 
 # Data change-history design
 

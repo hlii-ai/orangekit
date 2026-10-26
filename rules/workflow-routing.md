@@ -1,4 +1,4 @@
-<!-- orangekit-rule-version: 3.31.0 -->
+<!-- orangekit-rule-version: 3.39.0 -->
 <!-- **Do not add paths: frontmatter.** The moment you do, this turns into conditional loading and
      stops appearing at session start. This card is needed "before work begins", so
      it has to be loaded already at a point when no file has been opened yet.

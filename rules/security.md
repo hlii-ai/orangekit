@@ -12,7 +12,7 @@ paths:
   - "backend/**"
   - "api/**"
 ---
-<!-- orangekit-rule-version: 3.36.0 -->
+<!-- orangekit-rule-version: 3.39.0 -->
 <!-- security-check.sh (PreToolUse) blocks only hardcoded secret **strings**, by regex.
      This card carries what that regex can never catch — a problem of **placement** rather than of value,
      that is, "the right value put on the wrong side". Stack-specific procedures belong to the axis guides. -->
