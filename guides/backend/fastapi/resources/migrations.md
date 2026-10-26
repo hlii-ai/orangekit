@@ -6,6 +6,10 @@ Owns all of `alembic/`: `env.py` wiring · the limits of autogeneration · expan
 (`create_app`·`lifespan`) by `resources/project-structure.md`, and health checks, the pool, and observability by
 `resources/operations.md`.
 
+> **The canonical source for table design norms is the T1 data-modeling card (`.claude/rules/data-modeling.md`)** — default columns,
+> the per-table deletion strategy, history level and code-column approach, and the pattern references. It auto-loads from `alembic/**`
+> and does not load from `app/**`, where the models are defined, so open it yourself before creating or changing a table. This file covers only the deploy procedure.
+
 > **This is the one context that is an exception to the ownership discipline.** The first principle of this axis is "ownership lives in the `WHERE`", but
 > a migration runs on a deploy rather than a request, so **it has no subject and it targets the rows of every owner** —
 > the absence of `owner_id` in this file's `WHERE` clauses is normal, and it is normal **only here**.

@@ -6,19 +6,45 @@ paths:
   - "prisma/**"
   - "drizzle/**"
   - "dev/docs/database/**"
+  - "**/db/**"
+  - "**/migration/**"
+  - "alembic/**"
+  - "**/*.sql"
 ---
-<!-- orangekit-rule-version: 3.36.0 -->
+<!-- orangekit-rule-version: 3.38.0 -->
 
 # Data Modeling Card
 
 > Based on Kim Young-han's modern data modeling philosophy. Apply it when designing a new table·migration·schema change.
 > If the project has a canonical schema document (`dev/docs/database/`), stay consistent with it.
 >
-> **Scope**: §1~4·6~8 are common to relational DBs, §5 is specific to PostgreSQL (Supabase included) —
-> on another RDB take the principles only and substitute that DB's syntax. Each file under "Pattern References" below
-> also states its scope at the top. In a NoSQL project this card's paths barely match, so it stays dormant.
+> **Scope**: the principles are common to relational DBs, and the syntax is given for both PostgreSQL (Supabase included) and MySQL 8 (§5 and the dialect tables in the pattern files).
+> On any other RDB take the principles only and substitute that DB's syntax. In a NoSQL project this card's paths barely match, so it stays dormant.
 
 **Three core principles**: surrogate keys first · 3NF by default · non-identifying relationships by default
+
+## Default columns for every new table — apply these first, every time you create a table
+
+Include the columns below **by default**. A table that omits one gets a one-line reason in the migration comment —
+so review can tell whether a missing column is a mistake or a decision.
+
+| Column | PostgreSQL | MySQL 8 | Applies to |
+| --- | --- | --- | --- |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | `DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP` | every table |
+| `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` **+ an update trigger** (or the app sets it every time) — `DEFAULT` alone does not change on UPDATE | `DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | tables that can be modified |
+| `created_by` · `updated_by` | actor ID, NOT NULL — fill **both** on INSERT (creation = the first modification) | same | nearly every table (→ `change-history.md` Level 1) |
+
+Append-only tables (ledger entries · events · idempotency keys · audit logs) carry `created_*` only and are never modified or deleted.
+
+**Decide three things per table** and write them in the migration comment (or the table definition document) — these are per-table decisions, not a blanket default:
+
+1. **Deletion strategy** — Status · Soft (`deleted_at`·`deleted_by`) · Hard. Core-domain tables (orders · payments · settlements) are managed by status rather than deleted,
+   and Soft Delete is not bolted onto every table mechanically (→ `deletion-strategy.md`)
+2. **History level** — a dedicated `_history` table (full-row snapshot, starting from the row's creation) · the shared `audit_log` · none (→ `change-history.md`)
+3. **Code-column approach** — app ENUM + `CHECK` · a common-code table · hybrid (→ `common-code.md`)
+
+**Operational corrections must be traceable under any strategy** — fixing, voiding, or deleting wrongly entered data leaves who · when · why · before/after values
+in the history (`change_type = 'CORRECTION'`/`'DELETE'`) or `audit_log`, **in the same transaction**. Do not keep a correction path that leaves no record (editing directly in a console).
 
 ---
 
@@ -30,7 +56,7 @@ paths:
 
 **Entity classification**: fundamental (exists on its own: customer, product) → central (derived from relationships: order, contract) → action (records an event: order line, payment history)
 
-**Design patterns**: master-transaction separation (users vs transactions) · extracting code tables (TEXT+CHECK or a reference table → details in `common-code.md`) · history management (a separate `_history` table → details in `change-history.md`)
+**Design patterns**: master-transaction separation (users vs transactions) · separating code values (store the code value, not a display string — ENUM + `CHECK` when logic uses it, a common-code group/detail table when it is display only, hybrid when both → details in `common-code.md`) · history management (a separate `_history` table → details in `change-history.md`)
 
 ---
 
@@ -54,8 +80,8 @@ paths:
 
 | Situation    | Type                                  | Note                          |
 | ------------ | ------------------------------------- | ----------------------------- |
-| Ordinary PK  | `BIGINT GENERATED ALWAYS AS IDENTITY` | 8B, sequential insert, best for joins |
-| URL/API exposed | `UUID DEFAULT gen_random_uuid()`   | blocks enumeration attacks. 16B, random insert |
+| Ordinary PK  | `BIGINT GENERATED ALWAYS AS IDENTITY` (MySQL: `BIGINT AUTO_INCREMENT`) | 8B, sequential insert, best for joins |
+| URL/API exposed | `UUID DEFAULT gen_random_uuid()` (MySQL: `BINARY(16)` + `UUID_TO_BIN(UUID(), 1)`) | blocks enumeration attacks. 16B, random insert |
 | Distributed system | UUID v7 / ULID                  | time-ordered, nearly sequential insert |
 
 ### Relationship rules
@@ -86,27 +112,25 @@ paths:
 - Log/event tables: write optimization first (e.g. `events.data` JSONB)
 - Read-heavy aggregation: OLAP, summary tables for dashboards
 
-**Common mistakes**: bypassing 1NF with JSONB (dumping structured data into JSON), abusing the EAV pattern (→ details in `eav-vs-jsonb.md`), over-normalizing (splitting a code table ten levels deep).
+**Common mistakes**: bypassing 1NF with JSON (dumping structured data into JSON → `json-columns.md`), abusing the EAV pattern (→ details in `eav-vs-jsonb.md`), over-normalizing (splitting a code table ten levels deep).
 
 ---
 
 ## 5. Physical Modeling — data types
 
-On PostgreSQL/Supabase:
-
-| Category       | Rule                | Type                                            |
-| -------------- | ------------------- | ----------------------------------------------- |
-| PK             | surrogate key       | `BIGINT GENERATED ALWAYS AS IDENTITY`           |
-| Public ID      | UUID                | `UUID DEFAULT gen_random_uuid()`                |
-| Money          | **never FLOAT**     | `NUMERIC(12,0)` (KRW) / `NUMERIC(15,2)` (foreign currency) |
-| String (bounded) | length from a business rule | `VARCHAR(n)` (email 320, nickname 30, etc.) |
-| String (unbounded) | length undetermined | `TEXT`                                      |
-| Time           | **always time zone aware** | `TIMESTAMPTZ DEFAULT now()`              |
-| Date only      | no time needed      | `DATE` (date of birth, expiry date)             |
-| Status/type    | enumerated value    | `TEXT` + a `CHECK` constraint                   |
-| Fluid schema   | JSONB               | `JSONB` + a CHECK constraint or app-side Zod validation |
-| Boolean        | only when truly binary | `BOOLEAN` (any chance of 3+ states → a TEXT enum) |
-| Quantity/count | integer             | `INTEGER` (at large scale: `BIGINT`)            |
+| Category       | Rule                | PostgreSQL                                      | MySQL 8 |
+| -------------- | ------------------- | ----------------------------------------------- | ------- |
+| PK             | surrogate key       | `BIGINT GENERATED ALWAYS AS IDENTITY`           | `BIGINT AUTO_INCREMENT` |
+| Public ID      | UUID                | `UUID DEFAULT gen_random_uuid()`                | `BINARY(16)` (`UUID_TO_BIN(UUID(), 1)` — time-ordered) |
+| Money          | **never FLOAT**     | `NUMERIC(12,0)` (KRW) / `NUMERIC(15,2)` (foreign currency) | `DECIMAL(12,0)` / `DECIMAL(15,2)` |
+| String (bounded) | length from a business rule | `VARCHAR(n)` (email 320, nickname 30, etc.) | `VARCHAR(n)` — character set `utf8mb4` |
+| String (unbounded) | length undetermined | `TEXT`                                      | `TEXT` (`VARCHAR(n)` if it is searched or indexed) |
+| Time           | **the instant must be unambiguous** | `TIMESTAMPTZ DEFAULT now()`  | `DATETIME` + **a store-in-UTC convention** (pin the session `time_zone`). `TIMESTAMP` is discouraged because of the year-2038 limit. If you need fractional seconds use `DATETIME(3)` — `DATETIME` **rounds** fractional seconds |
+| Date only      | no time needed      | `DATE` (date of birth, expiry date)             | `DATE` |
+| Status/type    | enumerated value    | `TEXT`/`VARCHAR(n)` + a `CHECK` constraint      | `VARCHAR(n)` + `CHECK` (enforced from 8.0.16). Do not use the DB `ENUM` type — every new value needs an ALTER |
+| Fluid schema   | JSON                | `JSONB` + a CHECK constraint or app-side Zod validation | `JSON` + CHECK (→ `json-columns.md`) |
+| Boolean        | only when truly binary | `BOOLEAN` (any chance of 3+ states → a TEXT enum) | `BOOLEAN` (= `TINYINT(1)`) |
+| Quantity/count | integer             | `INTEGER` (at large scale: `BIGINT`)            | `INT` (at large scale: `BIGINT`) |
 
 ---
 
@@ -147,37 +171,35 @@ Mandatory checks when creating a new table:
 
 - [ ] `CREATE TABLE` + inline constraints (PK, FK, CHECK, NOT NULL, DEFAULT)
 - [ ] `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` + at least one policy (only on stacks that use row level security — policy details live in that stack's backend-guide auth/permission boundary resource (if the detailed guide is installed). On a stack without RLS, the application-layer ownership check is the only boundary)
-- [ ] Create an index on FK columns (`idx_{table}_{fk_column}`)
+- [ ] Create an index on FK columns (`idx_{table}_{fk_column}`) — PG does not create one automatically; MySQL InnoDB does create an index on every FK
 - [ ] Add an index on frequently used WHERE/ORDER BY columns
-- [ ] A GIN index on JSONB columns (when searching inside them is needed)
+- [ ] An index strategy when you search inside a JSON column — PG GIN / expression index; MySQL generated-column / functional / multi-valued index (→ `json-columns.md`)
 - [ ] TypeScript type definitions → the project's type directory (in a monorepo, the shared package's `types/`) + update the barrel export
 - [ ] Table definition document → `dev/docs/database/` (optional, from medium scale up)
-- [ ] `created_at TIMESTAMPTZ DEFAULT now()` + `updated_at TIMESTAMPTZ DEFAULT now()` common columns
-- [ ] `created_by UUID` + `updated_by UUID` common columns (applied by default to nearly every table → `change-history.md` Level 1)
+- [ ] The "Default columns for every new table" section above — the default columns (a reason for any omitted) and the three per-table decisions (deletion strategy · history level · code-column approach) are written in the migration comment
+- [ ] Soft Delete tables: the active-row index and UNIQUE in the dialect's form (PG partial index / MySQL `(business_key, deleted_at)` + change the value on withdrawal) + the RLS condition updated (→ `deletion-strategy.md`)
 - [ ] Tables that require business history → create the `_{table}_history` history table at the same time (→ `change-history.md`)
-- [ ] When applying Soft Delete: a `deleted_at` column + a partial index + the RLS condition updated (→ `deletion-strategy.md`)
 - [ ] When idempotency is needed: an `idempotency_key` UNIQUE column + TTL cleanup (→ `idempotency.md`)
-- [ ] Personal or sensitive columns: a retention period and what enforces it (job · TTL) + a per-subject erasure path (subject FK `ON DELETE CASCADE` or a documented bulk delete). If undecided, record the reason for indefinite retention in the table definition (→ `deletion-strategy.md`)
-
----
+- [ ] Personal or sensitive columns: a retention period and what enforces it (job · TTL) + a per-subject erasure path (anonymize the references then hard delete the subject, or an intended subject FK `ON DELETE CASCADE`). If undecided, record the reason for indefinite retention in the table definition (→ `deletion-strategy.md`)
 
 ---
 
 ## Pattern References — read only what you need
 
-This card carries only **what you always need when building a schema** (§1~8). The ten patterns below are
+This card carries only **what you always need when building a schema** (§1~8). The eleven patterns below are
 needed **only when you actually design that pattern**, so they were moved down to `.claude/references/data-modeling/`.
 Read **only the one** file on the matching row — reading them all makes the split meaningless.
 
 | What you are designing now | File to read |
 | --- | --- |
-| A column with a **fixed set of values**, like status·category·type | [`common-code.md`](../references/data-modeling/common-code.md) — designing a common-code table |
+| A column with a **fixed set of values**, like status·category·type (ENUM+CHECK · common-code · hybrid) | [`common-code.md`](../references/data-modeling/common-code.md) — designing common codes |
 | A **self-referencing hierarchy**, like a category tree·org chart | [`hierarchy.md`](../references/data-modeling/hierarchy.md) — designing a hierarchy |
 | You **must keep a history** of who changed what and when | [`change-history.md`](../references/data-modeling/change-history.md) — designing data change history |
 | You only need to hold the single previous value in a column | [`scd-type3.md`](../references/data-modeling/scd-type3.md) — keeping the previous value in a column — SCD Type 3 |
-| Deciding how deletion works (status value · Soft · Hard) | [`deletion-strategy.md`](../references/data-modeling/deletion-strategy.md) — data deletion strategy — Status vs Soft Delete vs Hard Delete |
+| Deciding a table's **deletion strategy** (status value · Soft · Hard), or implementing Soft Delete or operational corrections | [`deletion-strategy.md`](../references/data-modeling/deletion-strategy.md) — data deletion strategy — Status vs Soft Delete vs Hard Delete |
 | A **statistics table** for aggregation·dashboards | [`statistics.md`](../references/data-modeling/statistics.md) — designing a statistics table |
 | It must stay safe **when the same request arrives twice**, as with payments·webhooks | [`idempotency.md`](../references/data-modeling/idempotency.md) — designing idempotency |
-| The attributes vary, so the columns cannot be fixed | [`eav-vs-jsonb.md`](../references/data-modeling/eav-vs-jsonb.md) — EAV vs JSONB design |
+| The attributes vary, so the columns cannot be fixed (regular columns vs JSON vs EAV) | [`eav-vs-jsonb.md`](../references/data-modeling/eav-vs-jsonb.md) — designing dynamic attributes |
+| Creating a **JSON column**, or searching or validating inside one | [`json-columns.md`](../references/data-modeling/json-columns.md) — designing JSON columns |
 | An **inheritance relationship** built from common attributes + per-type attributes | [`supertype-subtype.md`](../references/data-modeling/supertype-subtype.md) — designing supertype/subtype (inheritance) |
 | A **DB function** that runs with elevated privileges | [`security-definer.md`](../references/data-modeling/security-definer.md) — conventions for writing SECURITY DEFINER functions |

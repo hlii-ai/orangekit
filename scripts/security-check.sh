@@ -58,6 +58,19 @@ if [ "$TOOL_NAME" = "Write" ] \
 'This is a new UI file. If the direction is still being decided, pass the review in `.claude/rules/ui-design.md` first — avoid the 3 default clusters · one signature element · 2-pass review. If you are following a direction that is already set, carry on.'
 fi
 
+# New schema file — the same greenfield gap exists for the data-modeling card. The card loads when
+# `db/**` or `**/migrations/**` is **read**, but the first migration always starts out as something
+# **newly written**. Measured (benchmark B2, 6 runs): the first migration was a Write (new) in all 6 runs, and in the
+# 5 where the card was opened directly only the front was read (`head -60/80/150`), so the default-columns line was never seen — `created_by`·`deleted_at` 0/6.
+# Narrowed by the same three conditions as above (Write · new · extension). It does not block.
+if [ "$TOOL_NAME" = "Write" ] \
+   && [[ "$FILE_PATH" =~ \.(sql|prisma)$ ]] \
+   && [[ "$FILE_PATH" =~ (^|/)(migrations?|db|prisma|drizzle|supabase)/ ]] \
+   && [ ! -f "$FILE_PATH" ]; then
+  orangekit_emit_context PreToolUse \
+'This is a new schema file. Before creating a table, read "Default columns for every new table" at the top of `.claude/rules/data-modeling.md` and apply it (decide the deletion strategy per table there too). That card loads automatically only when a matching file is read, so it may not have loaded yet while you are writing a new file.'
+fi
+
 # ══════════════════════════════════════════════════════════════════════
 # Destructive command gate
 # ══════════════════════════════════════════════════════════════════════
@@ -156,13 +169,32 @@ _strip_heredoc_bodies() {
       return (line ~ /^[ \t]*([A-Za-z_][A-Za-z0-9_]*=[^ \t]*[ \t]+)*(sudo[ \t]+)?(npx[ \t]+)?(psql|mysql|mariadb|sqlite3|mongo|mongosh|supabase|prisma|drizzle-kit|alembic|sqlcmd)([ \t]|$)/ \
            || line ~ /[|;&][ \t]*(sudo[ \t]+)?(npx[ \t]+)?(psql|mysql|mariadb|sqlite3|mongo|mongosh|supabase|prisma|drizzle-kit|alembic|sqlcmd)([ \t]|$)/)
     }
+    # What receives the heredoc is **the segment containing `<<`, not the whole line**. Looking at the whole line, in
+    # `psql … -c "select …"; python3 - <<EOF` the psql in the earlier segment leaves the python body
+    # as SQL — measured (benchmark B2/run1 step 1): the string `BEFORE TRUNCATE ON point_entries` in a python body that edits
+    # a migration was blocked as TRUNCATE. Split on `;` `&&` `||` outside quotes
+    # (a pipe is not split — `cat <<EOF | psql` is a heredoc going into psql).
+    function seg_of(line, st, ln,    i, c, q, s, e) {
+      q=""; s=1
+      for (i=1; i<st; i++) { c=substr(line,i,1)
+        if (q!="") { if (c==q) q=""; continue }
+        if (c=="\047" || c=="\"") { q=c; continue }
+        if (c==";") s=i+1
+        else if ((c=="&" || c=="|") && substr(line,i+1,1)==c) { s=i+2; i++ } }
+      e=length(line); q=""
+      for (i=st+ln; i<=length(line); i++) { c=substr(line,i,1)
+        if (q!="") { if (c==q) q=""; continue }
+        if (c=="\047" || c=="\"") { q=c; continue }
+        if (c==";" || ((c=="&" || c=="|") && substr(line,i+1,1)==c)) { e=i-1; break } }
+      return substr(line, s, e-s+1)
+    }
     { if (inhd) { l=$0; if (dash) sub(/^[ \t]+/,"",l); if (l==delim) inhd=0; else if (keep) print; next }
       if (match($0, /<<-?[ \t]*[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?/)) {
         # A `<<<` herestring is not a heredoc — if the preceding character is `<`, skip it
         if (RSTART==1 || substr($0,RSTART-1,1) != "<") {
           t=substr($0,RSTART,RLENGTH); dash=(substr(t,1,3)=="<<-")
           sub(/^<<-?[ \t]*/,"",t); gsub(/[\047"]/,"",t); delim=t; inhd=1
-          keep=feeds_db($0) } }
+          keep=feeds_db(seg_of($0, RSTART, RLENGTH)) } }
       print }'
 }
 
@@ -228,6 +260,93 @@ _writes_file() {
   return 1
 }
 
+# ── Scratch-DB drop exemption — only when proven ─────────────────────
+#
+# Blocking `DROP DATABASE` regardless of the name made commands that delete **scratch DBs the agent created for verification**
+# get blocked over and over — measured (benchmark B2, 6 runs): all 17 DB blocks were scratch DBs. 13 were
+# the re-create-in-the-same-command form (`DROP DATABASE IF EXISTS app_fresh` + `CREATE DATABASE
+# app_fresh` — running the migrations from scratch on an empty DB to verify), and 4 were cleanup of a DB created earlier.
+# The blocked agent went around it by creating a new one with a timestamp on the name, and only DBs that could not be deleted piled up —
+# 0 protection, only friction left. The real danger (deleting a project DB or a system DB) was not a single case.
+#
+# **The exemption is given only when both are proven** (the same discipline as the `.env` exemption below — if undecidable, no
+# exemption is given and today's block stands. It does not newly block; it just does not grant a new exception):
+#   ① the target is not the project DB — it is absent from the connection URLs and `PGDATABASE`-style values in the environment variables and the
+#      project root `.env*`, and it is not a system DB either. **If none can be found it is undecidable** → no exemption
+#   ② the target is a DB the agent created — the same command runs `CREATE DATABASE <the same name>`,
+#      or it is a name created in a command this hook let through earlier (`<state>/created-dbs`)
+# Why ② cannot stand in for ①: resetting a dev DB (`DROP … app; CREATE … app`) satisfies ② but is
+# the same thing as `prisma migrate reset`, so it is blocked. Why ① cannot stand in for ②: it is common for one local Postgres to hold
+# several projects' DBs, and someone else's project DB satisfies ①.
+# If the name is a variable or a substitution (`$N`) it is undecidable → no exemption. `DROP TABLE` and `DROP SCHEMA` are not exempted.
+# Known limit — a name for which a `CREATE DATABASE` was attempted on a DB that already existed (and is absent from the project config) and **failed**
+# is recorded too. The hook runs before execution (PreToolUse), so it does not know whether it succeeded.
+_SYS_DBS=" postgres template0 template1 mysql information_schema performance_schema sys "
+
+# The target names after `create|drop database` in a text (lowercase, one per line). Variables and substitutions are emitted as they are
+_db_targets() {   # $1 text  $2 create|drop
+  printf '%s' "$1" | awk -v verb="$2" -v q="'" '
+    { s = tolower($0); gsub(/\\/, "", s)
+      while (match(s, verb "[ \t]+database[ \t]+")) {
+        s = substr(s, RSTART + RLENGTH)
+        sub(/^if[ \t]+(not[ \t]+)?exists[ \t]+/, "", s)
+        t = s; sub(/^["`]/, "", t)
+        if (match(t, "^[^ \t\"`;,)" q "]+")) print substr(t, 1, RLENGTH) } }'
+}
+
+# The DB names the project uses — environment variables + the project root `.env*`. The path of a connection URL and the value of a name key
+_project_db_names() {
+  local f
+  { env 2>/dev/null
+    # If there is no `.env*` at all, the glob is left literally — ending with `[ -f ] && cat` makes the loop
+    # return 1, the function fails under pipefail and the ERR trap fires (when the connection URL is only in an environment variable, as in the benchmark)
+    for f in "${ORANGEKIT_ROOT:-.}"/.env*; do [ -f "$f" ] || continue; cat "$f" 2>/dev/null || true; done
+  } | awk -v q="'" '
+    { line = $0; sub(/^[ \t]*export[ \t]+/, "", line)
+      eq = index(line, "="); if (!eq) next
+      k = substr(line, 1, eq - 1); v = substr(line, eq + 1)
+      gsub("^[ \t\"" q "]+|[ \t\"" q "]+$", "", v)
+      if (v ~ /^(postgres(ql)?|mysql|mariadb)(\+[a-z0-9]+)?:\/\//) {
+        if (sub(/^[^:]+:\/\/[^\/]*\//, "", v)) { sub(/[?#].*$/, "", v); if (v != "") print tolower(v) }
+      } else if (k ~ /^[ \t]*(PGDATABASE|POSTGRES_DB|MYSQL_DATABASE|DB_NAME|DB_DATABASE|DATABASE_NAME)[ \t]*$/ && v != "") print tolower(v) }' \
+    | sort -u
+}
+
+_created_dbs_file() { [ -n "${ORANGEKIT_ROOT:-}" ] && printf '%s/created-dbs' "$(orangekit_state_dir)"; }
+
+# 0 = every DROP in this segment is proven to be the deletion of a scratch DB the agent created. 1 = not so, or undecidable
+_scratch_db_drop_only() {   # $1 segment  $2 DB names created in the executing segments of the same command
+  local targets proj created n f
+  printf '%s' "$1" | grep -Eqi '(^|[^a-z_])drop[[:space:]]+(table|schema)([^a-z_]|$)' && return 1
+  targets=$(_db_targets "$1" drop); [ -z "$targets" ] && return 1
+  proj=$(_project_db_names); [ -z "$proj" ] && return 1
+  created="$2"
+  f=$(_created_dbs_file) && [ -f "$f" ] && created="$created
+$(cat "$f" 2>/dev/null)"
+  while IFS= read -r n; do
+    [ -z "$n" ] && continue
+    case "$n" in *'$'*|*'('*|*'{'*|*'`'*) return 1 ;; esac
+    case "$_SYS_DBS" in *" $n "*) return 1 ;; esac
+    printf '%s\n' "$proj" | grep -qxF -- "$n" && return 1
+    printf '%s\n' "$created" | grep -qxF -- "$n" || return 1
+  done <<< "$targets"
+  return 0
+}
+
+# Records the DB names that commands we let through created (the "created earlier" basis for ②). Capped
+_record_created_dbs() {   # $1 names (one per line)
+  local f n
+  f=$(_created_dbs_file) || return 0
+  [ -z "$1" ] && return 0
+  mkdir -p "$(dirname "$f")" 2>/dev/null || return 0
+  printf '%s\n' "$1" | grep -v '[$({`]' >> "$f" 2>/dev/null || true
+  n=$(orangekit_num "$(wc -l < "$f" 2>/dev/null)")
+  if [ "$n" -gt 400 ]; then
+    tail -200 "$f" > "$f.tmp" 2>/dev/null && mv "$f.tmp" "$f" 2>/dev/null || rm -f "$f.tmp"
+  fi
+  return 0
+}
+
 destructive_gate() {
   # Judged after stripping the heredoc body (= data). The secret check **does not strip** —
   # the axis is the opposite: writing a secret is itself the exposure, so the body is exactly what is judged.
@@ -237,18 +356,30 @@ destructive_gate() {
 
   # ── Data destruction (SQL · migration tools) — judged per segment ───
   # A segment that is neither an investigation command, an authoring command, nor a message command = something meant to run
-  local seg
+  local seg created_here=""
+  _exec_seg() {
+    [ -z "$(printf '%s' "$1" | tr -d '[:space:]')" ] && return 1
+    _readonly_cmd "$1" && return 1
+    _authoring_cmd "$1" && return 1
+    _message_cmd "$1" && return 1
+    return 0
+  }
+  # The DBs the same command creates — gathered only from executing segments. A `CREATE DATABASE` string written to a file is not
+  # a creation. Gathered first so that it is visible even when the DROP is in an earlier segment than the CREATE (`DROP … && CREATE …`)
   while IFS= read -r seg; do
-    [ -z "$(printf '%s' "$seg" | tr -d '[:space:]')" ] && continue
-    _readonly_cmd "$seg" && continue
-    _authoring_cmd "$seg" && continue
-    _message_cmd "$seg" && continue
+    _exec_seg "$seg" || continue
+    created_here="$created_here$(_db_targets "$seg" create)
+"
+  done < <(_segments "$DCMD")
+  while IFS= read -r seg; do
+    _exec_seg "$seg" || continue
     _D="$seg"
 
     dhas '(^|[^a-z_])drop[[:space:]]+(table|database|schema)([^a-z_]|$)' \
+      && ! _scratch_db_drop_only "$seg" "$created_here" \
       && dblock "DROP of a table/database/schema via DDL" \
                 "That object and every row inside it disappears. Without a backup there is no recovery" \
-                "Take a backup first (pg_dump or similar), run it inside a transaction, check the result, then commit"
+                "Take a backup first (pg_dump or similar), run it inside a transaction, check the result, then commit. If it is a scratch DB for verification, write the name as a literal and re-create it with CREATE DATABASE in the same command, or delete only DBs this project created — the project DB (the connection URL in environment variables · .env*) and system DBs are still blocked, and if no connection URL can be found the exemption is not granted"
 
     # coreutils `truncate -s 0 file` carries a dash, so it does not match
     dhas '(^|[^a-z_])truncate[[:space:]]+(table[[:space:]]+)?["a-z_]' \
@@ -348,6 +479,8 @@ destructive_gate() {
   dhas 'git[[:space:]]+clean[^|;&]*-[a-z]*[fd]' \
     && dwarn "git clean — untracked files are deleted" "Check the targets first with git clean -n"
 
+  # Record the DBs created by a command that passed this gate — a later cleanup (`DROP DATABASE`) proves ② with them
+  _record_created_dbs "$(printf '%s' "$created_here" | grep -v '^$' || true)"
   return 0
 }
 

@@ -531,7 +531,7 @@ table and doctor cross-checks it) are not resident is the practical effect of th
 | `harness-change.md` | `.claude/**` `scripts/**` `hooks/**` | The harness only ever growing · silent failure · assets with no reach path (the plugin-authoring parts were moved down to `harness/rules/harness-authoring.md`, and release reach to §08) |
 | `lessons.md` | code · harness · document paths generally | Taking a criticism and not recording it · declaring a promotion while no asset changes |
 | `doc-dependency.md` | `dev/docs/{prd,database,design,architecture,api}/**` | The 6-edge document dependency graph being left open |
-| `data-modeling.md` | `supabase/**` `**/migrations/**` `db/**` `prisma/**` `drizzle/**` | Relational modelling norms (they naturally sleep in a NoSQL project) |
+| `data-modeling.md` | `supabase/**` `**/migrations/**` `db/**` `prisma/**` `drizzle/**` `**/db/**` `**/migration/**` `alembic/**` `**/*.sql` | Relational modelling norms — PG and MySQL side by side (they naturally sleep in a NoSQL project) |
 | `ui-design.md` | `**/components/**` `**/*.{css,scss}` `**/app/**/page.{tsx,jsx}` `**/app/**/layout.{tsx,jsx}` | Taking the first search hit as the result — settling into the 3 default clusters · no signature · going straight to code without review · UI copy written in system vocabulary · **treating a passing build as evidence of a render** (§6) |
 
 ### Trap ① — `workflow-routing.md` must not be given a `paths:`

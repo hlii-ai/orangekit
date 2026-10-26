@@ -11,7 +11,7 @@ paths:
   - "**/migrations/**"
   - "dev/active/**"
 ---
-<!-- orangekit-rule-version: 3.32.0 -->
+<!-- orangekit-rule-version: 3.38.0 -->
 
 # The Work Axis — reversibility
 
@@ -115,3 +115,13 @@ An Irreversible change is **verified independently through different lenses**. N
 
 Each lens decides independently, and **it passes only when a majority finds no problem**.
 Calling an external model is optional — lens diversity is the essence, model diversity is incidental.
+
+**How to launch them — independence lives in the verdict, not in repeated reading.** Measured (benchmark B2, 6 runs): at each
+migration step the three lenses read the same files with 40–50% overlap, and a review cut off by a usage limit was relaunched from scratch —
+the reviewer accounted for about 80% of the tokens above the no-harness baseline.
+
+1. **One context pack** — write the diff range (or the changed-file list), where the spec/contract lives (file · section), and the
+   invariants to uphold once, and hand it to all three lenses as **the same text**. Put the lens name on the first line (`Lens: correctness`)
+2. **All three in one message, in the foreground** — launch them in the background and end the turn, and you add a turn just to wake up for the results
+3. **Resume a cut-off lens** — continue it with SendMessage to the same agent, and do not rerun a lens that finished.
+   Only when it cannot be resumed, launch that one lens fresh

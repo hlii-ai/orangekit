@@ -511,7 +511,7 @@ Cards installed:
 | `harness-change.md` | editing `.claude/**` `scripts/**` `hooks/**` |
 | `lessons.md` | editing source · `.claude/**` · `scripts/**` · `dev/docs/**` |
 | `doc-dependency.md` | editing `dev/docs/{prd,database,design,architecture,api}/**` |
-| `data-modeling.md` | editing DB paths such as `supabase/**` `**/migrations/**` `db/**` `prisma/**`. It holds only §1–8; the ten patterns are moved down to `.claude/references/data-modeling/` so **only what is needed** is read |
+| `data-modeling.md` | editing DB paths such as `supabase/**` `**/migrations/**` `**/migration/**` `**/db/**` `prisma/**` `alembic/**` `**/*.sql`. It holds only §1–8; the eleven patterns are moved down to `.claude/references/data-modeling/` so **only what is needed** is read |
 | `ui-design.md` | editing `**/components/**` `**/*.{css,scss}` `**/app/**/page.{tsx,jsx}` `**/app/**/layout.{tsx,jsx}` |
 
 > This table must reflect the real frontmatter in `rules/`. When a card is added or changed, fix this too

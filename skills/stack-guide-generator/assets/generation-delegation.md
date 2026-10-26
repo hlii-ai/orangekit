@@ -89,11 +89,11 @@ Generation rules (instruct the subagent with these verbatim):
      Put this line into the delegation prompt verbatim — without it the generator widens "checking" on its own
 7. **For a relational DB, link to the data-modeling card — do not copy it.** The canonical source is
    the T1 rule card (`data-modeling.md` under `.claude/rules/`), which orangekit-init installs for every preset
-   and which loads automatically on a `paths:` match (supabase · migrations · db · prisma · drizzle).
+   and which loads automatically on a `paths:` match (supabase · migrations · migration · db · prisma · drizzle · alembic · `*.sql`).
    Put only the following into the backend-guide you generate:
    - 1 row in the Navigation Guide: table and migration design → a pointer to the data-modeling card (auto-loaded)
-   - **A non-PostgreSQL RDB (MySQL and the like)**: state one line — "take only the principles from the card's
-     PG-specific sections (§5 · 10 · 14 · 16 · 18) and substitute this stack's syntax"
+   - **An RDB that is neither PostgreSQL nor MySQL**: state one line — "take only the principles from card §5 and
+     the dialect tables in the pattern files, and substitute this stack's syntax" (the card already gives PG and MySQL side by side)
    - **NoSQL (MongoDB · DynamoDB)**: the card lies dormant because paths do not match — write that DB's modeling
      patterns (document design · partition keys, etc.) directly into the resource from knowledge of the combination
 

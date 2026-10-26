@@ -527,3 +527,27 @@
 - lesson: The basis of an order is not "is it possible?" but "if it changes, who pays again and how much?" Put
   the expensive thing after the stretch where change concentrates — and check row by row that the table's
   principle was applied at the same strength in every row. A row that contradicts the principle means either the principle is wrong or the row is.
+
+## [category: false-positive] Blocked DB deletion regardless of the name, so cleanup of agent-made scratch DBs was blocked over and over
+
+- date: 2026-10-26
+- Guard: scripts/security-check.sh
+- situation: I checked all 18 hook blocks from 6 runs of benchmark B2 (orangekit 1.1.3 = the same hooks as devkit). All 17 DB blocks
+  were scratch DBs the agent had created for verification (re-created in the same command 13 · cleanup of a DB created earlier 4). Deleting a project DB or a system DB: 0 cases.
+  The remaining 1 was a bug in `psql …; python3 - <<EOF`, where the string `BEFORE TRUNCATE ON` in the python body was read as SQL.
+  The user asked "isn't blocking DB deletion good for security?" — nothing that was blocked was anything worth protecting.
+- mistake: I blocked `DROP DATABASE` regardless of its target. The blocked agent worked around it by appending a timestamp to the name, and only DBs that could not be deleted piled up
+  (0 protection · pure friction). I judged the receiving side of the heredoc by the whole line instead of by the segment.
+- lesson: What to block is "what cannot be undone", not "words that look dangerous". Open an exemption only when it is proven — it is not the project DB
+  (environment variables · `.env*`) **and** it is a DB the agent created (a CREATE in the same command, or a record). Either one alone lets through resetting a dev DB or
+  someone else's project DB. Prove the exemption and the protection together in the same self-check (doctor 12 cases + a replay of 3,645 benchmark commands: 18 resolved · 0 new).
+
+## [category: rule] A key line at the end of a rule card goes unread — partial reads and new writes skip the card
+
+- date: 2026-10-26
+- situation: The user pointed out that the benchmark outputs had no soft-delete column. In all 6 runs `created_by` and `deleted_at` were 0.
+- mistake: Before blaming the card, I should have measured reach. Measured: in 5 of the 6 runs where the main agent opened the card directly, it read only the front
+  (`head -60/80/150`), and the default-columns line was at row 156. Also, a `paths:` card loads **when a file is read**, but the first migration in all 6 runs was
+  a brand-new Write — there was no path by which the card could surface at the moment the schema was decided.
+- lesson: Put the defaults to apply every time at the very **front** of the card (so a partial read still catches them). A greenfield new file has no read trigger,
+  so a hook summons it (the same gap and the same fix as the UI card). Measure "was the rule applied?" as exposure · range read · output, separately.

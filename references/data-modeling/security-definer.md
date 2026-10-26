@@ -1,6 +1,8 @@
-<!-- orangekit-rule-version: 3.25.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
+<!-- orangekit-rule-version: 3.38.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
 
 # SECURITY DEFINER function authoring conventions
+
+> Scope: **PostgreSQL only** (Supabase included). MySQL has no equivalent function model — the stored-procedure `SQL SECURITY DEFINER` is similar in name only, so take just the principles (least privilege, input validation, and schema-qualifying names, which is what pinning `search_path` achieves).
 
 > The shared authoring standard for PostgreSQL SECURITY DEFINER functions — `_history` triggers, sensitive RPCs, Vault functions, and so on.
 > These rules were promoted from defect patterns verified repeatedly in production (missing search_path, ambiguous argument names, permission bypass).

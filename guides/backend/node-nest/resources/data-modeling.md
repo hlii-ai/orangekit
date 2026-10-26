@@ -4,6 +4,10 @@
 This file owns **the table mapping and connection assembly**. Writing queries is owned by `data-access.md`,
 and the migration deploy order at operations time by `operations.md` §7.
 
+> **The canonical source for table design norms is the T1 data-modeling card (`.claude/rules/data-modeling.md`)** — default columns,
+> the per-table deletion strategy, history level and code-column approach, and the pattern references. It does not auto-load outside DB paths
+> (entities under `src/**`), so open it yourself before creating or changing a table. The table below holds the values this pack fixes on top of it.
+
 ## 1. What to look at first when deciding a column
 
 | decision | criterion | this pack's value |

@@ -45,7 +45,7 @@ is verification. Of an earlier report's "N Critical findings", accept only those
 | --- | --- |
 | **Reversible** | Not a review target — report "no review needed" and stop |
 | **Costly** | A~E below |
-| **Irreversible** | A~E + the multi-lens fan-out (see below) |
+| **Irreversible** | A~E + the multi-lens fan-out (see below). If called as a single lens, only that lens's share of the axes |
 
 ### A. Correctness
 - Does the logic do what was intended. Edge cases (empty value, 0, null, concurrency)
@@ -156,11 +156,25 @@ Judge independently through **three different lenses**, not the same lens N time
 > **Boundary** — the three lenses here look at **code** already written. Looking at a **planning decision**
 > not yet written (business direction·architecture choice) through the technical·business·UX perspectives is `/council-review`.
 
-1. **correctness** — does it match the spec, what about edge cases
+1. **correctness** — does it match the spec, what about edge cases.
+   If the diff contains a schema or migration, read these two and check against them:
+   - "Default columns for every new table" and §8 in `.claude/rules/data-modeling.md`
+   - **only one** "Anti-patterns" section: the one in `.claude/references/data-modeling/<pattern>.md` for the pattern that appears in the diff
+
+   Anchor each finding to that item number. An agent does not inherit rules, so open them yourself.
+   If the card is not installed, report this check as "cannot be judged".
 2. **security** — permissions·validation·exposure
 3. **reversibility** — is a rollback actually possible on failure, where are the data loss points
 
 Judge each lens independently and **pass it only when a majority finds no problem**.
+
+**If you were called as a single lens** (the first line of the prompt is `Lens: …`), judge only that lens's share of the axes. If three calls
+each run all of A~E, the same verdict is made three times and the same files are read three times — measured (benchmark):
+58 tool calls for one correctness-lens run, and 40–50% of the reads across the three lenses overlapped.
+A~E divide among the three lenses: **correctness = A·C·D·E · security = B · reversibility = rollback and data-loss points.**
+Start from the context pack you were given (diff range · spec location · invariants), and read beyond it only when your lens's verdict needs it.
+If you were called with no lens specified, look at all of A~E as before.
+
 Calling an external model is optional — lens diversity is the essence, model diversity is incidental.
 If you judge that another external-model lens is needed, **propose** `/codex-claude-loop` in the report —
 do not run it yourself (the source leaves the machine, so the user's consent comes first).

@@ -1761,7 +1761,8 @@ run_self_test() {
               "PreToolUse-bash-commit-msg-ok.json:commit message containing DDL vocabulary" \
               "PreToolUse-bash-gh-title-ok.json:PR title containing DDL vocabulary" \
               "PreToolUse-bash-stderr-null-ok.json:investigation command with only stderr discarded" \
-              "PreToolUse-bash-heredoc-file-dbstring-ok.json:DB client string in a file heredoc body"; do
+              "PreToolUse-bash-heredoc-file-dbstring-ok.json:DB client string in a file heredoc body" \
+              "PreToolUse-bash-heredoc-after-dbcmd-ok.json:interpreter heredoc in a segment after a DB command"; do
     oklabel="${okfx#*:}"; okfx="$fx/${okfx%%:*}"
     [ -f "$okfx" ] || { warn "false-positive fixture missing ($okfx)" "the false-positive defence on that path is unproven"; continue; }
     used="$used$(basename "$okfx")
@@ -1794,6 +1795,81 @@ run_self_test() {
     warn "failed to create a temporary git repo" "the undecidable branch is unproven"
   fi
   rm -rf "${ud:-/nonexistent}"
+
+  # ── Scratch-DB drop exemption — the exemption and the protection in one place ─────────────────────
+  # A static fixture cannot prove it — the exemption depends on the project config (the connection URL in .env) and the record of earlier commands
+  # (created-dbs). Prove the exemption (exit 0) and the protection (exit 2) **together**: looking only at the exemption misses
+  # the hole widening, and looking only at the protection misses the false positive coming back (benchmark B2: 17 scratch-DB blocks).
+  # The environment is emptied (env -i) — if the developer shell's DATABASE_URL changes the verdict, it is not a proof.
+  local sd sdwant sdcase sdcmd sdcode sddir sderr sdenv sdok=0 sdbad=0
+  local D='DROP DATABASE' C='CREATE DATABASE'
+  sd=$(mktemp -d 2>/dev/null) || sd=""
+  if [ -n "$sd" ] && command -v jq >/dev/null 2>&1; then
+    mkdir -p "$sd/proj" "$sd/nocfg" "$sd/envonly"
+    printf 'DATABASE_URL=postgres://u:p@localhost:5432/app\n' > "$sd/proj/.env"
+    while IFS='|' read -r sdwant sdcase sdcmd; do
+      [ -z "$sdwant" ] && continue
+      # Three sources of the connection URL: a .env file · environment variables only (no .env — the benchmark is this condition) · none
+      sddir="$sd/proj"; sdenv=""
+      case "$sdcase" in
+        "no connection config") sddir="$sd/nocfg" ;;
+        environment\ variable\ only*) sddir="$sd/envonly"; sdenv="postgres://u:p@localhost:5432/app" ;;
+      esac
+      sdcode=0
+      # Look at stderr too — even when the verdict is right, if the ERR trap rang the hook tripped midway
+      sderr=$(jq -nc --arg c "$sdcmd" '{tool_name:"Bash",tool_input:{command:$c}}' \
+        | env -i PATH="$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$sddir" ORANGEKIT_STATE_DIR="$sddir/.state" \
+            ${sdenv:+DATABASE_URL="$sdenv"} bash "$ROOT/scripts/security-check.sh" 2>&1 >/dev/null) || sdcode=$?
+      if [ "$sdcode" = "$sdwant" ] && ! printf '%s' "$sderr" | grep -q 'ERROR line'; then
+        sdok=$((sdok+1))
+      else
+        sdbad=$((sdbad+1))
+        bad "security-check scratch DB: $sdcase → exit $sdcode (expected $sdwant)$(printf '%s' "$sderr" | grep -m1 -o 'ERROR line [0-9]*' | sed 's/^/ · /')" \
+            "$([ "$sdwant" = 0 ] && printf 'false positive — cleanup of a scratch DB the agent created is blocked' || printf 'false negative — deleting a DB that must be protected gets through')"
+      fi
+    done <<EOF
+0|scratch DB re-created in the same command|psql -c "$D IF EXISTS app_fresh" -c "$C app_fresh"
+0|DB created earlier — creation|psql -c "$C rv_scratch"
+0|DB created earlier — cleanup|psql -c "$D rv_scratch"
+2|project DB (connection URL in .env)|psql -c "$D app"
+2|project DB reset (drop and re-create)|psql -c "$D IF EXISTS app" -c "$C app"
+2|system DB|psql -c "$D IF EXISTS postgres" -c "$C postgres"
+2|DB never created (another project)|psql -c "$D other_project_dev"
+2|name is a variable|psql -c "$D IF EXISTS \$N" -c "$C \$N"
+2|CREATE only written to a file|echo "$C wfile" > x.sql && psql -c "$D wfile"
+2|no connection config|psql -c "$D IF EXISTS app_fresh" -c "$C app_fresh"
+0|environment variable only — scratch DB|psql -c "$D IF EXISTS app_fresh" -c "$C app_fresh"
+2|environment variable only — project DB|psql -c "$D IF EXISTS app" -c "$C app"
+EOF
+    [ "$sdbad" -eq 0 ] && ok "security-check: scratch-DB exemption $sdok/$sdok — only DBs the agent created open, project·system·someone else's DBs stay blocked"
+  else
+    warn "temporary directory or jq missing" "the boundary of the scratch-DB exemption is unproven"
+  fi
+  rm -rf "${sd:-/nonexistent}"
+
+  # ── Summoning on a new schema file (does not block) ──────────────────────────
+  # The data-modeling card loads when read, so it does not come up on the first migration (a new Write) —
+  # the hook fills that gap. It must fire only on a new file, and not on an overwrite or a .sql outside the schema.
+  local nd ndcode ndout ndhit ndmiss
+  nd=$(mktemp -d 2>/dev/null) || nd=""
+  if [ -n "$nd" ] && command -v jq >/dev/null 2>&1; then
+    mkdir -p "$nd/db/migrations"; : > "$nd/db/migrations/0001_init.sql"
+    _nudge() {   # $1 file_path → stdout
+      jq -nc --arg p "$1" '{tool_name:"Write",tool_input:{file_path:$p,content:"select 1;"}}' \
+        | env -i PATH="$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$nd" ORANGEKIT_STATE_DIR="$nd/.state" \
+            bash "$ROOT/scripts/security-check.sh" 2>/dev/null
+    }
+    ndhit=$(_nudge "$nd/db/migrations/0002_core.sql" | grep -c 'new schema file' || true)
+    ndmiss=$( { _nudge "$nd/db/migrations/0001_init.sql"; _nudge "$nd/scripts/report.sql"; } | grep -c 'new schema file' || true)
+    if [ "$(num "$ndhit")" -eq 1 ] && [ "$(num "$ndmiss")" -eq 0 ]; then
+      ok "security-check: the data-modeling default-columns summons fires only on a new schema file (overwrites and .sql outside the schema excluded)"
+    else
+      bad "security-check: new-schema summons — ${ndhit} on new · ${ndmiss} on excluded targets" "it must be 1 on new · 0 on excluded"
+    fi
+  else
+    warn "temporary directory or jq missing" "the new-schema summons is unproven"
+  fi
+  rm -rf "${nd:-/nonexistent}"
 
   # ── block reasons ↔ fixtures ──────────────────────────────────────
   # "Orphan fixtures" looks only in the fixture→check direction. The reverse — does **each blocking reason** in the

@@ -1,30 +1,132 @@
-<!-- orangekit-rule-version: 3.25.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
+<!-- orangekit-rule-version: 3.38.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
 
 # Statistics table design
 
-**Default: a Materialized View** + periodic `pg_cron` refresh. Whenever real time is not required, prefer an MV.
+> Scope: the principles are common to relational DBs, and the syntax is given for both PostgreSQL and MySQL 8.
+> **Do not aggregate the source tables directly in production.** A GROUP BY over millions of rows on every call turns that load into a service outage.
+> Summarize ahead of time, and have reads read the summary.
 
-| approach               | when to apply                                                        | when not to apply                                 |
-| ---------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
-| Materialized View (MV) | repeated aggregate queries · stale data acceptable · simple to medium aggregation | second-level real time needed · MV refresh costs more than the direct query |
-| Summary Table          | incremental refresh needed · custom aggregation logic · full recomputation on MV refresh too expensive | simple COUNT/SUM (an MV is enough) |
-| real-time query        | small data volume · an index suffices · always needs the latest      | repeated aggregation over large tables (response time exceeded) |
+## Decision criteria
 
-**Hybrid read strategy** (when real-time statistics are needed but aggregating the whole source is too costly): historical data (the statistics/MV table) `UNION ALL` today's data (the source table, a date index mandatory). Only today's data is aggregated in real time, so DB load is minimal. This only works if the source table's date column **definitely has an index**.
+| Approach | When | Note |
+| --- | --- | --- |
+| **Daily summary table + nightly batch** (default) | dashboards and reports, where a one-day lag is acceptable | common to both DBs |
+| Materialized View | on PG, when storing one aggregate query as-is is enough | **PG only.** On MySQL, use a summary table |
+| Hybrid (past summary `UNION ALL` today's source) | today's numbers are needed in real time too | an index on the source's date column is mandatory |
+| Micro-batch (an `intraday` table) | traffic is high enough that aggregating even today's source is a burden | every 1–5 minutes |
+| Real-time aggregation of the source | little data, and an index is enough | move up when it grows |
 
-**Time-granularity principle**: one daily statistics table is enough. Weekly, monthly, and annual statistics are re-aggregated from the daily table with `GROUP BY` (10 years = 3,650 rows, nothing to a DB). Creating separate monthly/annual tables only adds maintenance surface — unnecessary below global scale.
+Order of evolution: GROUP BY → a daily table → derive weekly/monthly/yearly from the daily one → hybrid → an idempotent batch → micro-batch → UPSERT.
+Climb one step at a time, as the need arises.
 
-**MV naming**: `mv_{subject}_{granularity}` (e.g. `mv_order_daily_stats`, `mv_user_monthly_summary`)
+**One daily table is enough.** Weekly, monthly, and yearly statistics are built by `GROUP BY` over the daily table. Even ten years is 3,650 rows.
+Separate monthly and yearly tables only add places to maintain. The exception is global scale, where daily rows number in the hundreds of millions.
 
-**MV requirements**: ①a `CREATE UNIQUE INDEX` is mandatory — it is the precondition for `REFRESH MATERIALIZED VIEW CONCURRENTLY` ②refresh via `pg_cron` or a Supabase Edge Function schedule ③record the refresh interval, the source query, and the acceptable staleness in the table definition document
+## Standard design
 
-**Summary Table**: naming `stat_{subject}_{granularity}`. `period_start TIMESTAMPTZ` + `period_end TIMESTAMPTZ` + aggregate columns + `updated_at TIMESTAMPTZ`. A BRIN index (optimal for sequential time-series inserts).
+```sql
+-- common (on PG use NUMERIC or BIGINT)
+CREATE TABLE stat_sales_daily (
+  stat_date          DATE   NOT NULL,
+  total_order_count  INT    NOT NULL DEFAULT 0,
+  total_sales_amount BIGINT NOT NULL DEFAULT 0,   -- sales grow large
+  PRIMARY KEY (stat_date)                         -- with a dimension: (stat_date, store_id …)
+);
 
-**Batch refresh strategy** (idempotency mandatory):
+-- for the micro-batch (today only)
+CREATE TABLE stat_sales_intraday (
+  stat_date          DATE     NOT NULL PRIMARY KEY,
+  total_order_count  INT      NOT NULL DEFAULT 0,
+  total_sales_amount BIGINT   NOT NULL DEFAULT 0,
+  updated_at         DATETIME NOT NULL             -- shown on screen as "as of 14:05" (PG: TIMESTAMPTZ)
+);
+```
 
-| batch type                   | strategy                                                                                   | reason                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| nightly batch (once a day)   | **DELETE & INSERT** — delete that period, then re-aggregate from the source                | idempotency is obvious · retroactive changes such as refunds are picked up automatically · easy to debug |
-| micro-batch (minutes to hours) | **UPSERT overwriting the whole value** — `INSERT ... ON CONFLICT DO UPDATE SET count = EXCLUDED.count` | avoids the undo/redo log cost of DELETE & INSERT · prevents index fragmentation |
+- Name it `stat_{subject}_{unit}`. For an MV, name it `mv_{subject}_{unit}`.
+- Write the refresh interval, the source query, and the acceptable lag in the table definition document.
+- **The aggregation range is a half-open interval**: `order_date >= 'D 00:00:00' AND order_date < 'D+1 00:00:00'`.
+  Wrapping the column in a function, as in `DATE(order_date) = D`, cannot use the index.
+- Run the nightly batch in the small hours, 3–5 a.m., when there are hardly any users.
 
-**Anti-patterns**: ①attempting a `CONCURRENTLY` refresh with no UNIQUE index (error) ②an undocumented refresh interval (staleness cannot be reasoned about) ③introducing a Summary Table where an MV suffices (→ violates the denormalization premise in card §7) ④**incremental accumulation with `count = count + :delta` — re-running the batch inflates the data** (always overwrite the whole value or use DELETE & INSERT)
+## Refresh procedure — idempotency is required
+
+**A statistics aggregation must be idempotent.** Re-running the same batch any number of times must give the same result.
+That way an outage, a duplicate run, and a change to past data are all solved by one method: "re-run that date".
+
+| Batch | Strategy |
+| --- | --- |
+| **Daily batch** | **DELETE + INSERT in one transaction** — delete that date and re-aggregate from the source |
+| **Real-time / micro-batch** | **UPSERT overwriting with the full value** — in a batch that runs often, DELETE+INSERT causes Undo/Redo log volume, index rebuilds, page fragmentation, and lock waits |
+
+```sql
+-- daily batch (common to both; on MySQL use START TRANSACTION)
+BEGIN;
+DELETE FROM stat_sales_daily WHERE stat_date = :d;
+INSERT INTO stat_sales_daily (stat_date, total_order_count, total_sales_amount)
+SELECT :d, COUNT(*), COALESCE(SUM(total_amount), 0)
+  FROM orders
+ WHERE order_date >= :d AND order_date < :d + INTERVAL '1 day'   -- MySQL: :d + INTERVAL 1 DAY
+   AND order_status = 'COMPLETED';
+COMMIT;
+```
+
+```sql
+-- UPSERT — PostgreSQL
+INSERT INTO stat_sales_intraday (stat_date, total_order_count, total_sales_amount, updated_at)
+SELECT CURRENT_DATE, COUNT(*), COALESCE(SUM(total_amount), 0), now()
+  FROM orders
+ WHERE order_date >= CURRENT_DATE AND order_status = 'COMPLETED'
+ON CONFLICT (stat_date) DO UPDATE
+   SET total_order_count  = EXCLUDED.total_order_count,
+       total_sales_amount = EXCLUDED.total_sales_amount,
+       updated_at         = EXCLUDED.updated_at;
+```
+
+```sql
+-- UPSERT — MySQL 8 (VALUES() is deprecated from 8.0.20 → reference it through a derived-table alias)
+INSERT INTO stat_sales_intraday (stat_date, total_order_count, total_sales_amount, updated_at)
+SELECT * FROM (
+  SELECT CURDATE() AS stat_date, COUNT(*) AS total_order_count,
+         COALESCE(SUM(total_amount), 0) AS total_sales_amount, NOW() AS updated_at
+    FROM orders
+   WHERE order_date >= CURDATE() AND order_status = 'COMPLETED'
+) AS new_stats
+ON DUPLICATE KEY UPDATE
+  total_order_count  = new_stats.total_order_count,
+  total_sales_amount = new_stats.total_sales_amount,
+  updated_at         = new_stats.updated_at;
+```
+
+- **When past data changes, re-run that date's batch.** For example, if a January 1 order is refunded on January 4, re-aggregate January 1.
+  An accumulate-style update cannot fix this situation.
+- If you do the micro-batch as DELETE + INSERT, always do it inside a transaction. Otherwise there are moments when a reader sees an empty row.
+- Storing a `last_order_id` and adding only the increment after it breaks idempotency easily.
+  Unless the situation is extreme, use "re-aggregate all of today + UPSERT".
+- **PG MV**: `REFRESH MATERIALIZED VIEW CONCURRENTLY` requires a `UNIQUE` index on the MV. Refresh it from a scheduler such as `pg_cron`.
+
+## Reading — hybrid
+
+```sql
+SELECT stat_date, total_order_count, total_sales_amount
+  FROM stat_sales_daily
+ WHERE stat_date >= :from AND stat_date < :today
+UNION ALL
+SELECT stat_date, total_order_count, total_sales_amount     -- with a micro-batch, read intraday;
+  FROM stat_sales_intraday WHERE stat_date = :today;        -- without one, aggregate only today's range from orders
+```
+
+- For a hybrid that aggregates today's source directly, **an index on the source's date column is mandatory**.
+- A monthly total wraps the result above in a subquery and does a `GROUP BY` by month.
+
+## Anti-patterns
+
+1. Aggregating a large source table directly on every request in production.
+2. **An accumulating incremental update `SET total = total + :delta`.** A re-run inflates the numbers, and a past change (a refund) cannot be reflected either.
+3. Running DELETE + INSERT without a transaction.
+4. Building separate monthly and yearly tables when a daily table exists.
+5. Bounding the aggregation range with `DATE(col) = :d` or `BETWEEN … '23:59:59'`. It cannot use the index, or milliseconds at the boundary leak through.
+6. Running a high-frequency micro-batch as DELETE + INSERT.
+7. Newly writing `ON DUPLICATE KEY UPDATE x = VALUES(x)` on MySQL 8.0.20 or later (deprecated).
+8. Running `REFRESH … CONCURRENTLY` on PG with no UNIQUE index (an error).
+9. Not documenting the refresh interval and acceptable lag. If the screen does not show the as-of time either, the lag goes unnoticed.
+10. A hybrid read with no index on the source's date column.

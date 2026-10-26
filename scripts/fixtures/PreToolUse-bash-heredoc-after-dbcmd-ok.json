@@ -1,0 +1,9 @@
+{
+  "session_id": "orangekit-doctor-test",
+  "cwd": ".",
+  "tool_name": "Bash",
+  "hook_event_name": "PreToolUse",
+  "tool_input": {
+    "command": "psql \"$DATABASE_URL\" -Atc \"select count(*) from schema_migrations\" 2>&1; python3 - <<'EOF'\ns = open('db/migrations/0001_init.sql').read()\ns = s.replace('-- triggers', 'CREATE TRIGGER no_truncate BEFORE TRUNCATE ON point_entries')\nEOF"
+  }
+}

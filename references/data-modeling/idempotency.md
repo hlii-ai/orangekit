@@ -1,4 +1,4 @@
-<!-- orangekit-rule-version: 3.25.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
+<!-- orangekit-rule-version: 3.38.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
 
 # Idempotency design
 
@@ -11,7 +11,7 @@
 | external API calls (push notifications / OCR / payments) | a natural UNIQUE already exists at creation (email, etc.) |
 | message handling between distributed systems | delete operations (a no-op if already gone = naturally idempotent) |
 
-**Pattern**: add an `idempotency_key VARCHAR(64) UNIQUE` column. `INSERT ... ON CONFLICT (idempotency_key) DO UPDATE SET updated_at = now() RETURNING *` — a duplicate request returns the existing result.
+**Pattern**: add an `idempotency_key VARCHAR(64) UNIQUE` column. `INSERT ... ON CONFLICT (idempotency_key) DO UPDATE SET updated_at = now() RETURNING *` — a duplicate request returns the existing result. MySQL 8: `INSERT … ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`, then read the existing row's ID back with `LAST_INSERT_ID()` and fetch the row.
 
 **Key generation strategy**: client-generated `{user_id}:{action}:{target_id}:{timestamp_bucket}`, or server-generated `{webhook_event_id}` (using the PG webhook ID).
 
