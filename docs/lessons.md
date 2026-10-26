@@ -551,3 +551,15 @@
   a brand-new Write — there was no path by which the card could surface at the moment the schema was decided.
 - lesson: Put the defaults to apply every time at the very **front** of the card (so a partial read still catches them). A greenfield new file has no read trigger,
   so a hook summons it (the same gap and the same fix as the UI card). Measure "was the rule applied?" as exposure · range read · output, separately.
+
+## [category: false-positive] The scratch-DB exemption was built on name proof alone, so it blocked again when the name was a value or the target was a table (round 2)
+
+- date: 2026-10-26
+- Guard: scripts/security-check.sh
+- situation: After the first fix (the scratch-DB exemption, resolving 17 blocks in benchmark B2), I re-measured the same hook with B3 (OrangeKit 1.7.0). Blocks of literal-named scratch DBs dropped to 0, but 3 residual false positives remained —
+  (a) `for d in ot_final ot_work; do … DROP DATABASE IF EXISTS $d; done` (scratch DBs the previous command created, unreadable because the name was a loop variable) (b) `DROP TABLE tmp_probe`, created to test the migration runner and dropped in the same command
+  (c) a defensive `DROP TABLE IF EXISTS phase1_snapshot_check` of a name that never existed.
+- mistake: There are three root causes. ① The name is a **value, not characters** (loops · assignments), but the hook saw only characters. ② The exemption existed only for DBs, so tables were blocked in every case — a table has no name proof such as "it is not in the project config". ③ I **collapsed "unknown" into a block instead of measuring** — whether the target was absent or empty was knowable from a read-only query.
+- lesson: Open an exemption only when it is proven, but widen the means of proof **from guessing (name · origin) to measuring (existence · row count)**. Measuring opens a new hole — the DB that was measured and the DB the command will run against can differ
+  (`DATABASE_URL=… psql "$DATABASE_URL"` · `export DATABASE_URL=…` · `PG*` · a psql with no connection argument · a URL that exists only in `.env`). A test during design (against a real PostgreSQL) exposed this first — if measured target = executed target is not proven, the exemption is not granted.
+  Verify three things together: exemption cases (0) and protection cases (2) in the same self-check (doctor 38 cases), a real DB (PostgreSQL 16) rather than a fake plus the mawk in the benchmark container, and a replay of every tool command showing no new blocks.

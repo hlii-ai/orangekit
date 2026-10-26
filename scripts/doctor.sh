@@ -1847,6 +1847,98 @@ EOF
   fi
   rm -rf "${sd:-/nonexistent}"
 
+  # ── Shell-computed names and table drops — expand to values, prove by measurement ──────────────
+  # The roots of the three residual false positives (benchmark B3): ① the name is a value (a loop variable · an assignment), not characters, yet the hook saw only characters ② a table has no proof rule, so
+  # DROP TABLE was blocked in every case. So loops and assignments in the same command are expanded to values before judging, and DROP TABLE is exempted only when a read-only query
+  # **measures** "absent · empty". Exemption (exit 0) and protection (exit 2) are proven together — the measurement is answered by a fake psql through files.
+  # When it cannot be measured (no psql · connection failure · another DB · CASCADE · has rows) it must be blocked as today — undecidable is never collapsed into a pass.
+  local td tdline tdwant tdlabel tdtbl tdcmd tdrest tdcode tderr tdpath tdok=0 tdbad=0
+  td=$(mktemp -d 2>/dev/null) || td=""
+  if [ -n "$td" ] && command -v jq >/dev/null 2>&1; then
+    mkdir -p "$td/proj" "$td/bin" "$td/tbl"
+    printf 'DATABASE_URL=postgres://u:p@localhost:5432/app\n' > "$td/proj/.env"
+    cat > "$td/bin/psql" <<'STUB'
+#!/bin/bash
+# Fake psql — answers the hook's read-only queries through files: if $FAKE_PSQL_DIR/<table> exists the table exists, and if its content is rows it has rows
+[ -f "$FAKE_PSQL_DIR/.down" ] && exit 2
+q=""; while [ $# -gt 0 ]; do [ "$1" = "-c" ] && { q="$2"; break; }; shift; done
+t=$(printf '%s' "$q" | sed -nE "s/.*to_regclass\('([^']*)'\).*/\1/p")
+if [ -n "$t" ]; then [ -f "$FAKE_PSQL_DIR/$t" ] && echo t || echo f; exit 0; fi
+t=$(printf '%s' "$q" | sed -nE 's/.*FROM ([^ ]*) LIMIT 1.*/\1/p')
+[ "$(cat "$FAKE_PSQL_DIR/$t" 2>/dev/null)" = rows ] && echo t || echo f
+STUB
+    chmod +x "$td/bin/psql"
+    _td_run() {   # $1 want  $2 label  $3 tables  $4 command
+      local kv js tdurl="postgres://u:p@localhost:5432/app"
+      rm -rf "$td/tbl"; mkdir -p "$td/tbl"
+      for kv in ${3//,/ }; do case "$kv" in -|nostub|noenvurl|"") ;; down) : > "$td/tbl/.down" ;; *) printf '%s' "${kv#*=}" > "$td/tbl/${kv%%=*}" ;; esac; done
+      tdpath="$td/bin:$PATH"; [ "$3" = nostub ] && tdpath="$PATH"; [ "$3" = noenvurl ] && tdurl=""
+      tdcode=0
+      tderr=$(jq -nc --arg c "$4" '{tool_name:"Bash",tool_input:{command:$c}}' \
+        | env -i PATH="$tdpath" HOME="$HOME" CLAUDE_PROJECT_DIR="$td/proj" ORANGEKIT_STATE_DIR="$td/proj/.state" FAKE_PSQL_DIR="$td/tbl" ${tdurl:+DATABASE_URL="$tdurl"} \
+            bash "$ROOT/scripts/security-check.sh" 2>&1 >/dev/null) || tdcode=$?
+      # Even when the verdict is right, an ERR trap that fired means the hook tripped midway, and a block must come for the **intended reason** (data destruction)
+      if [ "$tdcode" = "$1" ] && ! printf '%s' "$tderr" | grep -q 'ERROR line' \
+         && { [ "$1" = 0 ] || printf '%s' "$tderr" | grep -qF 'table/database/schema'; }; then
+        tdok=$((tdok+1))
+      else
+        tdbad=$((tdbad+1))
+        bad "security-check shell values · tables: $2 → exit $tdcode (expected $1)$(printf '%s' "$tderr" | grep -m1 -o 'ERROR line [0-9]*' | sed 's/^/ · /')" \
+            "$([ "$1" = 0 ] && printf 'false positive — cleanup of a scratch object is blocked' || printf 'missed detection — a deletion that must be protected gets through')"
+      fi
+    }
+    while IFS= read -r tdline; do
+      [ -z "$tdline" ] && continue
+      tdwant=${tdline%%@@*}; tdrest=${tdline#*@@}; tdlabel=${tdrest%%@@*}; tdrest=${tdrest#*@@}; tdtbl=${tdrest%%@@*}; tdcmd=${tdrest#*@@}
+      tdcmd=${tdcmd//@D@/DROP DATABASE}; tdcmd=${tdcmd//@C@/CREATE DATABASE}; tdcmd=${tdcmd//@T@/DROP TABLE}
+      _td_run "$tdwant" "$tdlabel" "$tdtbl" "$tdcmd"
+    done <<'CASES'
+0@@two scratch DBs are created (recorded)@@-@@A=x; psql "$A" -qc "@C@ ot_final"; psql "$A" -qc "@C@ ot_work"
+0@@recorded scratch DBs cleaned up with a loop [B3 run5]@@-@@A=x; for d in ot_final ot_work; do psql "$A" -qc "@D@ IF EXISTS $d"; done; echo done
+0@@loop in the ${d} form@@-@@for d in ot_final ot_work; do psql -qc "@D@ IF EXISTS ${d}"; done
+2@@the project DB is mixed into the loop@@-@@for d in ot_final app; do psql -qc "@D@ IF EXISTS $d"; done
+2@@a DB that was never created, via a loop@@-@@for d in other1 other2; do psql -qc "@D@ IF EXISTS $d"; done
+2@@loop over a variable list (cannot be expanded)@@-@@for d in $LIST; do psql -qc "@D@ IF EXISTS $d"; done
+2@@glob loop@@-@@for d in app_*; do psql -qc "@D@ IF EXISTS $d"; done
+2@@nested loops are not expanded@@-@@for d in ot_final ot_work; do for e in 1 2; do psql -qc "@D@ IF EXISTS $d"; done; done
+0@@a name unique to each run (date)@@-@@N=app_fresh_$(date +%s); psql -qc "@C@ $N"; psql -qc "@D@ $N"
+0@@a name unique to each run ($$)@@-@@N=scratch_$$; psql -qc "@D@ IF EXISTS $N"
+0@@a literal name created in the same command@@-@@N=tmpdb1; psql -qc "@C@ $N"; psql -qc "@D@ $N"
+2@@the assigned value is the project DB@@-@@N=app; psql -qc "@D@ $N"
+2@@assigned by command substitution (cannot be expanded)@@-@@N=$(cat name.txt); psql -qc "@D@ $N"
+2@@re-assigned to the project DB just before the drop@@-@@N=scratch1; psql -qc "@C@ $N"; N=app; psql -qc "@D@ $N"
+2@@a system DB through a variable@@-@@N=postgres; psql -qc "@D@ $N"
+0@@the table is absent (defensive IF EXISTS) [B3 run6]@@-@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS phase1_snapshot_check" 2>/dev/null; echo ok
+0@@a not-yet-existing probe table created and dropped in the same command [B3 run5]@@-@@echo 'CREATE TABLE tmp_probe (id int);' > migrations/0000_probe.sql && npm run db:migrate 2>&1 | tail -2; rm migrations/0000_probe.sql; psql "$DATABASE_URL" -qc "@T@ tmp_probe; DELETE FROM schema_migrations WHERE name='0000_probe.sql';"
+0@@the table exists but is empty@@scratch_t=empty@@psql "$DATABASE_URL" -qc "@T@ scratch_t"
+2@@a table that has rows@@users=rows@@psql "$DATABASE_URL" -qc "@T@ users"
+2@@even when empty, CASCADE deletes dependent objects@@scratch_t=empty@@psql "$DATABASE_URL" -qc "@T@ scratch_t CASCADE"
+0@@CASCADE on an absent table (nothing to delete)@@-@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost CASCADE"
+0@@several tables, all absent@@-@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS a1, b1"
+2@@one of several tables has rows@@b1=rows@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS a1, b1"
+2@@cannot connect to the DB (undecidable → blocked)@@down@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
+2@@psql is not on PATH (undecidable → blocked)@@nostub@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
+2@@psql pointing at another DB (URL variable)@@-@@psql "$ADMIN_URL" -qc "@T@ IF EXISTS ghost"
+2@@psql -d another DB@@-@@psql -d other -qc "@T@ IF EXISTS ghost"
+2@@psql -h another host@@-@@psql -h db.prod.example "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
+2@@a quoted mixed-case identifier@@-@@psql "$DATABASE_URL" -qc '@T@ IF EXISTS "Users"'
+2@@DROP SCHEMA is never exempt@@-@@psql "$DATABASE_URL" -qc 'DROP SCHEMA public CASCADE; CREATE SCHEMA public'
+2@@a client that is not psql (mysql)@@-@@mysql -e "@T@ IF EXISTS ghost"
+2@@a DB drop and a table with rows in one list@@users=rows@@psql "$DATABASE_URL" -qc "@D@ IF EXISTS app_x; @T@ users"
+2@@the same command overrides DATABASE_URL (measured DB ≠ executed DB)@@-@@DATABASE_URL=postgres://x/prod psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
+2@@the same command exports a different DATABASE_URL@@-@@export DATABASE_URL="${DATABASE_URL%/*}/other"; psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
+2@@the same command sets PGHOST@@-@@PGHOST=prod.example psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
+2@@psql with no connection argument (connects with the PG* defaults)@@-@@psql -qc "@T@ IF EXISTS ghost"
+2@@DATABASE_URL only in .env, not in the environment variables@@noenvurl@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
+CASES
+    # In heredoc SQL the DROP is on a different line from psql, so the connection cannot be proven — it is blocked as today (a known limit)
+    _td_run 2 "DROP TABLE in heredoc SQL (connection unproven)" - "$(printf 'psql "$DATABASE_URL" <<%sSQL%s\nDROP TABLE IF EXISTS t1;\nSQL' "'" "'")"
+    [ "$tdbad" -eq 0 ] && ok "security-check: shell-value expansion · table measurement $tdok/$tdok — only provable scratch objects open; project, system and unmeasurable stay blocked"
+  else
+    warn "temp directory or jq missing" "the boundary of shell-value expansion and table measurement is unproven"
+  fi
+  rm -rf "${td:-/nonexistent}"
+
   # ── Summoning on a new schema file (does not block) ──────────────────────────
   # The data-modeling card loads when read, so it does not come up on the first migration (a new Write) —
   # the hook fills that gap. It must fire only on a new file, and not on an overwrite or a .sql outside the schema.

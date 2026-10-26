@@ -278,7 +278,8 @@ _writes_file() {
 # Why ② cannot stand in for ①: resetting a dev DB (`DROP … app; CREATE … app`) satisfies ② but is
 # the same thing as `prisma migrate reset`, so it is blocked. Why ① cannot stand in for ②: it is common for one local Postgres to hold
 # several projects' DBs, and someone else's project DB satisfies ①.
-# If the name is a variable or a substitution (`$N`) it is undecidable → no exemption. `DROP TABLE` and `DROP SCHEMA` are not exempted.
+# If the name is a variable or a substitution, it is judged **by expanding it to a value within the same command** (`_expand_shell_literals`: literal loops · assignments). If it cannot be expanded it is undecidable → no exemption.
+# `DROP TABLE` is exempted not by name proof but only by **measurement** (`_scratch_tables_ok`). `DROP SCHEMA` is not exempted.
 # Known limit — a name for which a `CREATE DATABASE` was attempted on a DB that already existed (and is absent from the project config) and **failed**
 # is recorded too. The hook runs before execution (PreToolUse), so it does not know whether it succeeded.
 _SYS_DBS=" postgres template0 template1 mysql information_schema performance_schema sys "
@@ -314,22 +315,195 @@ _project_db_names() {
 
 _created_dbs_file() { [ -n "${ORANGEKIT_ROOT:-}" ] && printf '%s/created-dbs' "$(orangekit_state_dir)"; }
 
-# 0 = every DROP in this segment is proven to be the deletion of a scratch DB the agent created. 1 = not so, or undecidable
-_scratch_db_drop_only() {   # $1 segment  $2 DB names created in the executing segments of the same command
-  local targets proj created n f
-  printf '%s' "$1" | grep -Eqi '(^|[^a-z_])drop[[:space:]]+(table|schema)([^a-z_]|$)' && return 1
+# ── Expand the names the shell computes into values before judging (root cause ① of the residual false positives) ──
+# The hook sees the **characters** of a command, but a DB name is a **value** the shell computes. The `$d` in `for d in ot_final ot_work; do … "DROP DATABASE IF
+# EXISTS $d"; done` is not a name as characters — left unexpanded it becomes "unknown" and collapses into a block (benchmark B3 run5: it was a scratch DB the
+# previous command created, blocked only because it was a loop variable). Nothing is executed — **only characters are substituted**, and only the two forms that can be expanded safely:
+#   ① `for V in w1 w2; do BODY; done` — if every word is a literal, BODY is unrolled once per word
+#   ② `V=value` — if the value is a literal, or contains a piece that **changes on every run** (`$(date …)` `$$` `$RANDOM` `$(uuidgen)`
+#      — timestamp, random number, PID), the value is put into later `$V`. That piece is replaced with the marker `@@u@@` — a name that cannot equal a DB that already existed
+# Any other value (`$(cat x)` · another variable · a glob · a nested loop) is left unexpanded → what the judgment below blocks is the same as today.
+_expand_shell_literals() {
+  printf '%s' "$1" | awk 'BEGIN { RS = "\001" }
+    function isword(w) { return (w ~ /^[A-Za-z0-9_.@-]+$/) }
+    function subst(b, v, w,   out, i, lv) {
+      out = ""; lv = length(v)
+      while ((i = index(b, "$")) > 0) {
+        out = out substr(b, 1, i - 1); b = substr(b, i)
+        if (substr(b, 1, lv + 3) == "${" v "}") { out = out w; b = substr(b, lv + 4) }
+        else if (substr(b, 1, lv + 1) == "$" v && substr(b, lv + 2, 1) !~ /[A-Za-z0-9_]/) { out = out w; b = substr(b, lv + 2) }
+        else { out = out "$"; b = substr(b, 2) }
+      }
+      return out b
+    }
+    function expand_loops(s,   out, orig, rest, body, after, v, ws, n, words, i, ok, consumed) {
+      out = ""
+      while (match(s, /for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+[^;$`|&<>()\n]+;[ \t]*do[ \t]+/)) {
+        out = out substr(s, 1, RSTART - 1); orig = substr(s, RSTART, RLENGTH); rest = substr(s, RSTART + RLENGTH)
+        if (!match(rest, /;[ \t]*done|\n[ \t]*done/)) { out = out orig; s = rest; continue }
+        consumed = substr(rest, 1, RSTART + RLENGTH - 1); body = substr(rest, 1, RSTART - 1); after = substr(rest, RSTART + RLENGTH)
+        v = orig; sub(/^for[ \t]+/, "", v); sub(/[ \t].*$/, "", v)
+        ws = orig; sub(/^for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+/, "", ws); sub(/;[ \t]*do[ \t]+$/, "", ws); gsub(/^[ \t]+|[ \t]+$/, "", ws)
+        n = split(ws, words, /[ \t]+/); ok = (n > 0 && n <= 8)
+        for (i = 1; i <= n; i++) if (!isword(words[i])) ok = 0
+        if (!ok || index(body, "for ") > 0) { out = out orig consumed; s = after; continue }
+        for (i = 1; i <= n; i++) out = out subst(body, v, words[i]) "; "
+        s = after
+      }
+      return out s
+    }
+    function uniq(val,   t) {
+      t = val
+      gsub(/\$\((date|uuidgen|mktemp|shuf)[^)]*\)/, "@@u@@", t)
+      gsub(/\$\$|\$RANDOM|\$\{RANDOM\}|\$EPOCHSECONDS|\$SECONDS/, "@@u@@", t)
+      if (t ~ /[$`]/ || t !~ /^[A-Za-z0-9_.@-]+$/) return ""
+      return t
+    }
+    function expand_assign(s,   out, pre, tail, nm, i, L, c, q, depth, raw, val, res, rest, head, remain) {
+      out = ""
+      while (match(s, /(^|[;&|\n \t])(export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=/)) {
+        pre = substr(s, 1, RSTART + RLENGTH - 1)
+        nm = substr(s, RSTART, RLENGTH); sub(/^[;&|\n \t]/, "", nm); sub(/^export[ \t]+/, "", nm); sub(/=$/, "", nm)
+        tail = substr(s, RSTART + RLENGTH)
+        i = 1; q = ""; depth = 0; L = length(tail)
+        while (i <= L) {
+          c = substr(tail, i, 1)
+          if (c == "$" && substr(tail, i + 1, 1) == "(") { depth++; i += 2; continue }
+          if (depth > 0) { if (c == "(") depth++; else if (c == ")") depth--; i++; continue }
+          if (q == "") {
+            if (c == "\"" || c == "\047") { q = c; i++; continue }
+            if (c ~ /[ \t\n;&|]/) break
+          } else if (c == q) { q = ""; i++; continue }
+          i++
+        }
+        raw = substr(tail, 1, i - 1); rest = substr(tail, i)
+        val = raw; gsub(/"/, "", val); gsub(/\047/, "", val)
+        res = uniq(val)
+        if (res != "") {
+          if (match(rest, "(^|[;&|\n \t])(export[ \t]+)?" nm "=")) { head = substr(rest, 1, RSTART - 1); remain = substr(rest, RSTART) }
+          else { head = rest; remain = "" }
+          rest = subst(head, nm, res) remain
+        }
+        out = out pre raw; s = rest
+      }
+      return out s
+    }
+    { printf "%s", expand_assign(expand_loops($0)) }'
+}
+
+# ── Exemption judgment for DROP — names by proof, tables by measurement (an exemption opens only when proven) ──
+# DATABASE: not the project DB (environment variables · `.env*`) + created by the agent (a CREATE in the same command, or recorded) or a name unique to each run
+# 0 = every DROP DATABASE in this segment is proven to be the deletion of a scratch DB. 1 = not so, or undecidable
+_scratch_dbs_ok() {   # $1 segment  $2 DB names created in the executing segments of the same command
+  local targets proj="" created n f
   targets=$(_db_targets "$1" drop); [ -z "$targets" ] && return 1
-  proj=$(_project_db_names); [ -z "$proj" ] && return 1
   created="$2"
   f=$(_created_dbs_file) && [ -f "$f" ] && created="$created
 $(cat "$f" 2>/dev/null)"
   while IFS= read -r n; do
     [ -z "$n" ] && continue
+    case "$n" in *'@@u@@'*) continue ;; esac     # a name that changes on every run: it cannot be a DB that already existed
     case "$n" in *'$'*|*'('*|*'{'*|*'`'*) return 1 ;; esac
     case "$_SYS_DBS" in *" $n "*) return 1 ;; esac
+    [ -z "$proj" ] && { proj=$(_project_db_names); [ -z "$proj" ] && return 1; }
     printf '%s\n' "$proj" | grep -qxF -- "$n" && return 1
     printf '%s\n' "$created" | grep -qxF -- "$n" || return 1
   done <<< "$targets"
+  return 0
+}
+
+# TABLE (root cause ②): a table has no name proof such as "it is not in the project config". So we **measure** —
+# whether there is data the deletion would destroy is knowable from a read-only query, not a guess (the principle of not collapsing undecidable into a block, solved by measurement).
+# The hook sees it before execution, so a "table that does not exist yet" is a scratch table this command will create (benchmark B3 run5: `tmp_probe`, created to test the migration runner
+# and dropped in the same command · run6: a defensive `DROP TABLE IF EXISTS phase1_snapshot_check` of a name that never existed).
+# Exemption conditions — only when **all** are proven: ① the name is an unquoted literal ② that psql points at the project DB (an explicit `"$DATABASE_URL"`, a value in the environment variables) and the same command does not change the connection environment
+# ③ a read-only query answers within 3 seconds: absent → pass · present and **has no rows** (and no CASCADE) → pass · has rows → block
+# ④ DROP SCHEMA is not exempted. No psql · connection failure · timeout · another DB · an existing table with CASCADE → undecidable → blocked as today.
+# The connection URL used for measuring is read **only from the hook's environment variables**. If it is only in `.env*`, the command's shell does not know that value (`$DATABASE_URL` is empty and
+# psql uses the default connection), so the DB the hook measured and the DB the command will run against differ — with no proof that the measured target = the executed target, no exemption is granted.
+_project_db_url() {
+  [ -n "${DATABASE_URL:-}" ] || return 1
+  printf '%s' "$DATABASE_URL"
+}
+
+# Does this psql call point at the project DB — the connection argument must be exactly one `"$DATABASE_URL"` or none, and there must be no connection flags such as -d/-h/-p/-U
+_psql_targets_project_db() (   # $1 segment containing psql — subshell: keeps an expected-to-fail grep from firing the ERR trap
+  trap - ERR; set +e
+  local t urlform cnt
+  case "$1" in *psql*) ;; *) return 1 ;; esac
+  t=${1#*psql}; t=${t%%|*}
+  urlform='"\$DATABASE_URL"|\$DATABASE_URL|"\$\{DATABASE_URL\}"|\$\{DATABASE_URL\}'
+  # Segment splitting also cuts at a `;` inside quotes (`-c "DROP TABLE t; DELETE …"`) — a fragment with no closing quote is also treated as a -c argument
+  t=$(printf ' %s ' "$t" | sed -E "s/[[:space:]]-[A-Za-z]*[cf][[:space:]]+(\"[^\"]*(\"|\$)|'[^']*('|\$))/ /g; s/<<-?[[:space:]]*['\"]?[A-Za-z_]+['\"]?/ /g; s/[0-9]*>&?[^[:space:]]*/ /g; s/<[^[:space:]]*/ /g")
+  cnt=$(printf '%s' "$t" | grep -oE "$urlform" | wc -l | tr -d ' ')
+  [ "${cnt:-0}" -eq 1 ] || return 1      # a psql with no connection argument connects with the PG* defaults — no proof it is the project DB
+  t=$(printf '%s' "$t" | sed -E "s/($urlform)/ /")
+  printf '%s' "$t" | grep -Eq '^[[:space:]]*(-[qXAt1]+([[:space:]]+|$)|-v[[:space:]]+[A-Za-z_]+=[^[:space:]]*([[:space:]]+|$)|--quiet([[:space:]]+|$))*[[:space:]]*$'
+)
+
+# The target names of DROP TABLE (one per line). If the same statement has CASCADE, a `@@cascade@@` line is emitted first
+_table_targets() {
+  printf '%s' "$1" | awk -v q="'" '
+    { s = tolower($0)
+      while (match(s, /drop[ \t]+table[ \t]+(if[ \t]+exists[ \t]+)?/)) {
+        s = substr(s, RSTART + RLENGTH); stmt = s
+        if (match(stmt, "[;\"`" q "]")) stmt = substr(stmt, 1, RSTART - 1)
+        if (stmt ~ /cascade/) print "@@cascade@@"
+        sub(/[ \t]+(cascade|restrict).*$/, "", stmt)
+        n = split(stmt, parts, /[ \t]*,[ \t]*/)
+        for (i = 1; i <= n; i++) { t = parts[i]; gsub(/^[ \t]+|[ \t]+$/, "", t); print t }
+      } }'
+}
+
+# Read-only measurement: absent | empty | rows (returns 1 when it cannot measure) — subshell: a psql failure is an expected result, so it must not fire the ERR trap
+_probe_table() (   # $1 lowercase literal name (schema.table allowed)
+  trap - ERR; set +e
+  local url out
+  url=$(_project_db_url) || return 1
+  case "$url" in *'$'*|*'`'*|*"'"*|*'"'*) return 1 ;; esac
+  command -v psql >/dev/null 2>&1 || return 1
+  out=$(PGCONNECT_TIMEOUT=3 PGOPTIONS='-c statement_timeout=3000 -c lock_timeout=1000' \
+        psql "$url" -X -A -t -q -v ON_ERROR_STOP=1 -c "SELECT to_regclass('$1') IS NOT NULL" 2>/dev/null) || return 1
+  case "$out" in f) printf 'absent'; return 0 ;; t) ;; *) return 1 ;; esac
+  out=$(PGCONNECT_TIMEOUT=3 PGOPTIONS='-c statement_timeout=3000 -c lock_timeout=1000' \
+        psql "$url" -X -A -t -q -v ON_ERROR_STOP=1 -c "SELECT EXISTS (SELECT 1 FROM $1 LIMIT 1)" 2>/dev/null) || return 1
+  case "$out" in f) printf 'empty' ;; t) printf 'rows' ;; *) return 1 ;; esac
+)
+
+# Does the same command change the connection environment — `DATABASE_URL=… psql "$DATABASE_URL"` · `export DATABASE_URL=…` · `PGHOST=… psql` · `unset DATABASE_URL`.
+# If so, `"$DATABASE_URL"` is not the DB the hook measured (the measured target and the executed target diverge) → undecidable
+_command_redefines_db_env() {
+  printf '%s' "${_GATE_CMD:-}" | grep -Eq '(^|[^A-Za-z0-9_])(DATABASE_URL|PGHOST|PGHOSTADDR|PGPORT|PGDATABASE|PGUSER|PGSERVICE|PGSERVICEFILE|PGPASSFILE|PGOPTIONS)=|unset[[:space:]]+(DATABASE_URL|PG[A-Z]+)'
+}
+
+_scratch_tables_ok() {   # $1 segment
+  local t cascade=0 any=0 st
+  _command_redefines_db_env && return 1
+  _psql_targets_project_db "$1" || return 1
+  while IFS= read -r t; do
+    [ -z "$t" ] && continue
+    if [ "$t" = "@@cascade@@" ]; then cascade=1; continue; fi
+    case "$t" in *'"'*) return 1 ;; esac
+    t=$(printf '%s' "$t" | tr 'A-Z' 'a-z')
+    printf '%s' "$t" | grep -Eq '^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$' || return 1
+    case "$t" in pg_*|information_schema.*|pg_catalog.*) return 1 ;; esac
+    st=$(_probe_table "$t" || printf '@@undecided@@')   # a failed measurement is received as a value — so a failure inside a command substitution does not fire the ERR trap
+    [ "$st" = "@@undecided@@" ] && return 1
+    case "$st" in
+      absent) ;;                               # nothing to delete — or a scratch table this command will create
+      empty) [ "$cascade" = 0 ] || return 1 ;; # even when empty, CASCADE deletes the dependent objects with it
+      *) return 1 ;;                           # it has rows
+    esac
+    any=1
+  done < <(_table_targets "$1")
+  [ "$any" = 1 ]
+}
+
+# All DROPs in one segment — DATABASE by name proof, TABLE by measurement, SCHEMA never exempt. When the three are mixed, all must pass
+_drop_exempt() {   # $1 segment  $2 DB names created in the same command
+  printf '%s' "$1" | grep -Eqi '(^|[^a-z_])drop[[:space:]]+schema([^a-z_]|$)' && return 1
+  if printf '%s' "$1" | grep -Eqi '(^|[^a-z_])drop[[:space:]]+database([^a-z_]|$)'; then _scratch_dbs_ok "$1" "$2" || return 1; fi
+  if printf '%s' "$1" | grep -Eqi '(^|[^a-z_])drop[[:space:]]+table([^a-z_]|$)'; then _scratch_tables_ok "$1" || return 1; fi
   return 0
 }
 
@@ -350,7 +524,8 @@ _record_created_dbs() {   # $1 names (one per line)
 destructive_gate() {
   # Judged after stripping the heredoc body (= data). The secret check **does not strip** —
   # the axis is the opposite: writing a secret is itself the exposure, so the body is exactly what is judged.
-  local DCMD; DCMD=$(_strip_heredoc_bodies "$1")
+  local DCMD; DCMD=$(_expand_shell_literals "$(_strip_heredoc_bodies "$1")")
+  _GATE_CMD="$DCMD"
   local target="" _D
   dhas() { printf '%s' "$_D" | grep -Eqi -e "$1"; }
 
@@ -376,7 +551,7 @@ destructive_gate() {
     _D="$seg"
 
     dhas '(^|[^a-z_])drop[[:space:]]+(table|database|schema)([^a-z_]|$)' \
-      && ! _scratch_db_drop_only "$seg" "$created_here" \
+      && ! _drop_exempt "$seg" "$created_here" \
       && dblock "DROP of a table/database/schema via DDL" \
                 "That object and every row inside it disappears. Without a backup there is no recovery" \
                 "Take a backup first (pg_dump or similar), run it inside a transaction, check the result, then commit. If it is a scratch DB for verification, write the name as a literal and re-create it with CREATE DATABASE in the same command, or delete only DBs this project created — the project DB (the connection URL in environment variables · .env*) and system DBs are still blocked, and if no connection URL can be found the exemption is not granted"
