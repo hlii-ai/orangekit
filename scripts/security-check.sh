@@ -28,47 +28,167 @@ NEW_STRING=$(orangekit_field "$INPUT" '.tool_input.new_string')
 [[ "$FILE_PATH" =~ security-check\.sh$ ]] && exit 0
 
 # ══════════════════════════════════════════════════════════════════════
-# Summoning the UI direction review (does not block)
+# Prior-knowledge gate — load the rule card · skill that owns a path before writing to it
 # ══════════════════════════════════════════════════════════════════════
 #
 # **A different axis** from the secret and destruction gates. Those two stop what must not happen now;
-# this one summons "a judgement that can only be made now".
+# this one stops "a judgement that can only be made now" from being made without the rule or procedure.
 #
-# The T1 card `.claude/rules/ui-design.md` loads when Claude **reads a matching file**.
-# When existing UI is edited, neighbours get read, so it comes up. But on greenfield, where there is
-# nothing to read — the moment a first screen is created — it does not. That one slot, where the
-# direction decision matters most, was empty, and this branch fills only that.
+# Root cause: an agent finishes its judgement **in its head** and goes straight to writing the artifact (the file). Whether to call a rule or skill
+# is the model's discretion, so the sentence "call X when Y" was never hung on the execution path.
+#   - a `paths:` card loads when a matching file is **read** (platform-contract §3). At the moment a new file is first
+#     written, or edited through Bash, there is no read, so no card comes up
+#   - a skill is chosen by the model from its description. The P3 · P4 instructions in the routing card are only sentences
+# Measured (benchmark B3 = 1.7.0, 3 runs): the data-modeling card reached before the first table was written 1/3 · in a fresh session 0/3,
+# `/test-driven-development` called 0/9 (stages 1·2·4) in a repo that had a test runner, Bash file writes 25~43 per run in stage 1.
+# A non-blocking notice arrived **after** the file was saved and could not change the design (only an omission-reason comment, 3/3).
 #
-# **It does not block.** Whether the review actually happened cannot be judged by a machine, and an
-# undecidable verdict is not blocked (harness-change "a guard has three states").
-#
-# The conditions are narrowed to three. Firing on every edit makes the user turn the hook off, and a hook that is off reaches nothing:
-#   ① Write only — Edit and MultiEdit are excluded. Editing an existing file is not a direction decision
-#   ② UI file extension — judging by directory makes `app/` drag in a FastAPI backend as well
-#   ③ New creation only — an overwrite is a file that already has a direction
-# Test and story files are left out: same extension, but not the place where direction is set.
-#
-# Without jq, orangekit_emit_context quietly emits nothing. This is a notice, not a block,
-# so that degradation is accepted — a missing jq does not stop the security check.
-if [ "$TOOL_NAME" = "Write" ] \
-   && [[ "$FILE_PATH" =~ \.(tsx|jsx|vue|svelte|css|scss)$ ]] \
-   && [[ ! "$FILE_PATH" =~ \.(test|spec|stories)\. ]] \
-   && [ ! -f "$FILE_PATH" ]; then
-  orangekit_emit_context PreToolUse \
-'This is a new UI file. If the direction is still being decided, pass the review in `.claude/rules/ui-design.md` first — avoid the 3 default clusters · one signature element · 2-pass review. If you are following a direction that is already set, carry on.'
+# So a deterministic checkpoint goes at the **boundary of the artifact** — it checks through the transcript whether the knowledge that owns the path
+# entered this session (since the last compaction), and if not, sends that write back once (exit 2).
+#   Owning knowledge ① rule card: `paths:` of the project's `.claude/rules/*.md` (the card declares it itself)
+#                    ② skill: `beforeWrite` of a skill node in `workflow.graph.json` (the graph declares it, doctor verifies it)
+#   Write            a new file from Write · the target of a Bash redirection · `tee` · `sed -i`. Bash does not force a Read,
+#                    so a card is required for edits to existing files too. A skill is required only for new files
+#   Entered          card: a Read (to the end — not if `limit` is shorter than the card) · `cat` · a Read of a file at that card's path
+#                    (= native load). Skill: a Skill tool call · the user's `/skill` command
+# **Each item blocks only once per session** — a subagent reads in its own transcript, which may not show in the main record,
+# and blocking twice on the same item would loop forever. From the second time it is a notice.
+# **Undecidable** (no transcript · jq · root) does not block and only emits a notice (harness-change "three states").
+# Known limit — a file written by a script (python · node) has a target that cannot be read from the command, so it is not caught.
+_globs_ere() {   # stdin: one glob per line → ERE `^(…|…)$` (empty string if none)
+  sed -E -e 's/[].+^$()|\\[]/\\&/g' -e 's#\*\*/#@DS@#g' -e 's#\*\*#@DD@#g' -e 's#\*#[^/]*#g' -e 's#\?#[^/]#g' \
+         -e 's#@DS@#(.*/)?#g' -e 's#@DD@#.*#g' -e 's#\{([^}]*)\}#(\1)#g' \
+  | sed -E -e ':a' -e 's#\(([^()|\\]*),#(\1|#' -e 'ta' \
+  | paste -sd '|' - | sed -E 's#^(.+)$#^(\1)$#'
+}
+_card_re() {   # $1 card → the ERE of its `paths:`. Empty string if there is no paths (always loaded)
+  awk 'NR==1 && $0!="---" {exit} NR==1 {next} /^---[[:space:]]*$/ {exit}
+       /^[[:space:]]*-[[:space:]]/ {sub(/^[[:space:]]*-[[:space:]]*/,""); gsub(/["\047]/,""); print}' "$1" 2>/dev/null | _globs_ere
+}
+_session_reads() {   # $1 transcript → since the last compaction, "R<TAB>path<TAB>limit" · "B<TAB>command" · "S<TAB>skill"
+  jq -r 'if (.type=="system" and .subtype=="compact_boundary") then "C"
+         elif .type=="assistant" then (.message.content[]? | select(.type=="tool_use")
+           | if .name=="Read" then "R\t\(.input.file_path // "")\t\(.input.limit // "")"
+             elif .name=="Bash" then "B\t\((.input.command // "") | gsub("\n";" "))"
+             elif .name=="Skill" then "S\t\(.input.skill // "")"
+             else empty end)
+         elif .type=="user" then ((.message.content // "")
+           | if type=="string" then . else ([.[]? | select(.type=="text") | .text] | join(" ")) end
+           | [scan("<command-name>/?([^<]+)</command-name>")] | .[] | "S\t\(.[0])")
+         else empty end' "$1" 2>/dev/null \
+  | awk '$0=="C" {n=0; next} {a[++n]=$0} END {for (i=1; i<=n; i++) print a[i]}'
+}
+_has_test_runner() {   # routing P4's "a repo that has a test runner"
+  local r="$ORANGEKIT_ROOT" t
+  if [ -f "$r/package.json" ] && command -v jq >/dev/null 2>&1; then
+    t=$(jq -r '.scripts.test // empty' "$r/package.json" 2>/dev/null)
+    [ -n "$t" ] && [[ "$t" != *"no test specified"* ]] && return 0
+  fi
+  for t in pytest.ini conftest.py go.mod Cargo.toml; do [ -f "$r/$t" ] && return 0; done
+  [ -f "$r/pyproject.toml" ] && grep -q 'pytest' "$r/pyproject.toml" 2>/dev/null && return 0
+  ls "$r"/vitest.config.* "$r"/jest.config.* >/dev/null 2>&1 && return 0
+  return 1
+}
+_bash_targets() {   # $1 command → the file paths it writes (one per line). Heredoc bodies · /dev/* · variable or substitution paths are left out
+  local t
+  t=$(printf '%s\n' "$1" | awk '
+      hd != "" { x=$0; sub(/^[\t ]+/, "", x); if (x == hd) hd = ""; next }
+      { print
+        if (match($0, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_]*/)) {
+          hd = substr($0, RSTART, RLENGTH); sub(/^<<-?[ \t]*["\047]?/, "", hd) } }' \
+      | sed -E 's/[0-9]*>{1,2}[[:space:]]*\/dev\/null//g; s/&>[[:space:]]*\/dev\/null//g; s/[0-9]*>&[0-9]+//g')
+  { printf '%s\n' "$t" | grep -oE '(^|[^-<>=0-9A-Za-z_])>{1,2}[[:space:]]*[^[:space:];&|<>()]+' | sed -E 's/^.?>{1,2}[[:space:]]*//' || true
+    printf '%s\n' "$t" | grep -oE '(^|[;&|[:space:]])tee([[:space:]]+-a)?[[:space:]]+[^-[:space:];&|<>()][^[:space:];&|<>()]*' | awk '{print $NF}' || true
+    printf '%s\n' "$t" | grep -oE "(^|[;&|[:space:]])sed[[:space:]]+(-[A-Za-z]*i[^[:space:]]*|--in-place[^[:space:]]*)([[:space:]]+(''|\"\"))?([[:space:]]+-e)?[[:space:]]+('[^']*'|\"[^\"]*\"|[^[:space:]]+)[[:space:]]+[^-[:space:];&|<>()][^[:space:];&|<>()]*" | awk '{print $NF}' || true
+  } | sed -E "s/^[\"']//; s/[\"']$//" | { grep -vE '^(/dev/|&)|[$`~*]' || true; } | sort -u
+}
+_gate_rel() {   # $1 path (absolute or relative) $2 base directory → the project-relative path, or an empty string if outside
+  local p="$1"
+  case "$p" in /*) ;; *) p="${2:-$ORANGEKIT_ROOT}/${p#./}" ;; esac
+  case "$p" in "$ORANGEKIT_ROOT"/*) printf '%s' "${p#"$ORANGEKIT_ROOT"/}" ;; esac
+}
+_knowledge_gate() {   # $1 project-relative path  $2 1=new file 0=existing  → exit 2 if it blocks
+  local rel="$1" isnew="$2" c re n un ex when names=() kinds=() res=() unread=() again=() _k _v _l seen
+  [ -n "$rel" ] && [ -n "$ORANGEKIT_ROOT" ] || return 0
+  if [ -d "$ORANGEKIT_ROOT/.claude/rules" ]; then
+    for c in "$ORANGEKIT_ROOT"/.claude/rules/*.md; do
+      [ -f "$c" ] || continue
+      re=$(_card_re "$c"); [ -n "$re" ] || continue
+      [[ "$rel" =~ $re ]] && { names+=("${c##*/}"); kinds+=(card); res+=("$re"); }
+    done
+  fi
+  local graph="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/workflow.graph.json"
+  if [ "$isnew" = 1 ] && [ -f "$graph" ] && command -v jq >/dev/null 2>&1; then
+    while IFS="$(printf '\t')" read -r n when; do
+      [ -n "$n" ] || continue
+      re=$(jq -r --arg n "$n" '.nodes[] | select(.id==$n) | .beforeWrite.paths[]?' "$graph" | _globs_ere)
+      un=$(jq -r --arg n "$n" '.nodes[] | select(.id==$n) | .beforeWrite.unless[]?' "$graph" | _globs_ere)
+      [ -n "$re" ] && [[ "$rel" =~ $re ]] || continue
+      [ -n "$un" ] && [[ "$rel" =~ $un ]] && continue
+      [ "$when" = "test-runner" ] && ! _has_test_runner && continue
+      names+=("$n"); kinds+=(skill); res+=("")
+    done < <(jq -r '.nodes[]? | select(.kind=="skill" and .beforeWrite) | "\(.id)\t\(.beforeWrite.when // "")"' "$graph" 2>/dev/null)
+  fi
+  [ ${#names[@]} -gt 0 ] || return 0
+  local tp sid state list
+  tp=$(orangekit_field "$INPUT" '.transcript_path')
+  sid=$(orangekit_field "$INPUT" '.session_id' | tr -cd 'A-Za-z0-9._-')
+  if [ -z "$tp" ] || [ ! -f "$tp" ] || ! command -v jq >/dev/null 2>&1; then
+    list=$(for i in "${!names[@]}"; do [ "${kinds[$i]}" = card ] && printf '  - Read .claude/rules/%s\n' "${names[$i]}" || printf '  - skill /%s\n' "${names[$i]}"; done)
+    orangekit_emit_context PreToolUse "Load these before writing \`$rel\` (it cannot be determined whether they were loaded in this session, so this does not block):
+$list"
+    return 0
+  fi
+  local reads; reads=$(_session_reads "$tp")
+  state="$(orangekit_state_dir)/knowledge-gate.${sid:-nosession}"
+  for i in "${!names[@]}"; do
+    n=${names[$i]}; re=${res[$i]}; seen=0
+    while IFS="$(printf '\t')" read -r _k _v _l; do
+      if [ "${kinds[$i]}" = skill ]; then
+        [ "$_k" = S ] && { [ "$_v" = "$n" ] || [[ "$_v" == *:"$n" ]]; } && { seen=1; break; }
+        continue
+      fi
+      case "$_k" in
+        R) if [[ "$_v" == */.claude/rules/"$n" ]]; then
+             if [ -z "$_l" ] || [ "$(orangekit_num "$_l")" -ge "$(orangekit_count_lines "$_v")" ]; then seen=1; break; fi
+             continue
+           fi
+           _v=${_v#"$ORANGEKIT_ROOT"/}
+           [[ "$_v" != /* ]] && [[ "$_v" =~ $re ]] && { seen=1; break; } ;;
+        B) [[ "$_v" =~ (^|[\;\&\|[:space:]])cat[[:space:]][^\;\&\|]*\.claude/rules/${n//./\\.} ]] && { seen=1; break; } ;;
+      esac
+    done <<< "$reads"
+    [ "$seen" -eq 1 ] && continue
+    if [ -f "$state" ] && grep -qxF "${kinds[$i]}:$n" "$state"; then again+=("$i"); else unread+=("$i"); fi
+  done
+  if [ ${#unread[@]} -gt 0 ]; then
+    mkdir -p "$(dirname "$state")" 2>/dev/null && for i in "${unread[@]}"; do printf '%s:%s\n' "${kinds[$i]}" "${names[$i]}"; done >> "$state"
+    printf '⏸ Load these first: `%s` is subject to the rules and procedures below, but they have not been loaded in this session yet.\n' "$rel" >&2
+    for i in "${unread[@]}"; do
+      if [ "${kinds[$i]}" = card ]; then printf '  - Read to the end with the Read tool: .claude/rules/%s\n' "${names[$i]}" >&2
+      else printf '  - Call with the Skill tool: /%s\n' "${names[$i]}" >&2; fi
+    done
+    printf '\nA rule card loads only when a file is *read*, and a skill applies only when it is *called* — writing from judgement in your head alone skips both.\n' >&2
+    printf 'Load the items above, then redo this work to that standard. (Each item stops you only once per session)\n' >&2
+    exit 2
+  fi
+  if [ ${#again[@]} -gt 0 ]; then
+    list=$(for i in "${again[@]}"; do printf '  - %s\n' "${names[$i]}"; done)
+    orangekit_emit_context PreToolUse "You are writing \`$rel\` with rules or skills still not loaded — this was announced once in this session, so it does not block:
+$list"
+  fi
+  return 0
+}
+if [ "$TOOL_NAME" = "Write" ] && [ -n "$FILE_PATH" ] && [ ! -e "$FILE_PATH" ]; then
+  _knowledge_gate "$(_gate_rel "$FILE_PATH" "$ORANGEKIT_ROOT")" 1
 fi
-
-# New schema file — the same greenfield gap exists for the data-modeling card. The card loads when
-# `db/**` or `**/migrations/**` is **read**, but the first migration always starts out as something
-# **newly written**. Measured (benchmark B2, 6 runs): the first migration was a Write (new) in all 6 runs, and in the
-# 5 where the card was opened directly only the front was read (`head -60/80/150`), so the default-columns line was never seen — `created_by`·`deleted_at` 0/6.
-# Narrowed by the same three conditions as above (Write · new · extension). It does not block.
-if [ "$TOOL_NAME" = "Write" ] \
-   && [[ "$FILE_PATH" =~ \.(sql|prisma)$ ]] \
-   && [[ "$FILE_PATH" =~ (^|/)(migrations?|db|prisma|drizzle|supabase)/ ]] \
-   && [ ! -f "$FILE_PATH" ]; then
-  orangekit_emit_context PreToolUse \
-'This is a new schema file. Before creating a table, read "Default columns for every new table" at the top of `.claude/rules/data-modeling.md` and apply it (decide the deletion strategy per table there too). That card loads automatically only when a matching file is read, so it may not have loaded yet while you are writing a new file.'
+if [ "$TOOL_NAME" = "Bash" ] && [ -n "$ORANGEKIT_ROOT" ]; then
+  _gcwd=$(orangekit_field "$INPUT" '.cwd'); _gcmd=$(orangekit_field "$INPUT" '.tool_input.command')
+  while IFS= read -r _gt; do
+    [ -n "$_gt" ] || continue
+    _gabs=$_gt; case "$_gabs" in /*) ;; *) _gabs="${_gcwd:-$ORANGEKIT_ROOT}/${_gabs#./}" ;; esac
+    if [ -e "$_gabs" ]; then _knowledge_gate "$(_gate_rel "$_gabs")" 0; else _knowledge_gate "$(_gate_rel "$_gabs")" 1; fi
+  done < <(_bash_targets "$_gcmd")
 fi
 
 # ══════════════════════════════════════════════════════════════════════

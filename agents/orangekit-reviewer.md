@@ -69,6 +69,9 @@ the **placement and boundaries** the hook can never see.
   Are the positions that cannot be parameterized (identifiers·sorting) covered by an allowlist
 - **Output security** — raw HTML injection, a stack trace·internal path in an error response,
   a redirect target taken straight from user input, existence leaked on authorization failure (403/404 distinction)
+- **Known vulnerabilities in dependencies** — if the diff contains a manifest or lockfile (`package.json` · `pnpm-lock.yaml` · `pyproject.toml` and the like),
+  run a production-dependency audit (`npm audit --omit=dev` and the like) and report high · critical findings. For an advisory on a transitive dependency,
+  also say whether only that package can be raised with an `overrides`-style mechanism. If the audit fails for lack of a network, record it as "undecidable"
 
 ### C. Structural Soundness
 

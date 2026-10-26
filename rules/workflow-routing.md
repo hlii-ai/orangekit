@@ -77,7 +77,7 @@ and freeze the most expensive thing (the migration) last.
 | 1 | Write down the fields the screen **reads · writes** | The contract's input. If the screen is unsettled, P0-D |
 | 2 | The wire contract `dev/docs/api/wire-contract.md` — write it if absent, **append** only this feature's part if present | The only thing frontend and backend **share across a context boundary** |
 | 3 | Derive a mock from the contract and **bring the UI up first, then verify it** — plan changes surface here and are absorbed in the contract document | Let most of the change happen in the cheapest place |
-| 4 | Only **after** the UI is frozen, the backend — physical schema·migration·real API, **in one pass**, to the contract | The backend does not swallow plan changes a second time. Irreversible is frozen last |
+| 4 | Only **after** the UI is frozen, the backend — when a table is created or changed, **write the design to `dev/docs/database/` first**, then the migration·real API, **in one pass**, to the contract | The backend does not swallow plan changes a second time. Irreversible is frozen last. The design has to come out into a file for the `data-modeling` card to reach it |
 | 5 | Removing the mock = integration | If a mock this feature stood up in place of the contract is still there, it is not finished |
 
 This is **serialization inside one feature**, not slicing the whole product horizontally into frontend → backend —

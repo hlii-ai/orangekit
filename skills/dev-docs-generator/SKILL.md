@@ -44,8 +44,11 @@ pull steps 1 and 2 of "the inner order of a single feature" in `workflow-routing
   generation, gate comparison) and its `exampleDomain` instruction are for guide generation, so do not carry them over. Fill in §6 auth
   surface only when the backend does its own authentication.
 - **If it already exists, do not rewrite it** — add only this feature's entities, endpoints, and error codes to §0 and §4.
-- The domain model is covered to the logical level by contract §0 plus the screen × field table. The physical schema is handled by the
-  `data-modeling` card at step 4 of the inner order — do not create a separate document here.
+- The domain model is covered to the logical level by contract §0 plus the screen × field table.
+- **If the feature creates or changes tables**, make the first item of the backend slice in tasks.md
+  "DB design `dev/docs/database/<slug>.md` → migration". Write the physical design into that document,
+  table by table — writing a design from your head straight into the migration means no rule card reaches it
+  (a `paths:` card comes up only when read). The moment you write to that path, the `data-modeling` card is summoned.
 
 Create them in `dev/active/<slug>/` using the three forms in `assets/doc-templates.md`.
 The **Scope** section of tasks.md is mandatory — orangekit-reviewer checks compliance with Scope.

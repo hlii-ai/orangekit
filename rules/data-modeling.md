@@ -25,16 +25,20 @@ paths:
 
 ## Default columns for every new table — apply these first, every time you create a table
 
-Include the columns below **by default**. A table that omits one gets a one-line reason in the migration comment —
-so review can tell whether a missing column is a mistake or a decision.
+The columns below are **mandatory — there is no exit by writing a reason and leaving one out.** To trace why production data changed,
+who created and who changed it has to exist first, and the history (`_history` · `audit_log`) inherits these values.
+The only thing that may be absent is `updated_*` on the append-only tables below.
 
 | Column | PostgreSQL | MySQL 8 | Applies to |
 | --- | --- | --- | --- |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | `DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP` | every table |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` **+ an update trigger** (or the app sets it every time) — `DEFAULT` alone does not change on UPDATE | `DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | tables that can be modified |
-| `created_by` · `updated_by` | actor ID, NOT NULL — fill **both** on INSERT (creation = the first modification) | same | nearly every table (→ `change-history.md` Level 1) |
+| `created_by` · `updated_by` | actor ID, NOT NULL — fill **both** on INSERT (creation = the first modification) | same | **every table** (append-only tables carry `created_by` only, → `change-history.md` Level 1) |
 
-Append-only tables (ledger entries · events · idempotency keys · audit logs) carry `created_*` only and are never modified or deleted.
+Append-only tables (ledger entries · events · idempotency keys · audit logs) carry `created_at` · `created_by` only and are never modified or deleted.
+
+**Include them even when the actor is simple** — "the actor is only the owning user" or "only the admin token" is not a reason to omit them;
+it is the case where **that user's or admin's ID goes in**. Batches · webhooks · system jobs use a fixed system actor ID (for example a seeded `system` user).
 
 **Decide three things per table** and write them in the migration comment (or the table definition document) — these are per-table decisions, not a blanket default:
 
@@ -176,7 +180,7 @@ Mandatory checks when creating a new table:
 - [ ] An index strategy when you search inside a JSON column — PG GIN / expression index; MySQL generated-column / functional / multi-valued index (→ `json-columns.md`)
 - [ ] TypeScript type definitions → the project's type directory (in a monorepo, the shared package's `types/`) + update the barrel export
 - [ ] Table definition document → `dev/docs/database/` (optional, from medium scale up)
-- [ ] The "Default columns for every new table" section above — the default columns (a reason for any omitted) and the three per-table decisions (deletion strategy · history level · code-column approach) are written in the migration comment
+- [ ] The "Default columns for every new table" section above — the default columns are on every table (only append-only tables lack `updated_*`), and the three per-table decisions (deletion strategy · history level · code-column approach) are written in the migration comment
 - [ ] Soft Delete tables: the active-row index and UNIQUE in the dialect's form (PG partial index / MySQL `(business_key, deleted_at)` + change the value on withdrawal) + the RLS condition updated (→ `deletion-strategy.md`)
 - [ ] Tables that require business history → create the `_{table}_history` history table at the same time (→ `change-history.md`)
 - [ ] When idempotency is needed: an `idempotency_key` UNIQUE column + TTL cleanup (→ `idempotency.md`)

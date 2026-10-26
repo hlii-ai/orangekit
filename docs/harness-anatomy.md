@@ -1055,11 +1055,14 @@ wide open. The last square of verification — **does the screen actually appear
 
 | Device | When | What it does | Does it block |
 | --- | --- | --- | --- |
-| the UI branch of `security-check` | **when a new UI file is written** | summons the direction review (`ui-design.md`) | **No** — a notice |
+| the prior-knowledge gate of `security-check` | **when a new file is written** (Write · Bash redirection · `tee` · `sed -i`) | if the card that owns that path (for UI, `ui-design.md`) or the skill (graph `beforeWrite`) has not been called in this session, sends the write back once so they get called | **once per item per session** — a notice from the second time |
 | `_ui_render_notice` of `build-gate` | at turn end | notifies when the UI changed and the build passed but **there is no trace of a render check** | **No** — once per session |
 | `ui-probe.sh` | when a person or the model invokes it | opens it in a real browser and gathers **reconnaissance and evidence in the same pass** | exit 1 |
 
-**All three refrain from blocking for the same reason.** "Was the review actually done" and "is the screen as
+Only the first row differs — **whether a card was read and whether a skill was called** can be decided from the transcript (if undecidable, it drops to a notice). A non-blocking notice
+arrived **after** the file was saved and could not change the design (benchmark B3: card reached before the first table 1/3), so only the reading is forced in front of the write.
+
+**The last two refrain from blocking for the same reason.** "Was the review actually done" and "is the screen as
 intended" cannot be decided by a machine, and **folding undecidable into blocking makes a false positive.** Cry
 every time in an environment with no headless browser, or on a component fix that needs no server, and the user
 turns the hook off. So this axis **summons rather than blocks** — make the intervention point, but let the user set the cost.

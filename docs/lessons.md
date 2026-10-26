@@ -563,3 +563,28 @@
 - lesson: Open an exemption only when it is proven, but widen the means of proof **from guessing (name · origin) to measuring (existence · row count)**. Measuring opens a new hole — the DB that was measured and the DB the command will run against can differ
   (`DATABASE_URL=… psql "$DATABASE_URL"` · `export DATABASE_URL=…` · `PG*` · a psql with no connection argument · a URL that exists only in `.env`). A test during design (against a real PostgreSQL) exposed this first — if measured target = executed target is not proven, the exemption is not granted.
   Verify three things together: exemption cases (0) and protection cases (2) in the same self-check (doctor 38 cases), a real DB (PostgreSQL 16) rather than a fake plus the mawk in the benchmark container, and a replay of every tool command showing no new blocks.
+
+## [category: rule] When a rule arrives "after the write" it cannot change the design — bring the design out into a file, and write a new file only after reading the card that owns it
+
+- date: 2026-10-26
+- situation: After fixing the data-modeling card in 1.7.0, I measured 3 runs of benchmark B3. Decision records in migration comments appeared in 3/3,
+  but `created_by` · `updated_by` · history tables were 0. The user's point: "It is wrong to say it cannot be called because it only thought in its head — make it spit the thing out so that it works."
+- mistake: ① The planning skill said "the physical schema is the card's job — do not create a separate document", which kept the design in the head. The design is finished
+  while reading the PRD, and the whole table definition goes into a single Write. ② The "new schema file" notice attached to that Write was non-blocking, so it arrived **after the file was saved**,
+  and the agent added an omission-reason comment instead of redesigning (card reached before the first table 1/3, in a fresh session 0/3). ③ The card's "one-line reason if omitted" exit and
+  its "nearly every table" wording justified omission even in the run that read the card to the end (run4).
+- lesson: Give a judgement that needs a norm a **step that brings it out into a file** (table design → `dev/docs/database/`), and make the owning card be read in front of the first Write to that file
+  (the `security-check` prior-knowledge gate — once per item per session, undecidable becomes a notice). The notices that patched one path at a time (UI · schema) were
+  partial fixes for the same gap. Leave no exit in a mandatory norm that disappears if you only write a reason — write the exception as structure (only append-only tables lack `updated_*`).
+  In the same benchmark an advisory on a dependency (`postcss 8.4.31` pulled in by Next.js 15, 3 high) was resolved by raising only the transitive dependency through `overrides` (B3 run6) — the audit lives in the security card and the reviewer's security axis.
+
+## [category: workflow] Skills, not only rules, lose to "judgement in the head" — hang a skill's "when" on the execution path (the first write)
+
+- date: 2026-10-27
+- situation: After the card gate went in, the user said "solve the root cause so that the problem of rules or skills not being called does not come back". I re-measured the same B3 records.
+- mistake: The routing card said "for a behavior change in a repo with a test runner, `/test-driven-development`" (P4), yet all 9 runs of stages 1·2·4 called it 0 times (vitest was present).
+  The only skill call was `dev-docs-generator` once at stage 0. And the first gate looked only at Write, but Bash file writes in stage 1 were 25~43 per run (`cat >` · `sed -i`),
+  and a Bash edit does not force a Read, so there is no native load either. Reading only the front with Read `limit` counted as "read".
+- lesson: A sentence "call X when Y" is kept only when it is hung on the execution path. A card declares it with `paths:`, a skill with the graph's `beforeWrite` (one place, verified by doctor),
+  and `security-check` confirms it entered before the first write of a new file (Write · Bash) — TDD only when a test runner exists, and test files excluded.
+  A partial read is not a read. Undecidable does not block, and each item blocks only once per session (no infinite loop).

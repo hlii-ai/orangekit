@@ -75,6 +75,13 @@ family have their value statically substituted at build time. Putting such a pre
   into 409. A concurrent request between the check and the insert leaks out as a 500
 - **Every write inside a transaction goes through that transaction's handle** — a row written with the outer client survives the rollback
 
+## Known Vulnerabilities in Dependencies
+
+- When you add a dependency, or scaffold a project so that a lockfile appears, confirm 0 high · critical with a **production-dependency audit** —
+  `npm audit --omit=dev` · `pnpm audit --prod` · `pip-audit` and the like. If the audit fails because it is offline, report "undecidable"
+- If the advisory is on a **transitive dependency**, raise only that package before reaching for a major upgrade (`overrides` · `pnpm.overrides` ·
+  `resolutions`). That holds even when the fix the audit tool offers is only a major upgrade of the parent package
+
 ## What Is Not Here
 
 The five-step check before adopting a dependency → `.claude/rules/code-change.md`

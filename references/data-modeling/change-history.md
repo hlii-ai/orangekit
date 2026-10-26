@@ -11,7 +11,7 @@
 
 | Level | Columns | Applies to |
 | --- | --- | --- |
-| **Level 1** (basic) | `created_at`, `created_by`, `updated_at`, `updated_by` — all NOT NULL | **almost every table** (card §8). A table that must never change carries only `created_*` |
+| **Level 1** (basic) | `created_at`, `created_by`, `updated_at`, `updated_by` — all NOT NULL | **every table** (the card's "Default columns for every new table"). Only an append-only table that must never change carries just `created_*` — there is no other omission |
 | **Level 2** (change reason) | `change_type` (a classification code for the system), `change_reason` (a description for people) | business-critical tables such as price, status, tier |
 | **Level 3** (audit) | `source_system`, `client_ip` | tables under regulatory or security requirements, or changed by several systems |
 | **Level 4** (distributed tracing) | `request_id` | microservices — trace the whole flow of one request |
@@ -216,3 +216,5 @@ For an admin app with very little traffic, keeping DB logs for convenience is ac
 10. UPDATEing or DELETEing rows of an event ledger. A ledger must be immutable.
 11. Piling system logs (HTTP requests, debug information) into the business DB.
 12. Leaving `updated_at` and `updated_by` NULL on INSERT.
+13. Dropping `created_by` · `updated_by` because "the actor is only the owning user" or "only the admin token". Put that ID in —
+    a system job uses a fixed system actor ID. If it is missing, the "who" of an operational correction is not recorded.

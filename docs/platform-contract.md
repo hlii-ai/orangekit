@@ -136,6 +136,10 @@ checked: 2026-08-24 · source: https://code.claude.com/docs/en/memory
 `paths` is a glob and supports brace expansion. User-level `~/.claude/rules/` loads **before** project
 rules (= the project takes precedence).
 
+> **A Write of a new file is not a "read"** — at the moment a file is first created at a matching path, the `paths:` card does not come up.
+> That gap is filled by the prior-knowledge gate of `security-check` (it sends the first write back once, before the card for that path has been read — for both Write and Bash writes).
+> The same goes for an existing file edited through Bash — Bash does not force a Read, so no native load happens.
+>
 > The moment you attach `paths:` it becomes conditional. **Norms needed before work starts** (what to build in
 > what order; the check right before citing previously written material) are needed at a point where no file has
 > been opened yet, so they must not carry `paths`.

@@ -1,5 +1,5 @@
 {
-  "$comment": "Declares the harness as a machine-readable graph. In v2 this graph was scattered across markdown tables and prose, making it impossible to verify or instrument, and as a result 'a declared but unreachable asset' (rules/, 697 lines) went undiscovered by anyone for 4 months. doctor --graph uses this file to check for dangling edges, unreachable nodes, and missing error edges. instrumented:true on an edge means a hook actually emits it. Edges between stages are model behavior and cannot be emitted by code, so they are excluded from the 'dead edge' decision. A node's phase links this graph to the Phase vocabulary in rules/workflow-routing.md (P0-A~E, P1~P6) — if the two vocabularies diverge, routing becomes machine-uncheckable. A node's produces is attached only to 'artifacts the harness reads again later' — an artifact that is delivered to the user and ends there (a marketing site, a favicon) is not a store. A store node must have both inbound (write) and outbound (read) edges: a store with no reader is pure cost and a source of drift.",
+  "$comment": "Declares the harness as a machine-readable graph. In v2 this graph was scattered across markdown tables and prose, making it impossible to verify or instrument, and as a result 'a declared but unreachable asset' (rules/, 697 lines) went undiscovered by anyone for 4 months. doctor --graph uses this file to check for dangling edges, unreachable nodes, and missing error edges. instrumented:true on an edge means a hook actually emits it. Edges between stages are model behavior and cannot be emitted by code, so they are excluded from the 'dead edge' decision. A node's phase links this graph to the Phase vocabulary in rules/workflow-routing.md (P0-A~E, P1~P6) — if the two vocabularies diverge, routing becomes machine-uncheckable. A node's produces is attached only to 'artifacts the harness reads again later' — an artifact that is delivered to the user and ends there (a marketing site, a favicon) is not a store. A store node must have both inbound (write) and outbound (read) edges: a store with no reader is pure cost and a source of drift. A node's beforeWrite declares that a skill 'must be called before the first write to that path' — the prior-knowledge gate of security-check reads only this (when: test-runner = only when a test runner exists). It is the only place that hangs a sentence of the routing card on the execution path.",
   "nodes": [
     {
       "id": "session-start",
@@ -329,7 +329,13 @@
         "P3"
       ],
       "path": "skills/dev-docs-generator/SKILL.md",
-      "when": "P3 — the work spans sessions (multiple tasks)"
+      "when": "P3 — the work spans sessions (multiple tasks)",
+      "beforeWrite": {
+        "paths": [
+          "dev/active/**"
+        ],
+        "why": "P3 — dev docs are written in this skill's three-document format and vertical slices"
+      }
     },
     {
       "id": "completion-review",
@@ -353,7 +359,34 @@
       "when": "P4 implementation — write the test before implementing a feature or bug fix",
       "phase": [
         "P4"
-      ]
+      ],
+      "beforeWrite": {
+        "paths": [
+          "src/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}",
+          "app/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}",
+          "lib/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}",
+          "server/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}",
+          "packages/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}",
+          "apps/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}",
+          "services/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}",
+          "backend/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}",
+          "api/**/*.{ts,tsx,js,jsx,mjs,cjs,py,go,rs,java,kt,swift,rb,php,cs}"
+        ],
+        "unless": [
+          "**/*.test.*",
+          "**/*.spec.*",
+          "**/tests/**",
+          "**/test/**",
+          "**/__tests__/**",
+          "**/test_*.py",
+          "**/*_test.py",
+          "**/*_test.go",
+          "**/*.d.ts",
+          "**/*.config.*"
+        ],
+        "when": "test-runner",
+        "why": "P4 — in a repo with a test runner, new behavior code starts from a failing test"
+      }
     },
     {
       "id": "codex-claude-loop",

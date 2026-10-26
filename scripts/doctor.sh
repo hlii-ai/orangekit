@@ -1939,27 +1939,99 @@ CASES
   fi
   rm -rf "${td:-/nonexistent}"
 
-  # ── Summoning on a new schema file (does not block) ──────────────────────────
-  # The data-modeling card loads when read, so it does not come up on the first migration (a new Write) —
-  # the hook fills that gap. It must fire only on a new file, and not on an overwrite or a .sql outside the schema.
-  local nd ndcode ndout ndhit ndmiss
+  # ── Prior-knowledge gate (rule cards · skills) ──────────────────────────────
+  # An agent finishes its judgement in its head and goes straight to writing the file — a `paths:` card comes up only when read and a skill is called only when
+  # the model picks it (benchmark B3: card reached before the first table 1/3, TDD skill called 0/9).
+  # The gate sends back, once, the first write made before the card · skill that owns the path has entered this session.
+  # To prove: ① if not called, exit 2 **naming that item** ② once per session per item (no infinite loop)
+  # ③ if called, pass (a Read to the end · cat · a Read of a matching file · a Skill call · a /command) ④ compaction and partial reads are void
+  # ⑤ Bash writes (heredoc · sed -i) get the same verdict, and a `>` inside a heredoc body is not a write ⑥ overwrites · Edit · out of jurisdiction · undecidable pass
+  # ⑦ the TDD skill only when a test runner exists, and test files are excluded.
+  local nd gwant gexp gtool garg gtr gsid glabel gcode gerr gok=0 gbad=0 gphase
   nd=$(mktemp -d 2>/dev/null) || nd=""
   if [ -n "$nd" ] && command -v jq >/dev/null 2>&1; then
-    mkdir -p "$nd/db/migrations"; : > "$nd/db/migrations/0001_init.sql"
-    _nudge() {   # $1 file_path → stdout
-      jq -nc --arg p "$1" '{tool_name:"Write",tool_input:{file_path:$p,content:"select 1;"}}' \
-        | env -i PATH="$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$nd" ORANGEKIT_STATE_DIR="$nd/.state" \
-            bash "$ROOT/scripts/security-check.sh" 2>/dev/null
+    mkdir -p "$nd/.claude/rules" "$nd/migrations" "$nd/tr"
+    for glabel in data-modeling ui-design code-change workflow-routing; do cp "$ROOT/rules/$glabel.md" "$nd/.claude/rules/"; done
+    : > "$nd/migrations/0001_init.sql"
+    _tl() {   # one transcript line: C | R path [limit] | B command | S skill | U user sentence
+      case "$1" in
+        C) jq -nc '{type:"system",subtype:"compact_boundary"}' ;;
+        R) jq -nc --arg v "$2" --arg l "${3:-}" '{type:"assistant",message:{content:[{type:"tool_use",name:"Read",input:({file_path:$v} + (if $l=="" then {} else {limit:($l|tonumber)} end))}]}}' ;;
+        B) jq -nc --arg v "$2" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$v}}]}}' ;;
+        S) jq -nc --arg v "$2" '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:{skill:$v}}]}}' ;;
+        U) jq -nc --arg v "$2" '{type:"user",message:{content:$v}}' ;;
+      esac; }
+    local rr="$nd/.claude/rules"
+    : > "$nd/tr/none.jsonl"
+    _tl R "$rr/data-modeling.md" > "$nd/tr/read.jsonl"
+    { _tl R "$rr/data-modeling.md"; _tl C; } > "$nd/tr/compacted.jsonl"
+    _tl R "$nd/migrations/0001_init.sql" > "$nd/tr/native.jsonl"
+    _tl B "cat .claude/rules/data-modeling.md stack.md | head -400" > "$nd/tr/cat.jsonl"
+    _tl B "head -60 .claude/rules/data-modeling.md" > "$nd/tr/head.jsonl"
+    _tl R "$rr/data-modeling.md" 60 > "$nd/tr/partial.jsonl"
+    _tl R "$rr/code-change.md" > "$nd/tr/code.jsonl"
+    { _tl R "$rr/code-change.md"; _tl S "orangekit-product:test-driven-development"; } > "$nd/tr/code-tdd.jsonl"
+    _tl S "orangekit-product:dev-docs-generator" > "$nd/tr/docs-skill.jsonl"
+    _tl U "<command-name>/dev-docs-generator</command-name> feature 1" > "$nd/tr/docs-cmd.jsonl"
+    _gate() {   # $1 tool $2 path or command (\n allowed) $3 transcript (-=none) $4 session
+      local a; a=$(printf '%b' "$2")
+      jq -nc --arg t "$1" --arg a "$a" --arg tp "$3" --arg s "$4" --arg cwd "$nd" \
+        '{session_id:$s,cwd:$cwd,tool_name:$t,hook_event_name:"PreToolUse"}
+         + (if $t=="Bash" then {tool_input:{command:$a}} else {tool_input:{file_path:$a,content:"x",old_string:"a",new_string:"b"}} end)
+         + (if $tp=="-" then {} else {transcript_path:$tp} end)' \
+        | env -i PATH="$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$nd" ORANGEKIT_STATE_DIR="$nd/.state" CLAUDE_PLUGIN_ROOT="$ROOT" \
+            bash "$ROOT/scripts/security-check.sh" >"$nd/out" 2>"$nd/err"
     }
-    ndhit=$(_nudge "$nd/db/migrations/0002_core.sql" | grep -c 'new schema file' || true)
-    ndmiss=$( { _nudge "$nd/db/migrations/0001_init.sql"; _nudge "$nd/scripts/report.sql"; } | grep -c 'new schema file' || true)
-    if [ "$(num "$ndhit")" -eq 1 ] && [ "$(num "$ndmiss")" -eq 0 ]; then
-      ok "security-check: the data-modeling default-columns summons fires only on a new schema file (overwrites and .sql outside the schema excluded)"
-    else
-      bad "security-check: new-schema summons — ${ndhit} on new · ${ndmiss} on excluded targets" "it must be 1 on new · 0 on excluded"
-    fi
+    _gcase() {
+      gwant=$1 gexp=$2 gtool=$3 garg=$4 gtr=$5 gsid=$6 glabel=$7
+      [ "$gtool" = Bash ] || garg="$nd/$garg"
+      [ "$gtr" = - ] || gtr="$nd/tr/$gtr.jsonl"
+      gcode=0; _gate "$gtool" "$garg" "$gtr" "$gsid" || gcode=$?
+      gerr=$(cat "$nd/err" "$nd/out" 2>/dev/null)
+      if [ "$gcode" -eq "$gwant" ] && { [ "$gexp" = "-" ] || printf '%s' "$gerr" | grep -qF -- "$gexp"; }; then
+        gok=$((gok+1))
+      else
+        gbad=$((gbad+1)); bad "prior-knowledge gate: $glabel → exit $gcode (expected $gwant, reason \"$gexp\")" "$(printf '%s' "$gerr" | head -3)"
+      fi
+    }
+    for gphase in norunner runner; do
+      [ "$gphase" = runner ] && printf '{"scripts":{"test":"vitest run"}}\n' > "$nd/package.json"
+      while IFS='|' read -r gwant gexp gtool garg gtr gsid glabel; do
+        [ -z "$gwant" ] && continue
+        case "$glabel" in "[$gphase]"*) ;; *) continue ;; esac
+        _gcase "$gwant" "$gexp" "$gtool" "$garg" "$gtr" "$gphase-$gsid" "$glabel"
+      done <<'CASES'
+2|data-modeling.md|Write|migrations/0002_core.sql|none|s1|[norunner] new migration · card not read → blocked, naming the data-modeling card
+0|announced once in this session|Write|migrations/0003_more.sql|none|s1|[norunner] second time in the same session → not blocked, a notice (no infinite loop)
+2|data-modeling.md|Write|dev/docs/database/rewards.md|none|s2|[norunner] a new DB design doc is blocked by the same card (at design time)
+0|-|Write|migrations/0002_core.sql|read|s3|[norunner] card Read to the end → pass
+2|data-modeling.md|Write|migrations/0002_core.sql|compacted|s4|[norunner] compacted after reading → must read again
+0|-|Write|migrations/0002_core.sql|native|s5|[norunner] a matching file was Read (native load) → pass
+0|-|Write|migrations/0002_core.sql|cat|s6|[norunner] whole card read with cat → pass
+2|data-modeling.md|Write|migrations/0002_core.sql|head|s7|[norunner] only the front with head → blocked
+2|data-modeling.md|Write|migrations/0002_core.sql|partial|s8|[norunner] Read limit 60 (partial read) → blocked
+2|ui-design.md|Write|src/components/Card.tsx|read|s9|[norunner] only another card read, then a new UI file → blocked, naming ui-design
+0|-|Write|migrations/0001_init.sql|none|s10|[norunner] overwriting an existing file → not blocked
+0|-|Edit|migrations/0002_core.sql|none|s11|[norunner] Edit → not blocked
+0|-|Write|notes.txt|none|s12|[norunner] a new file in nobody's jurisdiction → not blocked
+0|cannot be determined|Write|migrations/0002_core.sql|-|s13|[norunner] no transcript (undecidable) → not blocked, a notice
+2|dev-docs-generator|Write|dev/active/feat/plan.md|none|s14|[norunner] new dev doc · skill not called → blocked, naming dev-docs-generator
+0|-|Write|dev/active/feat/plan.md|docs-skill|s15|[norunner] dev-docs-generator called through Skill → pass
+0|-|Write|dev/active/feat/plan.md|docs-cmd|s16|[norunner] the user called it with /dev-docs-generator → pass
+0|-|Write|src/server/points.ts|code|s17|[norunner] no test runner → the TDD skill is not required
+2|data-modeling.md|Bash|cat > migrations/0009_x.sql <<'EOF'\nCREATE TABLE a (id int);\nEOF|none|s18|[norunner] new migration via a Bash heredoc → blocked
+2|data-modeling.md|Bash|sed -i '' 's/int/bigint/' migrations/0001_init.sql|none|s19|[norunner] editing an existing migration with Bash sed -i → blocked (Bash does not force a Read)
+0|-|Bash|cat > notes.txt <<'EOF'\nsee > migrations/0010_y.sql later\nEOF|none|s20|[norunner] a `>` inside a heredoc body is not a write → pass
+0|-|Bash|npm test > /tmp/test.log 2>&1|none|s21|[norunner] a log outside the project → pass
+0|-|Bash|cat > migrations/0009_x.sql <<'EOF'\nCREATE TABLE a (id int);\nEOF|read|s22|[norunner] Bash heredoc after reading the card → pass
+2|test-driven-development|Write|src/server/points.ts|code|s1|[runner] test runner present · new behavior code · TDD not called → blocked
+0|-|Write|src/server/points.ts|code-tdd|s2|[runner] TDD skill called → pass
+0|-|Write|src/server/points.test.ts|code|s3|[runner] a test file → TDD not required
+CASES
+    done
+    [ "$gbad" -eq 0 ] && ok "security-check: prior-knowledge gate $gok/$gok — write only after calling the owning card · skill (Write · Bash), once per item per session, undecidable passes"
   else
-    warn "temporary directory or jq missing" "the new-schema summons is unproven"
+    warn "temp directory or jq missing" "the prior-knowledge gate is unproven"
   fi
   rm -rf "${nd:-/nonexistent}"
 
@@ -2303,6 +2375,13 @@ run_graph() {
     fi
   done < <(jq -r '.nodes[]? | "\(.id)\t\(.kind)\t\(.path // "")"' "$g" 2>/dev/null)
   [ "$missing" -eq 0 ] && ok "all ${ntot} nodes exist"
+
+  # beforeWrite — a skill declares "call me before the first write to that path". The prior-knowledge gate reads only this,
+  # so a node that is not a skill, an empty path list, or an unknown condition quietly makes it inert
+  local bwbad
+  bwbad=$(jq -r '.nodes[]? | select(.beforeWrite) | select(.kind!="skill" or ((.beforeWrite.paths // []) | length)==0 or ((.beforeWrite.when // "") | IN("","test-runner") | not)) | .id' "$g" 2>/dev/null)
+  if [ -n "$bwbad" ]; then bad "node with an invalid beforeWrite declaration: $(printf '%s' "$bwbad" | tr '\n' ' ')" "a skill node · at least 1 path · when empty or test-runner"
+  else ok "$(jq '[.nodes[]? | select(.beforeWrite)] | length' "$g") beforeWrite declarations — skill node · paths · condition valid"; fi
 
   # Edge target existence
   local ids dang=0 etot=0
