@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "OrangeKit Claude Code Devkit — AI Native Dev Harness (reversibility axis + self-testing hooks + graph instrumentation)",
-    "version": "1.9.0"
+    "version": "1.10.0"
   },
   "plugins": [
     {
       "name": "orangekit-product",
       "source": "./",
       "description": "AI Native Dev Harness — reversibility-axis workflow, 5 hooks that verify themselves, graph instrumentation (doctor). 26 skills + axis guide packs (frontend 4 · app 1 · backend 9), 3-axis presets (frontend 5 · app 5 · backend 11).",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "author": {
         "name": "hlii-ai"
       },

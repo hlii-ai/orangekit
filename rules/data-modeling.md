@@ -11,7 +11,7 @@ paths:
   - "alembic/**"
   - "**/*.sql"
 ---
-<!-- orangekit-rule-version: 3.39.0 -->
+<!-- orangekit-rule-version: 3.41.0 -->
 
 # Data Modeling Card
 
@@ -42,9 +42,12 @@ it is the case where **that user's or admin's ID goes in**. Batches · webhooks 
 
 **Decide three things per table** and write them in the migration comment (or the table definition document) — these are per-table decisions, not a blanket default:
 
-1. **Deletion strategy** — Status · Soft (`deleted_at`·`deleted_by`) · Hard. Core-domain tables (orders · payments · settlements) are managed by status rather than deleted,
-   and Soft Delete is not bolted onto every table mechanically (→ `deletion-strategy.md`)
-2. **History level** — a dedicated `_history` table (full-row snapshot, starting from the row's creation) · the shared `audit_log` · none (→ `change-history.md`)
+1. **Deletion — logical deletion is the default.** Wrongly entered data must be removable while keeping its history. Soft (`deleted_at`·`deleted_by`),
+   or, for core domains managed by status (orders · payments · settlements), a void state (`VOIDED`) + `voided_at`·`voided_by`.
+   **Physical deletion only for the exempt tables** — tables whose history survives another way or that have nothing to lose: ledgers (fixed by
+   adding correcting entries) · archive tables · history tables · derived caches (recomputed from the source) · expiring data (tokens · verification links · sessions · idempotency keys) · single-row settings (→ `deletion-strategy.md`)
+2. **History level — only on tables that truly need it**: a dedicated `_history` (where past values, point-in-time reads or audit are needed: price · balance · contract · permission · state transitions) ·
+   the shared `audit_log` · none. Do not attach a history table to every table (→ `change-history.md`)
 3. **Code-column approach** — app ENUM + `CHECK` · a common-code table · hybrid (→ `common-code.md`)
 
 **Operational corrections must be traceable under any strategy** — fixing, voiding, or deleting wrongly entered data leaves who · when · why · before/after values
@@ -181,6 +184,7 @@ Mandatory checks when creating a new table:
 - [ ] TypeScript type definitions → the project's type directory (in a monorepo, the shared package's `types/`) + update the barrel export
 - [ ] Table definition document → `dev/docs/database/` (optional, from medium scale up)
 - [ ] The "Default columns for every new table" section above — the default columns are on every table (only append-only tables lack `updated_*`), and the three per-table decisions (deletion strategy · history level · code-column approach) are written in the migration comment
+- [ ] Unless the table is exempt, it has logical-deletion columns (`deleted_at`·`deleted_by` or `voided_at`·`voided_by`)
 - [ ] Soft Delete tables: the active-row index and UNIQUE in the dialect's form (PG partial index / MySQL `(business_key, deleted_at)` + change the value on withdrawal) + the RLS condition updated (→ `deletion-strategy.md`)
 - [ ] Tables that require business history → create the `_{table}_history` history table at the same time (→ `change-history.md`)
 - [ ] When idempotency is needed: an `idempotency_key` UNIQUE column + TTL cleanup (→ `idempotency.md`)
@@ -200,7 +204,7 @@ Read **only the one** file on the matching row — reading them all makes the sp
 | A **self-referencing hierarchy**, like a category tree·org chart | [`hierarchy.md`](../references/data-modeling/hierarchy.md) — designing a hierarchy |
 | You **must keep a history** of who changed what and when | [`change-history.md`](../references/data-modeling/change-history.md) — designing data change history |
 | You only need to hold the single previous value in a column | [`scd-type3.md`](../references/data-modeling/scd-type3.md) — keeping the previous value in a column — SCD Type 3 |
-| Deciding a table's **deletion strategy** (status value · Soft · Hard), or implementing Soft Delete or operational corrections | [`deletion-strategy.md`](../references/data-modeling/deletion-strategy.md) — data deletion strategy — Status vs Soft Delete vs Hard Delete |
+| Deciding a table's **deletion approach** (logical deletion · physical deletion for exempt tables), or implementing Soft Delete or operational corrections | [`deletion-strategy.md`](../references/data-modeling/deletion-strategy.md) — data deletion strategy — logical deletion by default, physical deletion only for exempt tables |
 | A **statistics table** for aggregation·dashboards | [`statistics.md`](../references/data-modeling/statistics.md) — designing a statistics table |
 | It must stay safe **when the same request arrives twice**, as with payments·webhooks | [`idempotency.md`](../references/data-modeling/idempotency.md) — designing idempotency |
 | The attributes vary, so the columns cannot be fixed (regular columns vs JSON vs EAV) | [`eav-vs-jsonb.md`](../references/data-modeling/eav-vs-jsonb.md) — designing dynamic attributes |

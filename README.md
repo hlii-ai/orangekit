@@ -2,7 +2,7 @@
 
 AI Native Dev Harness for Claude Code — reversibility-axis workflow, self-testing hooks, graph instrumentation.
 
-![version](https://img.shields.io/badge/version-1.9.0-blue)
+![version](https://img.shields.io/badge/version-1.10.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## What it is
@@ -116,7 +116,7 @@ A Phase number marks order, not obligation — when the 4 entry conditions hold,
 | Layer | Count | Contents |
 |------|-----|------|
 | **Hooks** | 5 scripts / 6 registrations | SessionStart · PreToolUse · Stop · PreCompact · SessionEnd · PostToolUse |
-| **Rules** | T0 41 lines + T1 9 cards 1,155 lines | T0 is injected by a hook at all times (plugin-owned). Of T1, `workflow-routing` is **always on, every session**; the rest load conditionally on a path match |
+| **Rules** | T0 41 lines + T1 9 cards 1,159 lines | T0 is injected by a hook at all times (plugin-owned). Of T1, `workflow-routing` is **always on, every session**; the rest load conditionally on a path match |
 | **Agents** | 2 | `orangekit-planner` (no writes) · `orangekit-reviewer` (read-only) |
 | **Skills** | 26 | Survey · planning · implementation · verification · security · PR workflow + stack guide generator + skill enhancer (the 5 marketing skills are split into `orangekit-marketing`, the 1 harness evaluation skill into the `orangekit-harness` plugin) |
 | **Presets** | 3-axis 5+5+11 | Web screens: nextjs·react-vite·vue·vanilla·none / App: react-native·flutter·ios-swift·android-kotlin·native-dual / Backend: supabase·firebase·aws-serverless·aws-container·gcp-serverless·fastapi·node-api·node-nest·fastify·rust-axum·none |
@@ -294,7 +294,7 @@ It checks with `doctor --default` after each step as it goes, and preserves proj
 | Item | v2 | v3 |
 |------|-----|-----|
 | Hooks | 11 (many void from output-format violations such as Stop's `decision`/`reason`) | **5, every one self-testing** |
-| Rules | the generator copied them into `.claude/rules/` (3 unconditionally loaded + 11 conditional) | **T0 41 lines + T1 1,155 lines, installation demonstrated by `install-rules.sh`. The always-on/conditional split is kept** |
+| Rules | the generator copied them into `.claude/rules/` (3 unconditionally loaded + 11 conditional) | **T0 41 lines + T1 1,159 lines, installation demonstrated by `install-rules.sh`. The always-on/conditional split is kept** |
 | Verification strength | S/M/L size judgement | **reversibility axis (decided by path)** |
 | Phase | P0~P6 (`.claude/rules/task-workflow.md` loaded always) | **P0~P6 kept** — moved to `workflow-routing.md`, the always-loaded property preserved |
 | Agents | no frontmatter, access to every tool | **full contract + least privilege** |

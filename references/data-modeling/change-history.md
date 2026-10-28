@@ -1,4 +1,4 @@
-<!-- orangekit-rule-version: 3.39.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
+<!-- orangekit-rule-version: 3.41.0 · this file is canonical. Parent card: .claude/rules/data-modeling.md -->
 
 # Data change-history design
 
@@ -34,6 +34,8 @@
 
 - If any of these is "yes", consider a dedicated history table: is it a business-critical change · are past values read · are point-in-time reads needed · is there an audit requirement.
 - Things that **do not need** a dedicated history: logs, temporary data, code tables that almost never change, and large content such as a body text.
+- **Put a history table only on tables that truly need it.** If none of the questions above is "yes", do not create one — a `_history` on every table only adds write cost and things to manage.
+  Logical deletion (`deleted_at` · `voided_at`) already keeps the trace of a removal, so do not create a history table just for deletion (→ [`deletion-strategy.md`](./deletion-strategy.md)).
 - **Ledger-like data** such as amounts and points is managed as an event ledger whose rows are never updated (current value = `SUM(delta)`).
   Never UPDATE or DELETE a ledger row.
 - For a linear state where only the single previous value is needed, use [`scd-type3.md`](./scd-type3.md).
@@ -218,3 +220,4 @@ For an admin app with very little traffic, keeping DB logs for convenience is ac
 12. Leaving `updated_at` and `updated_by` NULL on INSERT.
 13. Dropping `created_by` · `updated_by` because "the actor is only the owning user" or "only the admin token". Put that ID in —
     a system job uses a fixed system actor ID. If it is missing, the "who" of an operational correction is not recorded.
+14. Creating a `_history` for every table without deciding whether it is needed. Only tables that need past values, point-in-time reads or audit get one.
