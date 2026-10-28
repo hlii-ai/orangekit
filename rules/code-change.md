@@ -9,7 +9,7 @@ paths:
   - "android/**"
   - "lib/**"
 ---
-<!-- orangekit-rule-version: 3.32.0 -->
+<!-- orangekit-rule-version: 3.40.0 -->
 
 # Code Change Card
 
@@ -139,6 +139,13 @@ stop the install and report to the user**. If 10 lines can replace the feature, 
 
 **The primary evidence is the registry and the repository** — do not use an AI-generated comparison table·a single blog post·a
 Stack Overflow answer as grounds for the choice. They are good for "how do I use it" and bad for "should I use it".
+
+**Versions start from the latest stable release.** A new project's scaffold and any new dependency are installed at that package's
+**latest stable release** (check the registry — `npm view <pkg> version` · `pip index versions <pkg>`). The "verified versions" on a stack card
+(a major such as `next@15`) are **the version that guidance was verified against**, not an install instruction — starting from a past major
+means inheriting security advisories that are already fixed (measured: a project started on Next.js 15 set off with a postcss high advisory).
+If the installed major is newer than the verified one, where it conflicts with a card item the package's **official upgrade or migration
+docs take precedence**. A major upgrade of a project already in operation is not covered by this rule — ask about it as separate work.
 
 If the choice is **Costly or higher, record it in `docs/decisions.md`** — what is needed later is not what you picked but **the candidates
 you dropped and why** (the canonical format is `.claude/rules/reversibility.md`).

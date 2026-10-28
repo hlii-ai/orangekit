@@ -10,14 +10,16 @@
 # Only exact patterns are used. A false positive makes the user turn the hook off,
 # and then the blocking power is 0.
 
-INPUT=$(cat 2>/dev/null || printf '{}')
+# `--owning <path>…` — not the hook but a lookup mode: prints, one per line, the rule cards and skills the gate would require before the first write to that path.
+# The planning stage (dev-docs-generator) uses it to fill in "Read first" for each slice — it must be the **same judgement** as the gate, so no copy is kept.
+if [ "${1:-}" = "--owning" ]; then INPUT='{}'; else INPUT=$(cat 2>/dev/null || printf '{}'); fi
 # shellcheck source=lib/common.sh
 source "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/lib/common.sh"
 
 # A failed root resolution must not stop the security check — only the heartbeat is best-effort
 ORANGEKIT_HOOK_NAME="security-check"
 ORANGEKIT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || printf '')}"
-[ -n "$ORANGEKIT_ROOT" ] && orangekit_heartbeat 0
+[ -n "$ORANGEKIT_ROOT" ] && [ "${1:-}" != "--owning" ] && orangekit_heartbeat 0
 
 TOOL_NAME=$(orangekit_field "$INPUT" '.tool_name')
 FILE_PATH=$(orangekit_field "$INPUT" '.tool_input.file_path')
@@ -107,14 +109,14 @@ _gate_rel() {   # $1 path (absolute or relative) $2 base directory → the proje
   case "$p" in /*) ;; *) p="${2:-$ORANGEKIT_ROOT}/${p#./}" ;; esac
   case "$p" in "$ORANGEKIT_ROOT"/*) printf '%s' "${p#"$ORANGEKIT_ROOT"/}" ;; esac
 }
-_knowledge_gate() {   # $1 project-relative path  $2 1=new file 0=existing  → exit 2 if it blocks
-  local rel="$1" isnew="$2" c re n un ex when names=() kinds=() res=() unread=() again=() _k _v _l seen
+_owners_of() {   # $1 project-relative path  $2 1=new file 0=existing → lines of "card<TAB>name<TAB>ERE" · "skill<TAB>name<TAB>"
+  local rel="$1" isnew="$2" c re n un when
   [ -n "$rel" ] && [ -n "$ORANGEKIT_ROOT" ] || return 0
   if [ -d "$ORANGEKIT_ROOT/.claude/rules" ]; then
     for c in "$ORANGEKIT_ROOT"/.claude/rules/*.md; do
       [ -f "$c" ] || continue
       re=$(_card_re "$c"); [ -n "$re" ] || continue
-      [[ "$rel" =~ $re ]] && { names+=("${c##*/}"); kinds+=(card); res+=("$re"); }
+      [[ "$rel" =~ $re ]] && printf 'card\t%s\t%s\n' "${c##*/}" "$re"
     done
   fi
   local graph="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/workflow.graph.json"
@@ -126,9 +128,17 @@ _knowledge_gate() {   # $1 project-relative path  $2 1=new file 0=existing  → 
       [ -n "$re" ] && [[ "$rel" =~ $re ]] || continue
       [ -n "$un" ] && [[ "$rel" =~ $un ]] && continue
       [ "$when" = "test-runner" ] && ! _has_test_runner && continue
-      names+=("$n"); kinds+=(skill); res+=("")
+      printf 'skill\t%s\t\n' "$n"
     done < <(jq -r '.nodes[]? | select(.kind=="skill" and .beforeWrite) | "\(.id)\t\(.beforeWrite.when // "")"' "$graph" 2>/dev/null)
   fi
+  return 0
+}
+_knowledge_gate() {   # $1 project-relative path  $2 1=new file 0=existing  → exit 2 if it blocks
+  local rel="$1" isnew="$2" n re names=() kinds=() res=() unread=() again=() _k _v _l seen _ok _on _or
+  while IFS="$(printf '\t')" read -r _ok _on _or; do
+    [ -n "$_ok" ] || continue
+    kinds+=("$_ok"); names+=("$_on"); res+=("$_or")
+  done < <(_owners_of "$rel" "$isnew")
   [ ${#names[@]} -gt 0 ] || return 0
   local tp sid state list
   tp=$(orangekit_field "$INPUT" '.transcript_path')
@@ -170,6 +180,7 @@ $list"
     done
     printf '\nA rule card loads only when a file is *read*, and a skill applies only when it is *called* — writing from judgement in your head alone skips both.\n' >&2
     printf 'Load the items above, then redo this work to that standard. (Each item stops you only once per session)\n' >&2
+    printf 'To avoid this stop next time: read the cards listed under "Read first" in the plan (tasks.md) slice when you start the slice.\n' >&2
     exit 2
   fi
   if [ ${#again[@]} -gt 0 ]; then
@@ -179,6 +190,17 @@ $list"
   fi
   return 0
 }
+if [ "${1:-}" = "--owning" ]; then
+  shift
+  [ -n "$ORANGEKIT_ROOT" ] || { printf 'cannot determine: the project root was not found\n' >&2; exit 0; }
+  for _op in "$@"; do
+    _orel=$(_gate_rel "$_op" "$PWD")
+    [ -n "$_orel" ] || continue
+    _oe=1; [ -e "$ORANGEKIT_ROOT/$_orel" ] && _oe=0
+    _owners_of "$_orel" "$_oe" | awk -F'\t' -v p="$_orel" '{ if ($1 == "card") print p "\tRead .claude/rules/" $2; else print p "\t/" $2 }'
+  done
+  exit 0
+fi
 if [ "$TOOL_NAME" = "Write" ] && [ -n "$FILE_PATH" ] && [ ! -e "$FILE_PATH" ]; then
   _knowledge_gate "$(_gate_rel "$FILE_PATH" "$ORANGEKIT_ROOT")" 1
 fi
@@ -464,13 +486,57 @@ _expand_shell_literals() {
         consumed = substr(rest, 1, RSTART + RLENGTH - 1); body = substr(rest, 1, RSTART - 1); after = substr(rest, RSTART + RLENGTH)
         v = orig; sub(/^for[ \t]+/, "", v); sub(/[ \t].*$/, "", v)
         ws = orig; sub(/^for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+/, "", ws); sub(/;[ \t]*do[ \t]+$/, "", ws); gsub(/^[ \t]+|[ \t]+$/, "", ws)
-        n = split(ws, words, /[ \t]+/); ok = (n > 0 && n <= 8)
+        n = split(ws, words, /[ \t]+/); ok = (n > 0 && n <= 32)
         for (i = 1; i <= n; i++) if (!isword(words[i])) ok = 0
         if (!ok || index(body, "for ") > 0) { out = out orig consumed; s = after; continue }
         for (i = 1; i <= n; i++) out = out subst(body, v, words[i]) "; "
         s = after
       }
       return out s
+    }
+    # ③ A `f() { BODY; }` definition and calls like `f w1 w2` — at each call, expand `$1`…`$9` in BODY to the literal arguments and delete the definition itself.
+    #    Benchmark B4 run5: the `$1` in `mk() { psql … "DROP DATABASE IF EXISTS $1" -c "CREATE DATABASE $1 TEMPLATE x"; }; mk rev_a`
+    #    is not a name as characters, so it was blocked. If an argument is not a literal or the definition is nested, it is not expanded (the same judgement as today)
+    function expand_funcs(s,   out, nm, body, i, L, c, q, depth, st, rest, defs, n, k, args, nargs, j, b, cand, pre, ok) {
+      n = 0
+      while (match(s, /(^|[\n;&|( \t])(function[ \t]+)?[A-Za-z_][A-Za-z0-9_-]*[ \t]*\(\)[ \t]*\{/)) {
+        pre = substr(s, 1, RSTART - 1); cand = substr(s, RSTART, RLENGTH); rest = substr(s, RSTART + RLENGTH)
+        nm = cand; sub(/^[\n;&|( \t]/, "", nm); sub(/^function[ \t]+/, "", nm); sub(/[ \t]*\(\)[ \t]*\{$/, "", nm)
+        L = length(rest); q = ""; depth = 1
+        for (i = 1; i <= L; i++) {
+          c = substr(rest, i, 1)
+          if (q != "") { if (c == q) q = ""; continue }
+          if (c == "\"" || c == "\047") { q = c; continue }
+          if (c == "{") depth++
+          else if (c == "}") { depth--; if (depth == 0) break }
+        }
+        if (depth != 0) { out = out pre cand; s = rest; continue }
+        body = substr(rest, 1, i - 1)
+        if (body ~ /\(\)[ \t]*\{/) { out = out pre cand body "}"; s = substr(rest, i + 1); continue }
+        defs[++n] = nm; dbody[nm] = body; dtext[n] = cand body "}"; bad[nm] = 0
+        out = out pre " @@fn" n "@@ "; s = substr(rest, i + 1)
+      }
+      s = out s
+      if (n == 0) return s
+      for (k = 1; k <= n; k++) {
+        nm = defs[k]; out = ""
+        while (match(s, "(^|[\n;&|( \t])" nm "([ \t]+[^\n;&|<>()]*)?([\n;&|)]|$)")) {
+          pre = substr(s, 1, RSTART - 1); cand = substr(s, RSTART, RLENGTH); rest = substr(s, RSTART + RLENGTH)
+          c = substr(cand, 1, 1); if (c ~ /[\n;&|( \t]/) { pre = pre c; cand = substr(cand, 2) }
+          j = substr(cand, length(cand), 1); if (j ~ /[\n;&|)]/) { rest = j rest; cand = substr(cand, 1, length(cand) - 1) }
+          args = cand; sub("^" nm "[ \t]*", "", args); gsub(/^[ \t]+|[ \t]+$/, "", args)
+          nargs = (args == "") ? 0 : split(args, a, /[ \t]+/); ok = (nargs <= 9)
+          for (j = 1; j <= nargs; j++) { gsub(/^["\047]|["\047]$/, "", a[j]); if (!isword(a[j])) ok = 0 }
+          if (!ok) { bad[nm] = 1; out = out pre cand; s = rest; continue }
+          b = dbody[nm]
+          for (j = 1; j <= 9; j++) b = subst(b, j, (j <= nargs) ? a[j] : "")
+          out = out pre "{ " b " ; }"; s = rest
+        }
+        s = out s
+      }
+      # If even one call could not be expanded, the definition is put back as it was — the `$1` in that body stays unresolved and is judged as today
+      for (k = 1; k <= n; k++) { j = index(s, "@@fn" k "@@"); if (j) s = substr(s, 1, j - 1) (bad[defs[k]] ? dtext[k] : ":") substr(s, j + length("@@fn" k "@@")) }
+      return s
     }
     function uniq(val,   t) {
       t = val
@@ -508,7 +574,7 @@ _expand_shell_literals() {
       }
       return out s
     }
-    { printf "%s", expand_assign(expand_loops($0)) }'
+    { printf "%s", expand_assign(expand_loops(expand_funcs($0))) }'
 }
 
 # ── Exemption judgment for DROP — names by proof, tables by measurement (an exemption opens only when proven) ──
@@ -585,6 +651,10 @@ _probe_table() (   # $1 lowercase literal name (schema.table allowed)
   out=$(PGCONNECT_TIMEOUT=3 PGOPTIONS='-c statement_timeout=3000 -c lock_timeout=1000' \
         psql "$url" -X -A -t -q -v ON_ERROR_STOP=1 -c "SELECT to_regclass('$1') IS NOT NULL" 2>/dev/null) || return 1
   case "$out" in f) printf 'absent'; return 0 ;; t) ;; *) return 1 ;; esac
+  # If row-level security (RLS) applies to this role, the table looks "empty" even when it has rows (S1 audit F2, 1.8.0) — if the measurement cannot see all of the target, it cannot be judged
+  out=$(PGCONNECT_TIMEOUT=3 PGOPTIONS='-c statement_timeout=3000 -c lock_timeout=1000' \
+        psql "$url" -X -A -t -q -v ON_ERROR_STOP=1 -c "SELECT c.relrowsecurity AND NOT (r.rolsuper OR r.rolbypassrls OR (c.relowner = r.oid AND NOT c.relforcerowsecurity)) FROM pg_class c, pg_roles r WHERE c.oid = to_regclass('$1') AND r.rolname = current_user" 2>/dev/null) || return 1
+  [ "$out" = f ] || return 1
   out=$(PGCONNECT_TIMEOUT=3 PGOPTIONS='-c statement_timeout=3000 -c lock_timeout=1000' \
         psql "$url" -X -A -t -q -v ON_ERROR_STOP=1 -c "SELECT EXISTS (SELECT 1 FROM $1 LIMIT 1)" 2>/dev/null) || return 1
   case "$out" in f) printf 'empty' ;; t) printf 'rows' ;; *) return 1 ;; esac
@@ -641,9 +711,129 @@ _record_created_dbs() {   # $1 names (one per line)
   return 0
 }
 
+# ── Shell functions that create DBs — record the DB created by a call even when the definition is in another command (an env file that gets sourced) ──────────
+# Benchmark B4 run5: a function was put in a file with `cat > env.sh <<EOF … mk() { … CREATE DATABASE $1 …; } … EOF`, and later commands created
+# scratch DBs with `. env.sh; mk rev_rb`. The hook did not know that call creates a DB, so nothing was recorded, and the final cleanup (`for d in rev_*; … DROP DATABASE $d`) was blocked.
+# The definition is looked for in the **raw text, heredoc bodies included** (a definition written to a file is still a definition). Only the function name is recorded, and a name created by that call
+# still goes through exemption ① (not a project or system DB) as before — creating a project DB through a function does not exempt it.
+_created_db_fns_file() { [ -n "${ORANGEKIT_ROOT:-}" ] && printf '%s/created-db-fns' "$(orangekit_state_dir)"; }
+_db_creator_fns_in() (   # $1 raw text → names of the functions that create a DB from their first argument
+  trap - ERR; set +e
+  printf '%s' "$1" | awk 'BEGIN { RS = "\001" } {
+    s = $0
+    while (match(s, /(function[ \t]+)?[A-Za-z_][A-Za-z0-9_-]*[ \t]*\(\)[ \t]*\{[^}]*\}/)) {
+      d = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+      if (tolower(d) ~ /create[ \t]+database[ \t]+(if[ \t]+not[ \t]+exists[ \t]+)?["\047]?\$\{?1/ || d ~ /createdb[^}]*\$\{?1/) {
+        n = d; sub(/^function[ \t]+/, "", n); sub(/[ \t]*\(\).*$/, "", n); print n } } }'
+)
+_db_creates_via_fns() (   # $1 executable segment → names created by calling a recorded creator function with a literal argument
+  trap - ERR; set +e
+  local f fns fn
+  f=$(_created_db_fns_file) && [ -f "$f" ] || return 0
+  fns=$(sort -u "$f" 2>/dev/null)
+  while IFS= read -r fn; do
+    [ -n "$fn" ] || continue
+    printf '%s\n' "$1" | grep -oE "(^|[[:space:];&|(])$fn[[:space:]]+[A-Za-z_][A-Za-z0-9_-]*" | awk '{print tolower($NF)}' || true
+  done <<< "$fns"
+)
+_record_db_creator_fns() {   # $1 raw text
+  local f n; f=$(_created_db_fns_file) || return 0
+  n=$(_db_creator_fns_in "$1")
+  [ -n "$n" ] && { mkdir -p "$(dirname "$f")" 2>/dev/null && printf '%s\n' "$n" >> "$f" 2>/dev/null || true; }
+  f=$(_url_fns_file) || return 0
+  n=$(_url_fns_in "$1"); [ -n "$n" ] || return 0
+  mkdir -p "$(dirname "$f")" 2>/dev/null && printf '%s\n' "$n" >> "$f" 2>/dev/null || true
+  return 0
+}
+
+# Shell functions that build a connection URL — `psql "$(UU rev_rb)"` after `UU() { echo $DATABASE_URL | sed "s#/[^/]*\$#/$1#"; }` (benchmark B4 run5).
+# Put a probe name in the body's `$1` and record the function only when `_url_db_name` returns **that name** — a function that discards its argument is not recorded.
+_url_fns_file() { [ -n "${ORANGEKIT_ROOT:-}" ] && printf '%s/url-fns' "$(orangekit_state_dir)"; }
+_url_fns_in() (   # $1 raw text → names of the functions that replace only the DB name of DATABASE_URL with their first argument
+  trap - ERR; set +e
+  local nm body
+  printf '%s' "$1" | awk 'BEGIN { RS = "\001" } {
+    s = $0
+    while (match(s, /(function[ \t]+)?[A-Za-z_][A-Za-z0-9_-]*[ \t]*\(\)[ \t]*\{[^}]*\}/)) {
+      d = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+      if (d !~ /DATABASE_URL/ || d !~ /\$\{?1/) continue
+      n = d; sub(/^function[ \t]+/, "", n); sub(/[ \t]*\(\).*$/, "", n)
+      b = d; sub(/^[^{]*\{/, "", b); sub(/\}$/, "", b); gsub(/\n/, " ", b)
+      printf "%s\t%s\n", n, b } }' | while IFS="$(printf '\t')" read -r nm body; do
+    body=$(printf '%s' "$body" | sed 's/\${1}/zzorangekitprobe/g; s/\$1/zzorangekitprobe/g; s/;[[:space:]]*$//')
+    [ "$(_url_db_name "$body")" = zzorangekitprobe ] && printf '%s\n' "$nm"
+  done
+  true
+)
+
+# ── Work inside a psql attached to a scratch DB — exempt the deletes and DML (root cause ③ of the residual false positives) ──────────────
+# Benchmark B4 run6: `MIG=$(echo "$DATABASE_URL" | sed 's#/app$#/migtest#'); psql "$MIG" <<SQL … DROP TABLE …` · run6 stage 4:
+# `S="${DATABASE_URL%/*}/scratch_0014"; … psql "$S" -qc "DELETE FROM challenges"` · B2: `export DATABASE_URL="$BASE/rev_scratch3"; psql
+# "$DATABASE_URL" <<EOF … truncate …`. All of them are work inside a **scratch DB the same command created**, but the hook did not know which DB that psql attached to, so it
+# took it for project-DB work and blocked it. Resolve the connection string **through assignments in the same command** to get the target DB name, and if that name is proven a scratch DB
+# (the same proof as `_scratch_dbs_ok` — not a project or system DB, and a name this command created or one that was recorded), exempt the deletes and DML of that psql.
+# A connection that cannot be resolved (another variable · a command substitution · -h to another host) is judged as before — a new exemption opens only when it is proven.
+_scratch_db_ok() {   # $1 name  $2 names created in the same command → 0 = proven a scratch DB
+  _scratch_dbs_ok "DROP DATABASE $1" "$2"
+}
+_url_db_name() (   # $1 assigned value → if it is DATABASE_URL with only the DB name changed, that name (lowercase)
+  trap - ERR; set +e
+  printf '%s' "$1" | grep -q 'DATABASE_URL\|@@base@@' || return 1
+  printf '%s' "$1" | sed -nE 's#.*/([A-Za-z_][A-Za-z0-9_]*)[#|"'"'"')]*[[:space:]]*$#\1#p' | tr 'A-Z' 'a-z' | head -1
+)
+_psql_conn_db() (   # $1 psql segment  $2 "VAR=db" lines → the DB name that psql attaches to (if it resolves)
+  trap - ERR; set +e
+  local t v
+  case "$1" in *psql*) ;; *) return 1 ;; esac
+  t=${1#*psql}
+  printf '%s' "$t" | grep -Eq '(^|[[:space:]])-(h|-host|p|-port|U|-username)([[:space:]=]|$)' && return 1
+  v=$(printf '%s' "$t" | grep -oE '(^|[[:space:]])-d[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' | awk '{print tolower($NF)}' | head -1)
+  [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  v=$(printf '%s' "$t" | grep -oE '^[[:space:]]*"?\$\([A-Za-z_][A-Za-z0-9_-]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*\)' | head -1)
+  if [ -n "$v" ]; then
+    local fn arg f
+    fn=$(printf '%s' "$v" | sed -E 's/^[[:space:]]*"?\$\(([A-Za-z_][A-Za-z0-9_-]*).*/\1/'); arg=$(printf '%s' "$v" | sed -E 's/.*[[:space:]]([A-Za-z_][A-Za-z0-9_]*)\)$/\1/')
+    f=$(_url_fns_file) && [ -f "$f" ] && grep -qxF -- "$fn" "$f" && { printf '%s' "$arg" | tr 'A-Z' 'a-z'; return 0; }
+    return 1
+  fi
+  v=$(printf '%s' "$t" | grep -oE '"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?(/[A-Za-z_][A-Za-z0-9_]*)?"?' | head -1 | tr -d '"{}')
+  [ -n "$v" ] || return 1
+  case "$v" in
+    */*) printf '%s' "${v##*/}" | tr 'A-Z' 'a-z'; return 0 ;;
+  esac
+  v=${v#\$}
+  printf '%s\n' "$2" | awk -F= -v k="$v" '$1==k && $2!="@@base@@" && $2!="@@url@@" {d=$2} END {if (d!="") {print d; exit 0} exit 1}'
+)
+_assigns_of() (   # $1 segment → the leading assignments "VAR<TAB>value" (the value with its quotes)
+  trap - ERR; set +e
+  printf '%s\n' "$1" | sed -E 's/^[[:space:]]+//' \
+    | grep -oE '^((export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|\$\([^)]*\)|[^[:space:];&|]+)[[:space:]]*)+' \
+    | grep -oE '[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|\$\([^)]*\)|[^[:space:];&|]+)' | sed -E 's/=/\t/' || true
+)
+_conn_update() (   # $1 assignment lines (VAR<TAB>value)  $2 the map so far ("VAR=db" · "VAR=@@base@@") → the new map. An assignment that does not resolve removes that variable
+  trap - ERR; set +e
+  local map="$2" var val db b
+  while IFS="$(printf '\t')" read -r var val; do
+    [ -n "$var" ] || continue
+    map=$(printf '%s\n' "$map" | awk -F= -v k="$var" '$1!=k')
+    if printf '%s' "$val" | grep -Eq '^"?\$\{?DATABASE_URL\}?"?$'; then map="$map
+$var=@@url@@"; continue; fi
+    b=$(printf '%s' "$val" | sed -nE 's/^"?\$\{([A-Za-z_][A-Za-z0-9_]*)%\/[^}]*\}"?$/\1/p')
+    if [ "$b" = DATABASE_URL ] || { [ -n "$b" ] && printf '%s\n' "$map" | grep -qxF -- "$b=@@url@@"; }; then map="$map
+$var=@@base@@"; continue; fi
+    for b in $(printf '%s\n' "$map" | awk -F= '$2=="@@base@@" {print $1}'); do
+      val=$(printf '%s' "$val" | sed "s#\\\$$b\([^A-Za-z0-9_]\)#@@base@@\1#g; s#\\\${$b}#@@base@@#g")
+    done
+    db=$(_url_db_name "$val" || true)
+    [ -n "$db" ] && map="$map
+$var=$db"
+  done <<< "$1"
+  printf '%s' "$map"
+)
 destructive_gate() {
   # Judged after stripping the heredoc body (= data). The secret check **does not strip** —
   # the axis is the opposite: writing a secret is itself the exposure, so the body is exactly what is judged.
+  _record_db_creator_fns "$1"
   local DCMD; DCMD=$(_expand_shell_literals "$(_strip_heredoc_bodies "$1")")
   _GATE_CMD="$DCMD"
   local target="" _D
@@ -664,11 +854,37 @@ destructive_gate() {
   while IFS= read -r seg; do
     _exec_seg "$seg" || continue
     created_here="$created_here$(_db_targets "$seg" create)
+$(_db_creates_via_fns "$seg")
 "
   done < <(_segments "$DCMD")
+  # Connection map — in segment order. A standalone assignment (`S=…` · `export DATABASE_URL=…`) carries forward, while an assignment before a command (`DATABASE_URL=… npm …`) applies to that command only
+  local cmap="" segmap scratch_seg hd_delim="" a_lines
   while IFS= read -r seg; do
+    if [ -n "$hd_delim" ]; then   # a heredoc body going into a scratch-DB psql — it runs only inside that scratch DB
+      [ "$(printf '%s' "$seg" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')" = "$hd_delim" ] && hd_delim=""
+      continue
+    fi
+    a_lines=$(_assigns_of "$seg")
+    segmap=$(_conn_update "$a_lines" "$cmap")
+    if [ -n "$a_lines" ] && [ -z "$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*((export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|\$\([^)]*\)|[^[:space:];&|]+)[[:space:]]*)+//' | tr -d '[:space:]')" ]; then
+      cmap="$segmap"
+    fi
     _exec_seg "$seg" || continue
     _D="$seg"
+    scratch_seg=0
+    if _scratch_db_ok "$(_psql_conn_db "$seg" "$segmap" || printf '@@none@@')" "$created_here"; then
+      scratch_seg=1
+      if printf '%s' "$seg" | grep -Eq '<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*'; then
+        hd_delim=$(printf '%s' "$seg" | grep -oE '<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*' | head -1 | sed -E "s/^<<-?[[:space:]]*['\"]?//")
+      fi
+    fi
+    if [ "$scratch_seg" = 1 ]; then
+      # Work inside a scratch DB is exempt — but a DROP DATABASE that deletes a **different** DB from inside it still goes through the name proof
+      dhas '(^|[^a-z_])drop[[:space:]]+database([^a-z_]|$)' && ! _scratch_dbs_ok "$seg" "$created_here" \
+        && dblock "DROP of a table/database/schema via DDL" "That object and every row inside it disappears. Without a backup there is no recovery" \
+                  "If it is a scratch DB for verification, write the name as a literal and re-create it with CREATE DATABASE in the same command"
+      continue
+    fi
 
     dhas '(^|[^a-z_])drop[[:space:]]+(table|database|schema)([^a-z_]|$)' \
       && ! _drop_exempt "$seg" "$created_here" \

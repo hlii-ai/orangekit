@@ -11,9 +11,10 @@ paths:
 <!-- Stack core card — the admission conditions and the retirement procedure are in stack-guide-generator assets/guide-skeleton.md "Stack core card".
      The universal rules (ownership in the query condition · a 0-row mutation is 404 · 404 instead of 403 · no raw SQL) belong to security.md, so they are not here. -->
 
-# Express 5 + Prisma 6 core card
+# Express + Prisma core card
 
 The project spec (`dev/docs/api/` etc.) and `.claude/rules/code-conventions.md` take precedence over this card and the `backend-guide` skill.
+Verified versions — `express@5` · `prisma@6`. Install the latest stable release (`code-change.md` "Before Adding a Dependency") — where an item conflicts with a newer major, the official upgrade docs take precedence.
 Look up wiring and examples in the `backend-guide` skill when needed.
 
 ## Consistency — the project decides the values

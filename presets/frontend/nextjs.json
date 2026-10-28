@@ -1,10 +1,10 @@
 {
   "axis": "frontend",
   "name": "nextjs",
-  "displayName": "Next.js 15 (App Router)",
-  "description": "Next.js 15 App Router + React 19 + TypeScript strict + Tailwind CSS v4 + shadcn/ui + Zustand",
+  "displayName": "Next.js (App Router)",
+  "description": "Next.js App Router + React 19 + TypeScript strict + Tailwind CSS v4 + shadcn/ui + Zustand",
   "techStack": {
-    "framework": "Next.js 15 (App Router)",
+    "framework": "Next.js (App Router)",
     "language": "TypeScript (strict mode)",
     "packageManager": "pnpm",
     "commands": {

@@ -588,3 +588,26 @@
 - lesson: A sentence "call X when Y" is kept only when it is hung on the execution path. A card declares it with `paths:`, a skill with the graph's `beforeWrite` (one place, verified by doctor),
   and `security-check` confirms it entered before the first write of a new file (Write · Bash) — TDD only when a test runner exists, and test files excluded.
   A partial read is not a read. Undecidable does not block, and each item blocks only once per session (no infinite loop).
+
+## [category: false-positive] The scratch-DB judgement was tied to "is the name visible" — function arguments, computed URLs, and DML inside a scratch DB leaked every time
+
+- date: 2026-10-27
+- Guard: scripts/security-check.sh
+- situation: In 3 runs of benchmark B4 (3.39.0, OrangeKit 1.8.0), 8 of the 11 destructive-command blocks were validation DBs and tables the agent had created moments before.
+  The user's instruction: "Fix the scratch-DB false positives so this never happens again."
+- mistake: From 3.36 to 3.39 I widened the exemption **one visible shape at a time**, literal name → loop variable. Meanwhile ① a shell-function argument (`mk() { … DROP DATABASE $1 }`)
+  ② a connection URL computed with `sed` or `${DATABASE_URL%/*}` ③ `DELETE` · `UPDATE` · `TRUNCATE` inside a `psql` attached to a scratch DB were left exactly as they were.
+- lesson: Judge the exemption by **origin and connection target**, not by the shape of a string — record the DBs this session created (including those made by a function),
+  and exempt a destructive command inside a `psql` only when it is proven to be attached to that DB (what cannot be proven is blocked, as now). When fixing a block incident,
+  replay every Bash command of every benchmark run through the new hook and check both that the legitimate blocks still block and that no new blocks appear.
+  Do not count only exit 2 as "blocked" in the replay — an exit 1 from a hook that fell over looked like "passed", and I nearly missed the ERR trap in the first fix. Count anything outside 0 and 2 separately as an error.
+  The causes left after the second replay (the loop-item cap of 8 · the `U=$DATABASE_URL` alias · a URL function kept in a file) were remnants of the same "one shape at a time" approach.
+
+## [category: rule] When a stack pack writes a major version like an install instruction, the advisories dragged in by the old release are installed with it
+
+- date: 2026-10-27
+- situation: In the same benchmark the baseline (no harness) picked Next.js 16 and had 0 production-dependency advisories, while the OrangeKit pack wrote `Next.js 15` in the card title and the menu,
+  and a `postcss` high advisory came along (S3 95). The user's instruction: "Lift the version pin of the stack pack so the latest stable release is applied."
+- mistake: The `pkgs` of `pack.json` (the verified major = freshness metadata) was also written in the card title and the init menu, and the agent read it as the version to install.
+- lesson: A pack states the "verified version" as a fact only (the card's one `Verified versions —` line, which `guide-gate` checks against `pkgs`), and installation starts from the latest stable release
+  (`code-change.md` "Before Adding a Dependency"). Where a card item conflicts with a newer major, the official upgrade docs take precedence. Do not put a version number in a title.

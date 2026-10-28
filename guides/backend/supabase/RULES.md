@@ -16,6 +16,7 @@ paths:
 # Supabase (PostgreSQL + RLS) core card
 
 The project spec (`dev/docs/api/` etc.) and `.claude/rules/code-conventions.md` take precedence over this card and the `backend-guide` skill.
+Verified versions — `@supabase/supabase-js@2` · `@supabase/ssr@0.12`. Install the latest stable release (`code-change.md` "Before Adding a Dependency") — where an item conflicts with a newer major, the official upgrade docs take precedence.
 Look up wiring and examples in the `backend-guide` skill when needed.
 
 ## Consistency — the project decides the values

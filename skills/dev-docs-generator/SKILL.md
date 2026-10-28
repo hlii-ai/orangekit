@@ -53,6 +53,12 @@ pull steps 1 and 2 of "the inner order of a single feature" in `workflow-routing
 Create them in `dev/active/<slug>/` using the three forms in `assets/doc-templates.md`.
 The **Scope** section of tasks.md is mandatory — orangekit-reviewer checks compliance with Scope.
 
+For each slice, fill in **Read first** — pass the file paths that slice will create or edit to
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/security-check.sh" --owning <path…>` and the rule cards and skills that own them come out, using the
+**same judgement** as the prior-knowledge gate (do not write a copy of that judgement by hand). Read them when you start the slice,
+and the send-back and rewrite right before a write do not happen. Do not read them all at session start —
+the farther they are from the point of writing, the more the rules get buried.
+
 Group the checklist into **vertical slices** — each slice cuts thinly through every layer so it can be demonstrated on its own,
 fits into a single fresh context, and declares its predecessor slices under `Blocked by`. A wide refactoring is
 the exception to this rule and is arranged as expand → migrate → contract. The form and the criteria are in the template file.
@@ -68,6 +74,7 @@ Present the list of generated documents plus the approach summary from the plan,
 - Does each slice state `Blocked by`, and does one slice fit into a single fresh context?
 - If the work touches both frontend and backend, does `dev/docs/api/wire-contract.md` exist with this feature's endpoints in §4?
 - Is the plan's verification path an executable command?
+- Does each slice have `Read first` (if the `--owning` output is empty, "none")
 
 ## Reference documents
 

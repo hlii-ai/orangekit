@@ -13,9 +13,10 @@ paths:
      The universal rules (ownership in the query condition · 0-row mutation = 404 · 404 instead of 403 · uniqueness 23505 → 409 · no internal details in error responses or logs)
      belong to security.md, so they are not here. This axis is dataLayerPolicyEngine: false — the application layer is the only boundary. -->
 
-# FastAPI + SQLAlchemy 2 (async) core card
+# FastAPI + SQLAlchemy (async) core card
 
 The project spec (`dev/docs/api/` etc.) and `.claude/rules/code-conventions.md` take precedence over this card and the `backend-guide` skill.
+Verified versions — `fastapi@0.141` · `sqlalchemy@2` · `pydantic@2`. Install the latest stable release (`code-change.md` "Before Adding a Dependency") — where an item conflicts with a newer major, the official upgrade docs take precedence.
 Look up wiring and examples in the `backend-guide` skill when needed.
 
 ## Consistency — the project decides the values

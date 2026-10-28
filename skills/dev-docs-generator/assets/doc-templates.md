@@ -46,6 +46,7 @@
 
 ### S1. {slice title}
 - Blocked by: none — can start immediately
+- Read first: {the rule cards and skills that own the files this slice will create or edit — the output of `security-check.sh --owning <path…>`}
 - What works when it is done: {what becomes functional from the user's point of view}
 - Contract: {only when both sides are in play — which row of wire-contract.md §4 it uses}
 - [ ] {task item — with a clear completion condition}
@@ -63,6 +64,7 @@
 | Vertical | Cut thinly through every layer, not one layer. When it is done it must be **demonstrable and verifiable on its own** |
 | Size | **As much as fits in a single fresh context**. If it exceeds that, split it |
 | Blocked by | Name the slices that must be finished before this one starts. If none, write "none" |
+| Read first | Read it **when you start** the slice (not at session start — the closer to the point of writing, the better the rules are kept). If it is empty, the prior-knowledge gate sends the write back once right before the write |
 | Preparatory work | If a prefactor makes the implementation easier, put it in as the **first slice** |
 | Inner order | Follow "the inner order of a single feature" in `workflow-routing.md` — contract → mock UI verification → backend → remove the mock. Do not restate it here |
 | Done | "Demonstrable on its own" **does not mean demonstrable on top of a mock** — if the mock this slice stood up in place of the contract is still there, it is not done. Permanent test doubles such as payments or email do not count |

@@ -1128,9 +1128,10 @@ check_core_card() {
     return 0
   fi
   local out
-  out=$(python3 - "$c" "${P:+$P/$PACK_POLICIES_NAME}" "${P:+$P/PACK.md}" "$mode" <<'PYCARD'
+  out=$(python3 - "$c" "${P:+$P/$PACK_POLICIES_NAME}" "${P:+$P/PACK.md}" "$mode" "${P:+$P/pack.json}" <<'PYCARD'
 import re, sys, os
 card, pol, packmd, mode = sys.argv[1:5]
+packjson = sys.argv[5] if len(sys.argv) > 5 else ''
 s = open(card, encoding='utf-8').read()
 def emit(kind, msg, hint=''): print(f"{kind}\t{msg}\t{hint}")
 m = re.match(r'^---\n(.*?)\n---\n', s, re.S)
@@ -1147,6 +1148,23 @@ body = re.sub(r'^---\n.*?\n---\n', '', s, flags=re.S)
 body = re.sub(r'<!--.*?-->', '', body, flags=re.S).strip()
 if 'code-conventions.md' not in body.split('\n## ')[0]:
     emit('bad', 'the opening lacks "the project spec and code-conventions.md take precedence"', 'guide example values override project conventions (guide-ab T-D UUID)')
+# The "Verified versions" line — so the major in a card title or body is not read as an install instruction, one line separates the verified major from "install the latest stable release".
+# That major is a copy of pack.json pkgs, so a mismatch is a FAIL (a copy is kept only when a machine guards it)
+if mode == 'pack':
+    vl = re.search(r'^Verified versions — (.+)$', body, re.M)
+    if not vl: emit('bad', 'no "Verified versions — …" line', 'the major in the title or body is read as an install instruction (measured: started on next@15 → inherited advisories that were already fixed) — write the verified major and "Install the latest stable release"')
+    else:
+        try: pk = set(re.findall(r'"([^"]+@[^"]+)"', re.search(r'"pkgs"\s*:\s*\[(.*?)\]', open(packjson, encoding='utf-8').read(), re.S).group(1)))
+        except (OSError, AttributeError): pk = set()
+        cited = re.findall(r'`([^`]+@[^`]+)`', vl.group(1))
+        stray = [x for x in cited if x not in pk]
+        if not cited: emit('bad', 'the "Verified versions" line has no `package@major`', 'cite the core packages of the axis from pack.json pkgs')
+        elif stray: emit('bad', f'"Verified versions" cites a release not in pack.json pkgs: {" ".join(stray)}', 'it must be the same major as pkgs so the freshness check and the card state the same fact')
+        elif 'latest stable' not in vl.group(1): emit('bad', 'the "Verified versions" line lacks "Install the latest stable release"', 'a verified major is not an install instruction')
+        else: emit('ok', f'verified versions {" ".join(cited)} = pkgs · install the latest stable release', '')
+    title = re.search(r'^# (.+)$', body, re.M)
+    if title and re.search(r'\b\d+(\.\d+)?\b', re.sub(r'\b(Vue 3|v2|Cloud Functions v2)\b', '', title.group(1))):
+        emit('bad', f'a version number in the card title: {title.group(1)}', 'a major in the title reads as an install instruction — keep the release only in the "Verified versions" line')
 n = len(body)
 emit('bad' if n > 3000 else 'ok', f'card body {n}/3000 characters', 'over budget: drop the less important items')
 items = [l for l in s.splitlines() if l.lstrip().startswith('- [')]
@@ -2146,6 +2164,9 @@ run_self_test() {
   _fx_assert_pack "$fx/pk/cardbig/fxpack2"      1 "card over budget (body · item count)"
   _fx_assert_pack "$fx/pk/cardstamp/fxpack2"    1 "card stamp ≠ PACK.md"
   _fx_assert_pack "$fx/pk/cardnoprio/fxpack2"   1 "the card opening has no project-precedence sentence"
+  _fx_assert_pack "$fx/pk/cardnover/fxpack2"    1 "the card has no \"Verified versions\" line (the major is read as an install instruction)"
+  _fx_assert_pack "$fx/pk/cardstrayver/fxpack2" 1 "\"Verified versions\" cites a release not in pkgs"
+  _fx_assert_pack "$fx/pk/cardtitlever/fxpack2" 1 "a version number in the card title"
 
   # Project-owned rule file — it enters with evidence (URL · date · installed version), no policies, no stamp
   _fx_build_rulecards "$fx" || { bad "rule card fixture build failed"; return; }
@@ -2608,7 +2629,7 @@ FXPJ
   done
   # Core card — one sound card, and each defect breaks exactly one thing (caught for another reason, it is not a fixture)
   local cm
-  for cm in cardok cardpolok cardmixed cardnopaths cardnoreason cardnoev cardbadpol cardbig cardstamp cardnoprio; do
+  for cm in cardok cardpolok cardmixed cardnopaths cardnoreason cardnoev cardbadpol cardbig cardstamp cardnoprio cardnover cardstrayver cardtitlever; do
     mkdir -p "$fx/pk/$cm" && cp -R "$b" "$fx/pk/$cm/" || return 1
     cat > "$fx/pk/$cm/fxpack2/RULES.md" <<'FXCARD'
 ---
@@ -2620,6 +2641,7 @@ paths:
 # fxpack2 core card
 
 The project spec and `.claude/rules/code-conventions.md` take precedence over this card.
+Verified versions — `zod@4` · `prisma@6`. Install the latest stable release — where an item conflicts with a newer major, the official upgrade docs take precedence.
 
 ## Performance
 
@@ -2637,6 +2659,9 @@ FXCARD
   c="$fx/pk/cardbadpol/fxpack2/RULES.md";   sed -i.bak 's/evidence: guide-ab T-D/evidence: policies no-such-policy/' "$c"
   c="$fx/pk/cardstamp/fxpack2/RULES.md";    sed -i.bak 's/fxpack2 v0.0.0/fxpack2 v9.9.9/' "$c"
   c="$fx/pk/cardnoprio/fxpack2/RULES.md";   sed -i.bak 's/^The project spec.*$/Follow this card./' "$c"
+  c="$fx/pk/cardnover/fxpack2/RULES.md";    sed -i.bak '/^Verified versions —/d' "$c"
+  c="$fx/pk/cardstrayver/fxpack2/RULES.md"; sed -i.bak 's/`prisma@6`/`prisma@5`/' "$c"
+  c="$fx/pk/cardtitlever/fxpack2/RULES.md"; sed -i.bak 's/^# fxpack2 core card/# fxpack2 15 core card/' "$c"
   c="$fx/pk/cardbig/fxpack2/RULES.md"
   awk 'BEGIN{ for (i=0; i<13; i++) printf "- [performance] padding item %d — a sentence that pushes the card over its budget, repeated to make it long enough. — why models get it wrong: padding <!-- evidence: guide-ab · model-gap: observed -->\n", i }' >> "$c"
   rm -f "$fx"/pk/card*/fxpack2/RULES.md.bak

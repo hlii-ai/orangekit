@@ -1863,6 +1863,7 @@ EOF
 [ -f "$FAKE_PSQL_DIR/.down" ] && exit 2
 q=""; while [ $# -gt 0 ]; do [ "$1" = "-c" ] && { q="$2"; break; }; shift; done
 t=$(printf '%s' "$q" | sed -nE "s/.*to_regclass\('([^']*)'\).*/\1/p")
+case "$q" in *relrowsecurity*) [ "$(cat "$FAKE_PSQL_DIR/$t" 2>/dev/null)" = rls ] && echo t || echo f; exit 0 ;; esac
 if [ -n "$t" ]; then [ -f "$FAKE_PSQL_DIR/$t" ] && echo t || echo f; exit 0; fi
 t=$(printf '%s' "$q" | sed -nE 's/.*FROM ([^ ]*) LIMIT 1.*/\1/p')
 [ "$(cat "$FAKE_PSQL_DIR/$t" 2>/dev/null)" = rows ] && echo t || echo f
@@ -1879,7 +1880,7 @@ STUB
             bash "$ROOT/scripts/security-check.sh" 2>&1 >/dev/null) || tdcode=$?
       # Even when the verdict is right, an ERR trap that fired means the hook tripped midway, and a block must come for the **intended reason** (data destruction)
       if [ "$tdcode" = "$1" ] && ! printf '%s' "$tderr" | grep -q 'ERROR line' \
-         && { [ "$1" = 0 ] || printf '%s' "$tderr" | grep -qF 'table/database/schema'; }; then
+         && { [ "$1" = 0 ] || printf '%s' "$tderr" | grep -qE 'table/database/schema|DELETE|TRUNCATE'; }; then
         tdok=$((tdok+1))
       else
         tdbad=$((tdbad+1))
@@ -1912,6 +1913,7 @@ STUB
 0@@a not-yet-existing probe table created and dropped in the same command [B3 run5]@@-@@echo 'CREATE TABLE tmp_probe (id int);' > migrations/0000_probe.sql && npm run db:migrate 2>&1 | tail -2; rm migrations/0000_probe.sql; psql "$DATABASE_URL" -qc "@T@ tmp_probe; DELETE FROM schema_migrations WHERE name='0000_probe.sql';"
 0@@the table exists but is empty@@scratch_t=empty@@psql "$DATABASE_URL" -qc "@T@ scratch_t"
 2@@a table that has rows@@users=rows@@psql "$DATABASE_URL" -qc "@T@ users"
+2@@looks empty but RLS hides rows from the measuring role (undecidable → blocked)@@secret_t=rls@@psql "$DATABASE_URL" -qc "@T@ secret_t"
 2@@even when empty, CASCADE deletes dependent objects@@scratch_t=empty@@psql "$DATABASE_URL" -qc "@T@ scratch_t CASCADE"
 0@@CASCADE on an absent table (nothing to delete)@@-@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost CASCADE"
 0@@several tables, all absent@@-@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS a1, b1"
@@ -1930,7 +1932,34 @@ STUB
 2@@the same command sets PGHOST@@-@@PGHOST=prod.example psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
 2@@psql with no connection argument (connects with the PG* defaults)@@-@@psql -qc "@T@ IF EXISTS ghost"
 2@@DATABASE_URL only in .env, not in the environment variables@@noenvurl@@psql "$DATABASE_URL" -qc "@T@ IF EXISTS ghost"
+0@@scratch DB created and dropped through a shell function [B4 run5]@@-@@mk() { psql "$DATABASE_URL" -qc "@D@ IF EXISTS $1" -c "@C@ $1 TEMPLATE base"; }; mk rev_a; psql "$DATABASE_URL" -qc "@D@ rev_a"
+2@@a shell function drops and re-creates the project DB@@-@@mk() { psql -qc "@D@ IF EXISTS $1" -c "@C@ $1"; }; mk app
+2@@a shell function argument is not a literal@@-@@mk() { psql -qc "@D@ IF EXISTS $1"; }; mk $NAME
+0@@DELETE in a scratch DB assigned with ${DATABASE_URL%/*} [B4 run6 stage 4]@@-@@S="${DATABASE_URL%/*}/scratch_0014"; psql "$DATABASE_URL" -qc "@D@ IF EXISTS scratch_0014" -c "@C@ scratch_0014"; psql "$S" -qc "DELETE FROM challenges"
+0@@TRUNCATE after export DATABASE_URL was switched to a scratch DB [B2]@@-@@BASE="${DATABASE_URL%/*}"; psql "$BASE/postgres" -qc "@C@ rev_s3" && export DATABASE_URL="$BASE/rev_s3"; psql "$DATABASE_URL" -qc "truncate point_entries"
+2@@a psql before the switch to a scratch DB is the project DB@@-@@psql "$DATABASE_URL" -qc "truncate point_entries"; BASE="${DATABASE_URL%/*}"; psql "$BASE/postgres" -qc "@C@ rev_s4"; export DATABASE_URL="$BASE/rev_s4"
+2@@the URL points at a DB that was never created@@-@@M=$(echo "$DATABASE_URL" | sed 's#/app$#/other_db#'); psql "$M" -qc "DELETE FROM t"
+2@@a scratch DB URL but -h to another host@@-@@S="${DATABASE_URL%/*}/scratch_y"; psql "$DATABASE_URL" -qc "@C@ scratch_y"; psql -h prod.example "$S" -qc "DELETE FROM t"
+2@@a scratch DB variable re-assigned to the project DB@@-@@S="${DATABASE_URL%/*}/scratch_z"; psql "$DATABASE_URL" -qc "@C@ scratch_z"; S="$DATABASE_URL"; psql "$S" -qc "DELETE FROM t"
+2@@an assignment before a command applies to that command only — the next psql is the project DB@@-@@S="${DATABASE_URL%/*}/scratch_w"; psql "$DATABASE_URL" -qc "@C@ scratch_w"; DATABASE_URL=$S npm run db:migrate; psql "$DATABASE_URL" -qc "DELETE FROM t"
+0@@scratch DB of a base derived through an alias (U=$DATABASE_URL) [B2 run3]@@-@@U="$DATABASE_URL"; BASE="${U%/*}"; psql "$BASE/postgres" -qc "@C@ rev_s5" && export DATABASE_URL="$BASE/rev_s5"; psql "$DATABASE_URL" -qc "DELETE FROM point_entries"
+2@@the alias itself is the project DB@@-@@U="$DATABASE_URL"; psql "$U" -qc "DELETE FROM point_entries"
+0@@a loop of 9 or more items [B4 run5]@@-@@for d in s1 s2 s3 s4 s5 s6 s7 s8 s9 s10; do psql -qc "@C@ $d"; done; for d in s1 s2 s3 s4 s5 s6 s7 s8 s9 s10; do psql -qc "@D@ IF EXISTS $d"; done
+2@@the project DB is mixed into 9 or more items@@-@@for d in s1 s2 s3 s4 s5 s6 s7 s8 s9 app; do psql -qc "@D@ IF EXISTS $d"; done
 CASES
+    # A function definition is written to a file (env.sh) and the next command sources and calls it [B4 run5] — the definition is recorded even inside a heredoc body
+    _td_run 0 "function definition written to an env file (recorded)" - "$(printf 'cat > /tmp/envx.sh <<%sEOF%s\nmk2() { psql "$DATABASE_URL" -qc "CREATE DATABASE $1 TEMPLATE base"; }\nEOF' "'" "'")"
+    _td_run 0 "scratch DB created by a sourced function" - '. /tmp/envx.sh; mk2 rev_rb'
+    _td_run 0 "that scratch DB cleaned up with a loop [B4 run5]" - 'for d in rev_rb; do psql "$DATABASE_URL" -qc "DROP DATABASE IF EXISTS $d"; done'
+    _td_run 2 "even a recorded function does not make the project DB a scratch DB" - '. /tmp/envx.sh; mk2 app; psql "$DATABASE_URL" -qc "DROP DATABASE IF EXISTS app"'
+    # A function that builds a connection URL is also kept in a file and sourced [B4 run5] — only a function that puts `$1` in the DB-name position is recorded
+    _td_run 0 "URL function written to an env file (recorded)" - "$(printf 'cat > /tmp/envu.sh <<%sEOF%s\nUU() { echo $DATABASE_URL | sed "s#/[^/]*\\$#/$1#"; }\nVV() { echo $DATABASE_URL; : $1; }\nmk3() { psql "$DATABASE_URL" -qc "CREATE DATABASE $1"; }\nEOF' "'" "'")"
+    _td_run 0 "DELETE inside a scratch DB reached through a URL function [B4 run5]" - '. /tmp/envu.sh; mk3 rev_u1; psql "$(UU rev_u1)" -qc "DELETE FROM t"'
+    _td_run 2 "URL function argument is the project DB" - '. /tmp/envu.sh; psql "$(UU app)" -qc "DELETE FROM t"'
+    _td_run 2 "a function that discards its argument is not a URL function" - '. /tmp/envu.sh; mk3 rev_u2; psql "$(VV rev_u2)" -qc "DELETE FROM t"'
+    # Heredoc SQL entering through a scratch-DB connection (a URL rewritten with sed) [B4 run6] — the body runs only inside that scratch DB
+    _td_run 0 "DROP TABLE in a psql heredoc on a scratch DB URL (sed) [B4 run6]" - "$(printf 'MIG=$(echo "$DATABASE_URL" | sed %ss#/app$#/migtest#%s); psql "$DATABASE_URL" -qc "DROP DATABASE IF EXISTS migtest" -c "CREATE DATABASE migtest"; psql "$MIG" -v ON_ERROR_STOP=1 -q <<%sSQL%s\nBEGIN;\nDROP TABLE point_lots;\nDELETE FROM schema_migrations;\nSQL' "'" "'" "'" "'")"
+    _td_run 2 "a heredoc DROP TABLE on a project-DB connection stays blocked" - "$(printf 'MIG=$(echo "$DATABASE_URL" | sed %ss#/app$#/migtest2#%s); psql "$DATABASE_URL" -qc "CREATE DATABASE migtest2"; psql "$DATABASE_URL" -q <<%sSQL%s\nDROP TABLE users;\nSQL\npsql "$MIG" -qc "select 1"' "'" "'" "'" "'")"
     # In heredoc SQL the DROP is on a different line from psql, so the connection cannot be proven — it is blocked as today (a known limit)
     _td_run 2 "DROP TABLE in heredoc SQL (connection unproven)" - "$(printf 'psql "$DATABASE_URL" <<%sSQL%s\nDROP TABLE IF EXISTS t1;\nSQL' "'" "'")"
     [ "$tdbad" -eq 0 ] && ok "security-check: shell-value expansion · table measurement $tdok/$tdok — only provable scratch objects open; project, system and unmeasurable stay blocked"
@@ -2030,6 +2059,14 @@ CASES
 CASES
     done
     [ "$gbad" -eq 0 ] && ok "security-check: prior-knowledge gate $gok/$gok — write only after calling the owning card · skill (Write · Bash), once per item per session, undecidable passes"
+    # `--owning` — the lookup the planning stage uses to fill in a slice's "Read first". It must be the same judgement as the gate (the same function is used)
+    local own
+    own=$(cd "$nd" && CLAUDE_PROJECT_DIR="$nd" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ROOT/scripts/security-check.sh" --owning migrations/0009_x.sql notes.txt 2>/dev/null)
+    if [ "$own" = "$(printf 'migrations/0009_x.sql\tRead .claude/rules/data-modeling.md')" ]; then
+      ok "security-check --owning: prints the card that owns the path, with the same judgement as the gate (a path outside any jurisdiction gives empty output)"
+    else
+      bad "security-check --owning output differs from the gate's judgement: $(printf '%s' "$own" | tr '\t\n' ' |')" "if the plan's \"Read first\" is wrong, the send-back stays exactly as it was"
+    fi
   else
     warn "temp directory or jq missing" "the prior-knowledge gate is unproven"
   fi

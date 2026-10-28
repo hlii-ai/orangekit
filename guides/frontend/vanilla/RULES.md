@@ -13,6 +13,7 @@ paths:
 # Vanilla JS + Vite core card
 
 The project spec and `.claude/rules/code-conventions.md` take precedence over this card and the `frontend-guide` skill.
+Verified versions — `vite@8`. Install the latest stable release (`code-change.md` "Before Adding a Dependency") — where an item conflicts with a newer major, the official upgrade docs take precedence.
 Look up wiring and examples in the `frontend-guide` skill when needed.
 
 ## Consistency — the project decides the values

@@ -399,7 +399,9 @@ install_toolchain() {
   command -v npm >/dev/null 2>&1 || { skip "no npm — toolchain installation skipped" "$specs"; return 0; }
   printf '{ "name": "pack-smoke", "private": true, "type": "module" }\n' > "$OUT/package.json"
   # shellcheck disable=SC2086
-  if (cd "$OUT" && npm i -D --silent --no-audit --no-fund $specs) >"$OUT/.npm.log" 2>&1; then
+  # --ignore-scripts: keeps the install scripts of packages pinned only to their major from running on the maintainer machine (S1 audit F3, 1.8.0).
+  # The typecheck needs no install scripts — the postinstall of `@prisma/client` (the node-api pack) has nothing to generate in this schema-less directory either
+  if (cd "$OUT" && npm i -D --silent --no-audit --no-fund --ignore-scripts $specs) >"$OUT/.npm.log" 2>&1; then
     ok "toolchain installed — ${n} pinned to their major"
   else
     skip "toolchain installation failed — the typecheck stays unchecked" "$(tail -2 "$OUT/.npm.log" | tr '\n' ' ') — normal when offline"

@@ -165,7 +165,7 @@ push and API version negotiation sections come alive. **It is information that i
 ⑤ What do you build the screens with:   ← ① splits the question itself
 
   ▸ If ① is "Web" — web framework:
-    1. nextjs      — Next.js 15 App Router + React 19 + Tailwind v4 + shadcn/ui + Zustand
+    1. nextjs      — Next.js App Router + React + Tailwind v4 + shadcn/ui + Zustand
     2. react-vite  — React + Vite SPA (no SSR) + Tailwind + React Router + TanStack Query + Zustand
     3. vue         — Vue 3 Composition API + Vite SPA (no SSR) + Tailwind + Vue Router + Pinia
     4. Not sure
@@ -242,7 +242,7 @@ shell question settles whether the app axis exists.
 
   ↳ Self-hosted server — **pick the language first** (it is where the toolchain splits):
       1. TypeScript  — the framework is picked in the 3rd call
-      2. Python      — fastapi: FastAPI + SQLAlchemy 2.0 + Pydantic v2 + Alembic
+      2. Python      — fastapi: FastAPI + SQLAlchemy + Pydantic + Alembic
       3. Rust        — rust-axum: Axum + Tokio + SQLx + PostgreSQL
       4. Not sure
       (Java · Go · C# and the like go through custom)
@@ -253,10 +253,10 @@ shell question settles whether the app axis exists.
       3. Decide later → `undecided`
 
 ⑩ (3rd call) Self-hosted server · TypeScript — framework:
-      1. fastify        — Fastify 5 + PostgreSQL + Drizzle + Zod
-      2. node-nest      — NestJS 11 + PostgreSQL + TypeORM 1 + class-validator
+      1. fastify        — Fastify + PostgreSQL + Drizzle + Zod
+      2. node-nest      — NestJS + PostgreSQL + TypeORM + class-validator
                           (modules, DI and decorators set the structure — it is not a variant of Express)
-      3. node-api       — Express 5 + PostgreSQL + Prisma
+      3. node-api       — Express + PostgreSQL + Prisma
       4. aws-container  — Hono + Drizzle · ECS/Fargate + RDS PostgreSQL + Cognito
                           (a finished product including the AWS infrastructure. AWS coupling stays in the infrastructure layer only)
       (the options are full — someone who knows only "TypeScript" writes "recommend" in the custom field)
@@ -393,11 +393,11 @@ the chosen backend preset left empty:
 | --- | --- | --- |
 | `supabase` | backendType · database · dataAccess · auth, all of them | nothing — show and confirm |
 | `fastapi` | backendType · database · dataAccess | **auth method** (self-issued JWT · OAuth provider · session) · hosting (optional) |
-| `node-api` | backendType · database · framework (Express 5) · ORM (Prisma) | **auth method**. The framework and ORM are nailed down by the pack — anything else is `node-nest` or the generation path |
-| `node-nest` | backendType · database · framework (NestJS 11) · ORM (TypeORM 1) · validation (class-validator) | **auth method**. Whether the guard reads a session cookie or a bearer token is a function of the frontend axis |
+| `node-api` | backendType · database · framework (Express) · ORM (Prisma) | **auth method**. The framework and ORM are nailed down by the pack — anything else is `node-nest` or the generation path |
+| `node-nest` | backendType · database · framework (NestJS) · ORM (TypeORM) · validation (class-validator) | **auth method**. Whether the guard reads a session cookie or a bearer token is a function of the frontend axis |
 | `aws-container` | defaults for every dimension | nothing — show and confirm. Changing the defaults (RDS PostgreSQL · Drizzle · Cognito) leaves the pre-built set and takes the generation path |
 | `aws-serverless` · `gcp-serverless` | defaults for every dimension | any dimension where a different service is used (e.g. DynamoDB→RDS) |
-| `fastify` | backendType · database · framework (Fastify 5) · ORM (Drizzle) | **auth method**. The pack pins the framework and ORM — a different ORM such as Prisma takes the generation path |
+| `fastify` | backendType · database · framework (Fastify) · ORM (Drizzle) | **auth method**. The pack pins the framework and ORM — a different ORM such as Prisma takes the generation path |
 | `rust-axum` | backendType · database · framework (Axum) · data access (SQLx) | **auth method**. There is no pre-built pack — generation path |
 | `firebase` | every dimension | nothing — show and confirm |
 | `custom` | the entered framework name | **DB · data access (ORM) · auth method · commands · language** — the preset fills nothing in |

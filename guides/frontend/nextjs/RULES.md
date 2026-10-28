@@ -10,9 +10,10 @@ paths:
 <!-- Stack core card — the admission conditions and the retirement procedure are in stack-guide-generator assets/guide-skeleton.md "Stack core card".
      The universal rules (no secrets behind the NEXT_PUBLIC_ prefix · an action is an entry point too, so auth first · no raw HTML injection) belong to security.md, so they are not here. -->
 
-# Next.js 15 App Router core card
+# Next.js App Router core card
 
 The project spec and `.claude/rules/code-conventions.md` take precedence over this card and the `frontend-guide` skill.
+Verified versions — `next@15` · `react@19`. Install the latest stable release (`code-change.md` "Before Adding a Dependency") — where an item conflicts with a newer major, the official upgrade docs take precedence.
 Look up wiring and examples in the `frontend-guide` skill when needed.
 
 ## Consistency — the project decides the values
