@@ -611,3 +611,18 @@
 - mistake: The `pkgs` of `pack.json` (the verified major = freshness metadata) was also written in the card title and the init menu, and the agent read it as the version to install.
 - lesson: A pack states the "verified version" as a fact only (the card's one `Verified versions —` line, which `guide-gate` checks against `pkgs`), and installation starts from the latest stable release
   (`code-change.md` "Before Adding a Dependency"). Where a card item conflicts with a newer major, the official upgrade docs take precedence. Do not put a version number in a title.
+
+## [category: tooling] Defects that appear only past the pipe buffer never show in small fixtures — block the shape with a lint and prove it with large fixtures
+
+- date: 2026-10-30
+- device: scripts/security-check.sh · build-gate.sh · handoff.sh · guide-freshness.sh · doctor.sh
+- situation: A user bug report (measured on 1.4.2–1.9.0). "Stop hook prevented continuation" on almost every turn of a long session, a secret near the top of a 300KB Write
+  passing, the handoff lost in a large working tree, guide-freshness dying only in macOS users' terminals. All six were still present in 1.10.0.
+- mistake: ① `printf "$x" | grep -q` · `jq … | awk '…exit'` · `git status | head` — when the reader finished first the writer died of SIGPIPE (141) and pipefail made that the verdict.
+  It happens only when the output exceeds ~64KB, so doctor's fixtures never showed it. **doctor itself had the same shape** (`code_lines | grep -q`), so its checks on large files
+  (security-check, 77KB) were switched off, and two false positives of the BRE lint were hidden behind that. ② `grep -c` exits 1 on zero, and the ERR trap recorded it as an abnormal exit.
+  ③ `"$dmaj→$lmaj"` — bash 3.2 in a UTF-8 locale reads the non-ASCII bytes as part of the variable name. It did not reproduce with an empty LANG in the developer's shell.
+  ④ build-gate's "changed this session" was a working-tree difference, so it blocked a session over edits made by parallel sessions in the same checkout.
+- lesson: Block size-dependent defects **by shape with a lint** (here-string · `{ cmd || true; } | reader` · `|| true` · `${name}`) and prove them by running the real hooks
+  on **large fixtures** (a 300KB Write · a 4,000-line transcript · 1,500 untracked files). Reproduce under the user's conditions (`/bin/bash` 3.2 + a UTF-8 locale).
+  Judge "what this session changed" from traces in the transcript (Edit · Write paths, paths mentioned in Bash commands), not from the working tree, and do not block when it cannot be read.

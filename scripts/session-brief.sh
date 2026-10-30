@@ -37,9 +37,9 @@ orangekit_response_language() {
       # A naive grep -m1 picks the stack language (TypeScript) as the response language depending on key order.
       # Search only after narrowing the range to the project block.
       blk=$({ sed -n '/"project"[[:space:]]*:/,/^[[:space:]]*}/p' "$cfg" 2>/dev/null || true; })
-      code=$({ printf '%s' "$blk" | grep -m1 -oE '"language"[[:space:]]*:[[:space:]]*"[^"]*"' 2>/dev/null || true; } \
+      code=$({ grep <<<"$blk" -m1 -oE '"language"[[:space:]]*:[[:space:]]*"[^"]*"' 2>/dev/null || true; } \
               | sed -E 's/.*"([^"]*)"$/\1/')
-      label=$({ printf '%s' "$blk" | grep -m1 -oE '"languageLabel"[[:space:]]*:[[:space:]]*"[^"]*"' 2>/dev/null || true; } \
+      label=$({ grep <<<"$blk" -m1 -oE '"languageLabel"[[:space:]]*:[[:space:]]*"[^"]*"' 2>/dev/null || true; } \
               | sed -E 's/.*"([^"]*)"$/\1/')
     fi
   fi
@@ -122,7 +122,7 @@ fi
 
 # Open workspaces
 if [ -d "$ORANGEKIT_ROOT/dev/active" ]; then
-  OPEN=$(find "$ORANGEKIT_ROOT/dev/active" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -5)
+  OPEN=$({ find "$ORANGEKIT_ROOT/dev/active" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true; } | head -5)
   if [ -n "$OPEN" ]; then
     printf -- '- open work: '
     printf '%s' "$OPEN" | while IFS= read -r d; do printf '`%s` ' "$(basename "$d")"; done
@@ -151,7 +151,7 @@ if [ -f "$HOOKS_JSON" ] && command -v jq >/dev/null 2>&1; then
   UNCOND=$({ jq -r '[.hooks|to_entries[].value[]? | select((.matcher // "") == "")
                   | .hooks[]?.command | capture("(?<f>[a-z0-9-]+)\\.sh").f] | unique | .[]' \
                   "$HOOKS_JSON" 2>/dev/null || true; })
-  UN=$(orangekit_num "$(printf '%s\n' "$UNCOND" | grep -c .)")
+  UN=$(orangekit_num "$(grep <<<"$UNCOND" -c . || true)")
 
   # **The number of unique hook names** left in the log. There is no time filter — the "within the last 7 days"
   # that used to be here was a condition not present in the code. The meaning is what the message says, "has it ever run",
@@ -176,7 +176,7 @@ if [ -f "$HOOKS_JSON" ] && command -v jq >/dev/null 2>&1; then
     printf -- '- first session — hook liveness is judged from the next session on (only SessionStart can fire now)\n'
   elif [ -n "$UMISS" ]; then
     printf -- '- ⚠️ hook liveness %s/%s — a hook that must fire every session has never run:%s. Check with `bash "%s/scripts/doctor.sh" --self-test`\n' \
-      "$((UN - $(printf '%s\n' $UMISS | grep -c .)))" "$UN" "$UMISS" "$PLUGIN_ROOT"
+      "$((UN - $(printf '%s\n' $UMISS | grep -c . || true)))" "$UN" "$UMISS" "$PLUGIN_ROOT"
     orangekit_edge "session-start" "doctor"
   elif [ "$SEEN" -lt "$EXPECTED" ]; then
     # Every unconditional hook is alive and only conditional ones have not fired — that is normal. No warning.

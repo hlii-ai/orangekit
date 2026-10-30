@@ -99,9 +99,9 @@ _bash_targets() {   # $1 command → the file paths it writes (one per line). He
         if (match($0, /<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_]*/)) {
           hd = substr($0, RSTART, RLENGTH); sub(/^<<-?[ \t]*["\047]?/, "", hd) } }' \
       | sed -E 's/[0-9]*>{1,2}[[:space:]]*\/dev\/null//g; s/&>[[:space:]]*\/dev\/null//g; s/[0-9]*>&[0-9]+//g')
-  { printf '%s\n' "$t" | grep -oE '(^|[^-<>=0-9A-Za-z_])>{1,2}[[:space:]]*[^[:space:];&|<>()]+' | sed -E 's/^.?>{1,2}[[:space:]]*//' || true
-    printf '%s\n' "$t" | grep -oE '(^|[;&|[:space:]])tee([[:space:]]+-a)?[[:space:]]+[^-[:space:];&|<>()][^[:space:];&|<>()]*' | awk '{print $NF}' || true
-    printf '%s\n' "$t" | grep -oE "(^|[;&|[:space:]])sed[[:space:]]+(-[A-Za-z]*i[^[:space:]]*|--in-place[^[:space:]]*)([[:space:]]+(''|\"\"))?([[:space:]]+-e)?[[:space:]]+('[^']*'|\"[^\"]*\"|[^[:space:]]+)[[:space:]]+[^-[:space:];&|<>()][^[:space:];&|<>()]*" | awk '{print $NF}' || true
+  { grep <<<"$t" -oE '(^|[^-<>=0-9A-Za-z_])>{1,2}[[:space:]]*[^[:space:];&|<>()]+' | sed -E 's/^.?>{1,2}[[:space:]]*//' || true
+    grep <<<"$t" -oE '(^|[;&|[:space:]])tee([[:space:]]+-a)?[[:space:]]+[^-[:space:];&|<>()][^[:space:];&|<>()]*' | awk '{print $NF}' || true
+    grep <<<"$t" -oE "(^|[;&|[:space:]])sed[[:space:]]+(-[A-Za-z]*i[^[:space:]]*|--in-place[^[:space:]]*)([[:space:]]+(''|\"\"))?([[:space:]]+-e)?[[:space:]]+('[^']*'|\"[^\"]*\"|[^[:space:]]+)[[:space:]]+[^-[:space:];&|<>()][^[:space:];&|<>()]*" | awk '{print $NF}' || true
   } | sed -E "s/^[\"']//; s/[\"']$//" | { grep -vE '^(/dev/|&)|[$`~*]' || true; } | sort -u
 }
 _gate_rel() {   # $1 path (absolute or relative) $2 base directory → the project-relative path, or an empty string if outside
@@ -245,7 +245,7 @@ dwarn() { printf '⚠️  %s\n     %s\n' "$1" "$2" >&2; }
 
 # First token of the command (leading environment variable assignments are skipped)
 _first_tok() {
-  printf '%s' "$1" | sed -E 's/^[[:space:]]*//; s/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*//' | awk '{print $1; exit}'
+  printf '%s' "$1" | sed -E 's/^[[:space:]]*//; s/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*//' | awk 'NR == 1 {print $1}'
 }
 
 # Is it an investigation/search command? Blocking `grep 'DROP TABLE' supabase/migrations/` is itself the false positive.
@@ -257,7 +257,7 @@ _first_tok() {
 _readonly_cmd() {
   case "$(_first_tok "$1")" in
     grep|egrep|fgrep|rg|ag|cat|head|tail|less|more|ls|find|wc|awk|diff|jq|file|stat|which|echo|printf) ;;
-    git) printf '%s' "$1" | grep -Eq '^[[:space:]]*git[[:space:]]+(log|diff|show|grep|blame|status|branch|remote|config|rev-parse|describe|ls-files)([^a-zA-Z-]|$)' || return 1 ;;
+    git) grep <<<"$1" -Eq '^[[:space:]]*git[[:space:]]+(log|diff|show|grep|blame|status|branch|remote|config|rev-parse|describe|ls-files)([^a-zA-Z-]|$)' || return 1 ;;
     *) return 1 ;;
   esac
   # Does a read command flow into a destructive executor — then it is not a read
@@ -276,8 +276,7 @@ _readonly_cmd() {
 # there is no room to confuse it with description — a bare `(`, on the other hand, is not included: prose parentheses such as
 # `git commit -m "docs: (psql) explanation"` would be mistaken for execution and become a new false positive. Narrow the hole in the exemption without adding false positives.
 _pipes_to_db_client() {
-  printf '%s' "$1" \
-    | grep -Eqi '(\$\(|`|[|;&])[[:space:]]*(sudo[[:space:]]+)?(npx[[:space:]]+)?(psql|mysql|mariadb|sqlite3|mongosh?|supabase|prisma|drizzle-kit|alembic|sqlcmd)([[:space:]]|$)'
+  grep <<<"$1" -Eqi '(\$\(|`|[|;&])[[:space:]]*(sudo[[:space:]]+)?(npx[[:space:]]+)?(psql|mysql|mariadb|sqlite3|mongosh?|supabase|prisma|drizzle-kit|alembic|sqlcmd)([[:space:]]|$)'
 }
 
 # Does a heredoc feed a DB client — then the body is not data but **SQL that will be executed**.
@@ -348,7 +347,7 @@ _strip_heredoc_bodies() {
 # The verdict is not made from the heredoc alone: `psql <<'SQL'` is a heredoc but it is execution.
 _authoring_cmd() {
   case "$(_first_tok "$1")" in
-    cat|tee|printf|echo) printf '%s' "$1" | grep -Eq '(>|<<)' && return 0 ;;
+    cat|tee|printf|echo) grep <<<"$1" -Eq '(>|<<)' && return 0 ;;
   esac
   return 1
 }
@@ -360,7 +359,7 @@ _authoring_cmd() {
 # and it is not granted when a DB client follows a pipe.
 _message_cmd() {
   case "$(_first_tok "$1")" in
-    git) printf '%s' "$1" | grep -Eq '^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*git[[:space:]]+(commit|tag|notes|merge|revert|stash)([^a-zA-Z-]|$)' || return 1 ;;
+    git) grep <<<"$1" -Eq '^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*git[[:space:]]+(commit|tag|notes|merge|revert|stash)([^a-zA-Z-]|$)' || return 1 ;;
     gh|glab) ;;
     *) return 1 ;;
   esac
@@ -379,10 +378,10 @@ _segments() { printf '%s\n' "$1" | awk '{ gsub(/;|&&|\|\|/, "\n"); print }'; }
 # `bash scripts/doctor.sh --help; psql -c "DROP TABLE users"` was exit 0 (evaluation v6 · E-21).
 # The exemption is judged by the first token, and is not granted when another command follows (`;` `&&` `||` `&`).
 _self_ref_cmd() {
-  printf '%s' "$1" | grep -Eq '(;|&&|\|\||&[[:space:]]|&$)' && return 1
+  grep <<<"$1" -Eq '(;|&&|\|\||&[[:space:]]|&$)' && return 1
   local t1 t2
   t1=$(_first_tok "$1")
-  t2=$(printf '%s' "$1" | sed -E 's/^[[:space:]]*//; s/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*//' | awk '{print $2; exit}')
+  t2=$(printf '%s' "$1" | sed -E 's/^[[:space:]]*//; s/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*//' | awk 'NR == 1 {print $2}')
   case "$t1" in
     */doctor.sh|*/security-check.sh|doctor.sh|security-check.sh) return 0 ;;
     bash|sh) case "$t2" in */doctor.sh|*/security-check.sh|doctor.sh|security-check.sh) return 0 ;; esac ;;
@@ -397,8 +396,8 @@ _self_ref_cmd() {
 _writes_file() {
   local c
   c=$(printf '%s' "$1" | sed -E 's/[0-9]*>{1,2}[[:space:]]*\/dev\/null//g; s/&>[[:space:]]*\/dev\/null//g; s/[0-9]*>&[0-9]+//g')
-  printf '%s' "$c" | grep -Eq '(^|[^0-9A-Za-z_])(tee|dd)([^0-9A-Za-z_]|$)' && return 0
-  printf '%s' "$c" | grep -Eq '(^|[^-<>=])>{1,2}[[:space:]]*[^=&[:space:]]' && return 0
+  grep <<<"$c" -Eq '(^|[^0-9A-Za-z_])(tee|dd)([^0-9A-Za-z_]|$)' && return 0
+  grep <<<"$c" -Eq '(^|[^-<>=])>{1,2}[[:space:]]*[^=&[:space:]]' && return 0
   return 1
 }
 
@@ -592,8 +591,8 @@ $(cat "$f" 2>/dev/null)"
     case "$n" in *'$'*|*'('*|*'{'*|*'`'*) return 1 ;; esac
     case "$_SYS_DBS" in *" $n "*) return 1 ;; esac
     [ -z "$proj" ] && { proj=$(_project_db_names); [ -z "$proj" ] && return 1; }
-    printf '%s\n' "$proj" | grep -qxF -- "$n" && return 1
-    printf '%s\n' "$created" | grep -qxF -- "$n" || return 1
+    grep <<<"$proj" -qxF -- "$n" && return 1
+    grep <<<"$created" -qxF -- "$n" || return 1
   done <<< "$targets"
   return 0
 }
@@ -621,10 +620,10 @@ _psql_targets_project_db() (   # $1 segment containing psql — subshell: keeps 
   urlform='"\$DATABASE_URL"|\$DATABASE_URL|"\$\{DATABASE_URL\}"|\$\{DATABASE_URL\}'
   # Segment splitting also cuts at a `;` inside quotes (`-c "DROP TABLE t; DELETE …"`) — a fragment with no closing quote is also treated as a -c argument
   t=$(printf ' %s ' "$t" | sed -E "s/[[:space:]]-[A-Za-z]*[cf][[:space:]]+(\"[^\"]*(\"|\$)|'[^']*('|\$))/ /g; s/<<-?[[:space:]]*['\"]?[A-Za-z_]+['\"]?/ /g; s/[0-9]*>&?[^[:space:]]*/ /g; s/<[^[:space:]]*/ /g")
-  cnt=$(printf '%s' "$t" | grep -oE "$urlform" | wc -l | tr -d ' ')
+  cnt=$(grep <<<"$t" -oE "$urlform" | wc -l | tr -d ' ')
   [ "${cnt:-0}" -eq 1 ] || return 1      # a psql with no connection argument connects with the PG* defaults — no proof it is the project DB
   t=$(printf '%s' "$t" | sed -E "s/($urlform)/ /")
-  printf '%s' "$t" | grep -Eq '^[[:space:]]*(-[qXAt1]+([[:space:]]+|$)|-v[[:space:]]+[A-Za-z_]+=[^[:space:]]*([[:space:]]+|$)|--quiet([[:space:]]+|$))*[[:space:]]*$'
+  grep <<<"$t" -Eq '^[[:space:]]*(-[qXAt1]+([[:space:]]+|$)|-v[[:space:]]+[A-Za-z_]+=[^[:space:]]*([[:space:]]+|$)|--quiet([[:space:]]+|$))*[[:space:]]*$'
 )
 
 # The target names of DROP TABLE (one per line). If the same statement has CASCADE, a `@@cascade@@` line is emitted first
@@ -663,7 +662,7 @@ _probe_table() (   # $1 lowercase literal name (schema.table allowed)
 # Does the same command change the connection environment — `DATABASE_URL=… psql "$DATABASE_URL"` · `export DATABASE_URL=…` · `PGHOST=… psql` · `unset DATABASE_URL`.
 # If so, `"$DATABASE_URL"` is not the DB the hook measured (the measured target and the executed target diverge) → undecidable
 _command_redefines_db_env() {
-  printf '%s' "${_GATE_CMD:-}" | grep -Eq '(^|[^A-Za-z0-9_])(DATABASE_URL|PGHOST|PGHOSTADDR|PGPORT|PGDATABASE|PGUSER|PGSERVICE|PGSERVICEFILE|PGPASSFILE|PGOPTIONS)=|unset[[:space:]]+(DATABASE_URL|PG[A-Z]+)'
+  grep <<<"${_GATE_CMD:-}" -Eq '(^|[^A-Za-z0-9_])(DATABASE_URL|PGHOST|PGHOSTADDR|PGPORT|PGDATABASE|PGUSER|PGSERVICE|PGSERVICEFILE|PGPASSFILE|PGOPTIONS)=|unset[[:space:]]+(DATABASE_URL|PG[A-Z]+)'
 }
 
 _scratch_tables_ok() {   # $1 segment
@@ -675,7 +674,7 @@ _scratch_tables_ok() {   # $1 segment
     if [ "$t" = "@@cascade@@" ]; then cascade=1; continue; fi
     case "$t" in *'"'*) return 1 ;; esac
     t=$(printf '%s' "$t" | tr 'A-Z' 'a-z')
-    printf '%s' "$t" | grep -Eq '^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$' || return 1
+    grep <<<"$t" -Eq '^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$' || return 1
     case "$t" in pg_*|information_schema.*|pg_catalog.*) return 1 ;; esac
     st=$(_probe_table "$t" || printf '@@undecided@@')   # a failed measurement is received as a value — so a failure inside a command substitution does not fire the ERR trap
     [ "$st" = "@@undecided@@" ] && return 1
@@ -691,9 +690,9 @@ _scratch_tables_ok() {   # $1 segment
 
 # All DROPs in one segment — DATABASE by name proof, TABLE by measurement, SCHEMA never exempt. When the three are mixed, all must pass
 _drop_exempt() {   # $1 segment  $2 DB names created in the same command
-  printf '%s' "$1" | grep -Eqi '(^|[^a-z_])drop[[:space:]]+schema([^a-z_]|$)' && return 1
-  if printf '%s' "$1" | grep -Eqi '(^|[^a-z_])drop[[:space:]]+database([^a-z_]|$)'; then _scratch_dbs_ok "$1" "$2" || return 1; fi
-  if printf '%s' "$1" | grep -Eqi '(^|[^a-z_])drop[[:space:]]+table([^a-z_]|$)'; then _scratch_tables_ok "$1" || return 1; fi
+  grep <<<"$1" -Eqi '(^|[^a-z_])drop[[:space:]]+schema([^a-z_]|$)' && return 1
+  if grep <<<"$1" -Eqi '(^|[^a-z_])drop[[:space:]]+database([^a-z_]|$)'; then _scratch_dbs_ok "$1" "$2" || return 1; fi
+  if grep <<<"$1" -Eqi '(^|[^a-z_])drop[[:space:]]+table([^a-z_]|$)'; then _scratch_tables_ok "$1" || return 1; fi
   return 0
 }
 
@@ -703,7 +702,7 @@ _record_created_dbs() {   # $1 names (one per line)
   f=$(_created_dbs_file) || return 0
   [ -z "$1" ] && return 0
   mkdir -p "$(dirname "$f")" 2>/dev/null || return 0
-  printf '%s\n' "$1" | grep -v '[$({`]' >> "$f" 2>/dev/null || true
+  grep <<<"$1" -v '[$({`]' >> "$f" 2>/dev/null || true
   n=$(orangekit_num "$(wc -l < "$f" 2>/dev/null)")
   if [ "$n" -gt 400 ]; then
     tail -200 "$f" > "$f.tmp" 2>/dev/null && mv "$f.tmp" "$f" 2>/dev/null || rm -f "$f.tmp"
@@ -733,7 +732,7 @@ _db_creates_via_fns() (   # $1 executable segment → names created by calling a
   fns=$(sort -u "$f" 2>/dev/null)
   while IFS= read -r fn; do
     [ -n "$fn" ] || continue
-    printf '%s\n' "$1" | grep -oE "(^|[[:space:];&|(])$fn[[:space:]]+[A-Za-z_][A-Za-z0-9_-]*" | awk '{print tolower($NF)}' || true
+    grep <<<"$1" -oE "(^|[[:space:];&|(])$fn[[:space:]]+[A-Za-z_][A-Za-z0-9_-]*" | awk '{print tolower($NF)}' || true
   done <<< "$fns"
 )
 _record_db_creator_fns() {   # $1 raw text
@@ -778,7 +777,7 @@ _scratch_db_ok() {   # $1 name  $2 names created in the same command → 0 = pro
 }
 _url_db_name() (   # $1 assigned value → if it is DATABASE_URL with only the DB name changed, that name (lowercase)
   trap - ERR; set +e
-  printf '%s' "$1" | grep -q 'DATABASE_URL\|@@base@@' || return 1
+  grep <<<"$1" -qE 'DATABASE_URL|@@base@@' || return 1
   printf '%s' "$1" | sed -nE 's#.*/([A-Za-z_][A-Za-z0-9_]*)[#|"'"'"')]*[[:space:]]*$#\1#p' | tr 'A-Z' 'a-z' | head -1
 )
 _psql_conn_db() (   # $1 psql segment  $2 "VAR=db" lines → the DB name that psql attaches to (if it resolves)
@@ -786,17 +785,17 @@ _psql_conn_db() (   # $1 psql segment  $2 "VAR=db" lines → the DB name that ps
   local t v
   case "$1" in *psql*) ;; *) return 1 ;; esac
   t=${1#*psql}
-  printf '%s' "$t" | grep -Eq '(^|[[:space:]])-(h|-host|p|-port|U|-username)([[:space:]=]|$)' && return 1
-  v=$(printf '%s' "$t" | grep -oE '(^|[[:space:]])-d[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' | awk '{print tolower($NF)}' | head -1)
+  grep <<<"$t" -Eq '(^|[[:space:]])-(h|-host|p|-port|U|-username)([[:space:]=]|$)' && return 1
+  v=$(grep <<<"$t" -oE '(^|[[:space:]])-d[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' | awk '{print tolower($NF)}' | head -1)
   [ -n "$v" ] && { printf '%s' "$v"; return 0; }
-  v=$(printf '%s' "$t" | grep -oE '^[[:space:]]*"?\$\([A-Za-z_][A-Za-z0-9_-]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*\)' | head -1)
+  v=$(grep <<<"$t" -oE '^[[:space:]]*"?\$\([A-Za-z_][A-Za-z0-9_-]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*\)' | head -1)
   if [ -n "$v" ]; then
     local fn arg f
     fn=$(printf '%s' "$v" | sed -E 's/^[[:space:]]*"?\$\(([A-Za-z_][A-Za-z0-9_-]*).*/\1/'); arg=$(printf '%s' "$v" | sed -E 's/.*[[:space:]]([A-Za-z_][A-Za-z0-9_]*)\)$/\1/')
     f=$(_url_fns_file) && [ -f "$f" ] && grep -qxF -- "$fn" "$f" && { printf '%s' "$arg" | tr 'A-Z' 'a-z'; return 0; }
     return 1
   fi
-  v=$(printf '%s' "$t" | grep -oE '"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?(/[A-Za-z_][A-Za-z0-9_]*)?"?' | head -1 | tr -d '"{}')
+  v=$(grep <<<"$t" -oE '"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?(/[A-Za-z_][A-Za-z0-9_]*)?"?' | head -1 | tr -d '"{}')
   [ -n "$v" ] || return 1
   case "$v" in
     */*) printf '%s' "${v##*/}" | tr 'A-Z' 'a-z'; return 0 ;;
@@ -816,10 +815,10 @@ _conn_update() (   # $1 assignment lines (VAR<TAB>value)  $2 the map so far ("VA
   while IFS="$(printf '\t')" read -r var val; do
     [ -n "$var" ] || continue
     map=$(printf '%s\n' "$map" | awk -F= -v k="$var" '$1!=k')
-    if printf '%s' "$val" | grep -Eq '^"?\$\{?DATABASE_URL\}?"?$'; then map="$map
+    if grep <<<"$val" -Eq '^"?\$\{?DATABASE_URL\}?"?$'; then map="$map
 $var=@@url@@"; continue; fi
     b=$(printf '%s' "$val" | sed -nE 's/^"?\$\{([A-Za-z_][A-Za-z0-9_]*)%\/[^}]*\}"?$/\1/p')
-    if [ "$b" = DATABASE_URL ] || { [ -n "$b" ] && printf '%s\n' "$map" | grep -qxF -- "$b=@@url@@"; }; then map="$map
+    if [ "$b" = DATABASE_URL ] || { [ -n "$b" ] && grep <<<"$map" -qxF -- "$b=@@url@@"; }; then map="$map
 $var=@@base@@"; continue; fi
     for b in $(printf '%s\n' "$map" | awk -F= '$2=="@@base@@" {print $1}'); do
       val=$(printf '%s' "$val" | sed "s#\\\$$b\([^A-Za-z0-9_]\)#@@base@@\1#g; s#\\\${$b}#@@base@@#g")
@@ -837,7 +836,7 @@ destructive_gate() {
   local DCMD; DCMD=$(_expand_shell_literals "$(_strip_heredoc_bodies "$1")")
   _GATE_CMD="$DCMD"
   local target="" _D
-  dhas() { printf '%s' "$_D" | grep -Eqi -e "$1"; }
+  dhas() { grep <<<"$_D" -Eqi -e "$1"; }
 
   # ── Data destruction (SQL · migration tools) — judged per segment ───
   # A segment that is neither an investigation command, an authoring command, nor a message command = something meant to run
@@ -874,8 +873,8 @@ $(_db_creates_via_fns "$seg")
     scratch_seg=0
     if _scratch_db_ok "$(_psql_conn_db "$seg" "$segmap" || printf '@@none@@')" "$created_here"; then
       scratch_seg=1
-      if printf '%s' "$seg" | grep -Eq '<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*'; then
-        hd_delim=$(printf '%s' "$seg" | grep -oE '<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*' | head -1 | sed -E "s/^<<-?[[:space:]]*['\"]?//")
+      if grep <<<"$seg" -Eq '<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*'; then
+        hd_delim=$(grep <<<"$seg" -oE '<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*' | head -1 | sed -E "s/^<<-?[[:space:]]*['\"]?//")
       fi
     fi
     if [ "$scratch_seg" = 1 ]; then
@@ -942,12 +941,12 @@ $(_db_creates_via_fns "$seg")
   local pushseg="" pmode=""
   if dhas 'git[[:space:]]+push'; then
     pushseg=$(printf '%s' "$DCMD" | tr ';|&' '\n' | grep -E 'git[[:space:]]+push' | head -1)
-    if printf '%s' "$pushseg" | grep -Eq -- '(--force([^-]|$)|[[:space:]]-f([[:space:]]|$))' \
-       && ! printf '%s' "$pushseg" | grep -q -- '--force-with-lease'; then
+    if grep <<<"$pushseg" -Eq -- '(--force([^-]|$)|[[:space:]]-f([[:space:]]|$))' \
+       && ! grep <<<"$pushseg" -q -- '--force-with-lease'; then
       pmode="force"
-    elif printf '%s' "$pushseg" | grep -Eq '[[:space:]]\+[A-Za-z0-9_./:-]+'; then
+    elif grep <<<"$pushseg" -Eq '[[:space:]]\+[A-Za-z0-9_./:-]+'; then
       pmode="force"
-    elif printf '%s' "$pushseg" | grep -Eq -- '(^|[[:space:]])(--delete|-d)([[:space:]]|$)|[[:space:]]:[A-Za-z0-9_./-]+([[:space:]]|$)'; then
+    elif grep <<<"$pushseg" -Eq -- '(^|[[:space:]])(--delete|-d)([[:space:]]|$)|[[:space:]]:[A-Za-z0-9_./-]+([[:space:]]|$)'; then
       pmode="delete"
     fi
   fi
@@ -991,7 +990,7 @@ $(_db_creates_via_fns "$seg")
     && dwarn "git clean — untracked files are deleted" "Check the targets first with git clean -n"
 
   # Record the DBs created by a command that passed this gate — a later cleanup (`DROP DATABASE`) proves ② with them
-  _record_created_dbs "$(printf '%s' "$created_here" | grep -v '^$' || true)"
+  _record_created_dbs "$(grep <<<"$created_here" -v '^$' || true)"
   return 0
 }
 
@@ -1041,8 +1040,11 @@ block() {
 warn() { printf '⚠️  %s\n%s\n' "$1" "$2" >&2; }
 
 # -e is required: a pattern starting with '-', such as a PEM header, is mistaken by grep for an option
-has()  { printf '%s' "$TEXT" | grep -Eq  -e "$1"; }
-hasi() { printf '%s' "$TEXT" | grep -Eqi -e "$1"; }
+# A here-string is required: in `printf | grep -q`, when grep stops at its first match printf dies of SIGPIPE, and under
+# pipefail that 141 reads as "no match". A secret near the **top** of a Write larger than the pipe buffer (~64KB) went
+# through (consumer report). Every `grep <<<"$x"` in this file is there for the same reason.
+has()  { grep <<<"$TEXT" -Eq  -e "$1"; }
+hasi() { grep <<<"$TEXT" -Eqi -e "$1"; }
 
 # ── .env exemption — only when proven ─────────────────────────────────
 #

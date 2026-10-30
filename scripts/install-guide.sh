@@ -488,7 +488,7 @@ except Exception: print('')" 2>/dev/null)
   for f in "$packdir/resources"/*.md; do
     [ -f "$f" ] || continue
     if [ -n "$seamdir" ] && [ -f "$seamdir/resources/$(basename "$f")" ]; then continue; fi
-    if printf '%s\n' "$OLDSEAM" | grep -qxF "$(basename "$f")"; then
+    if grep <<<"$OLDSEAM" -qxF "$(basename "$f")"; then
       printf '    = %-30s project seam — preserved (not laying down the pack file of the same name)\n' "$(basename "$f")"
       continue
     fi
@@ -499,7 +499,7 @@ except Exception: print('')" 2>/dev/null)
   if [ -n "$vfiles" ]; then
     while IFS= read -r f; do
       [ -f "$f" ] || continue
-      if printf '%s\n' "$OLDSEAM" | grep -qxF "$(basename "$f")"; then
+      if grep <<<"$OLDSEAM" -qxF "$(basename "$f")"; then
         printf '    = %-30s project seam — preserved (not laying down the pack variant)\n' "$(basename "$f")"
         continue
       fi
@@ -574,7 +574,7 @@ $({ grep -oE '"seamFiles"[^]]*\]' "$dst/assembly.json" 2>/dev/null || true; } \
     while IFS= read -r oldf; do
       if [ -z "$oldf" ]; then continue; fi
       if [ ! -f "$dst/resources/$oldf" ]; then continue; fi
-      if printf '%s' "$newfiles" | grep -qxF "$oldf"; then continue; fi
+      if grep <<<"$newfiles" -qxF "$oldf"; then continue; fi
       printf '    - %-30s retired — not in this assembly\n' "$oldf"
       rm -f "$dst/resources/$oldf"
       retired=$((retired+1))
@@ -827,7 +827,7 @@ run_self_test() {
   printf -- '---\nname: frontend-guide\n---\n<!-- orangekit-guide: assembled pkgs=zod@3 -->\n' > "$proj/.claude/skills/frontend-guide/SKILL.md"
   rm -f "$card"
   out=$(CLAUDE_PLUGIN_ROOT="$t" CLAUDE_PROJECT_DIR="$proj" bash "$0" --frontend full --no-freshness --no-cache 2>&1) || true
-  if printf '%s' "$out" | grep -q 'state: frontend=pinned' && cmp -s "$t/guides/frontend/full/RULES.md" "$card"; then
+  if grep <<<"$out" -q 'state: frontend=pinned' && cmp -s "$t/guides/frontend/full/RULES.md" "$card"; then
     printf '  ✓ an axis whose stack premise is pinned still receives the core card\n'; pass=$((pass+1))
   else
     printf '  ✗ no core card on a pinned axis (or it was not judged pinned)\n'; fail=$((fail+1))

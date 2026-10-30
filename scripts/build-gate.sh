@@ -46,12 +46,54 @@ fi
 
 # Source extensions only (config, docs and markdown excluded)
 # dart is the Flutter app axis — leave it out and a session that only edited .dart passes with no verification
-SRC_CHANGED=$(printf '%s\n' "$CHANGED" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|dart|rb|php|vue|svelte)$' \
+SRC_CHANGED=$(grep <<<"$CHANGED" -E '\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|dart|rb|php|vue|svelte)$' \
   | grep -vE '\.(config|test|spec)\.' | grep -vE '^\s*$' || true)
 
 [ -z "$SRC_CHANGED" ] && exit 0
 
-SRC_COUNT=$(orangekit_num "$(printf '%s\n' "$SRC_CHANGED" | grep -c . || printf '0')")
+# ── 1-b. Keep only what **this session** changed ──────────────────────
+# The snapshot difference is "what changed in the working tree", not "what this session changed". When other sessions
+# work in the same checkout their edits land in the difference, and the gate **blocked this session over files it never
+# touched** (consumer report 2026-10-28 · three sessions in parallel). Keep only files this session left a trace on in the
+# transcript — ⓐ the path of an Edit · Write · MultiEdit · NotebookEdit ⓑ a file whose path or name appears in a Bash
+# command (sed -i · cp · mv). Known limit: a codemod or generator that changes files without naming them in the command
+# is not counted. Matching by file name is loose and can count another session's file of the same name — that error is
+# on the blocking side, the same as the previous behaviour.
+# A transcript that cannot be read is undecidable — do not block (the three-state rule below).
+{ [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ] && command -v jq >/dev/null 2>&1; } || exit 0
+
+# jq is wrapped in `{ … || true; }` for the same reason as _verification_ran below (SIGPIPE).
+_session_touched() {
+  { jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use")
+            | if (.name | test("^(Edit|Write|MultiEdit|NotebookEdit)$"))
+                then "E\t" + (.input.file_path // .input.notebook_path // "")
+              elif .name=="Bash" then "B\t" + ((.input.command // "") | gsub("\n"; " "))
+              else empty end' "$TRANSCRIPT" 2>/dev/null || true; } \
+  | ORANGEKIT_SRC_LIST="$SRC_CHANGED" awk '
+    # A bounded mention — look at the characters on both sides so `a.ts` does not match inside `data.tsx`
+    function mention(s, p,    i, k, pre, post) {
+      k = 0
+      while ((i = index(substr(s, k + 1), p)) > 0) {
+        k += i
+        pre = (k > 1) ? substr(s, k - 1, 1) : ""
+        post = substr(s, k + length(p), 1)
+        if (pre !~ /[A-Za-z0-9_.-]/ && post !~ /[A-Za-z0-9_.-]/) return 1
+      }
+      return 0
+    }
+    BEGIN { n = split(ENVIRON["ORANGEKIT_SRC_LIST"], w, "\n")
+            for (i = 1; i <= n; i++) { b[i] = w[i]; sub(/.*\//, "", b[i]) } }
+    /^E\t/ { p = substr($0, 3)
+             for (i = 1; i <= n; i++)
+               if (!hit[i] && (p == w[i] || substr(p, length(p) - length(w[i])) == "/" w[i])) hit[i] = 1
+             next }
+    /^B\t/ { for (i = 1; i <= n; i++) if (!hit[i] && (mention($0, w[i]) || mention($0, b[i]))) hit[i] = 1 }
+    END { for (i = 1; i <= n; i++) if (hit[i]) print w[i] }'
+}
+SRC_CHANGED=$(_session_touched)
+[ -z "$SRC_CHANGED" ] && exit 0
+
+SRC_COUNT=$(orangekit_num "$(grep <<<"$SRC_CHANGED" -c . || printf '0')")
 [ "$SRC_COUNT" -eq 0 ] && exit 0
 
 # ── 2. Did the build/tests actually run? ──────────────────────────────
@@ -85,10 +127,15 @@ fi
 # (cargo test · go vet …). A segment carrying install vocabulary (install, add) is excluded from ② —
 # `python -m pip install pytest` is not verification. Known limit: if a line of a heredoc **body** in a file
 # starts with a verifier name it is counted as a run — the inherent boundary of judging from command text alone.
+#
+# **jq is wrapped in `{ … || true; }`.** awk exits on the first verification command, and if jq is still writing at that
+# moment it dies of SIGPIPE (141) — under pipefail that 141 became the pipeline's value and turned "ran" into "did not run".
+# In long sessions whose transcript exceeds the pipe buffer (~64KB) this blocked **almost every turn** (consumer report
+# 2026-10-23~28). Wrapped, the verdict is decided by awk's END alone.
 _verification_ran() {
-  jq -r 'select(.type=="assistant") | .message.content[]?
+  { jq -r 'select(.type=="assistant") | .message.content[]?
           | select(.type=="tool_use" and .name=="Bash") | .input.command // empty' \
-     "$TRANSCRIPT" 2>/dev/null \
+     "$TRANSCRIPT" 2>/dev/null || true; } \
   | awk '
     function head(s) {
       sub(/^[ \t]+/, "", s)
@@ -120,9 +167,9 @@ _verification_ran && BUILD_RAN=1
 # and repeated false positives make the user turn the hook off (the principle in security-check.sh).
 _ui_render_notice() {
   local ui_changed ui_count stamp
-  ui_changed=$(printf '%s\n' "$SRC_CHANGED" | grep -E '\.(tsx|jsx|vue|svelte)$' || true)
+  ui_changed=$(grep <<<"$SRC_CHANGED" -E '\.(tsx|jsx|vue|svelte)$' || true)
   [ -z "$ui_changed" ] && return 0
-  ui_count=$(orangekit_num "$(printf '%s\n' "$ui_changed" | grep -c . || printf '0')")
+  ui_count=$(orangekit_num "$(grep <<<"$ui_changed" -c . || printf '0')")
   [ "$ui_count" -eq 0 ] && return 0
 
   stamp="$(orangekit_state_dir)/ui-notice.stamp"
@@ -130,11 +177,11 @@ _ui_render_notice() {
 
   # A trace that the render was checked — a probe or browser-automation Bash call, or a built-in /run skill call.
   # Not the presence of a string but **an actual tool call** (the lesson of v2's stop-guard).
-  if jq -r 'select(.type=="assistant") | .message.content[]?
+  if { jq -r 'select(.type=="assistant") | .message.content[]?
             | select(.type=="tool_use")
             | if .name=="Bash" then (.input.command // empty)
               elif .name=="Skill" then (.input.skill // empty)
-              else empty end' "$TRANSCRIPT" 2>/dev/null \
+              else empty end' "$TRANSCRIPT" 2>/dev/null || true; } \
      | grep -qiE '(ui-probe|playwright|puppeteer|chromium|(^|:)run$)'; then
     return 0
   fi

@@ -211,7 +211,7 @@ check_target() { # $1=label $2=asset dir $3=pack|guide
       # release and kill the signal.
       fixed="no"
       if is_fixed_variant "$name" "$DIR" && [ "${dmaj%%.*}" != "${lmaj%%.*}" ]; then fixed="yes"; fi
-      printf '%s\t%s\t%s\tmajor_up\t%s\t%s\n' "$name" "$dmaj→$lmaj" "$latest" "$fixed" "$files" >> "$TMP/report.tsv"
+      printf '%s\t%s\t%s\tmajor_up\t%s\t%s\n' "$name" "${dmaj}→${lmaj}" "$latest" "$fixed" "$files" >> "$TMP/report.tsv"
     fi
   done < "$TMP/res.tsv"
 

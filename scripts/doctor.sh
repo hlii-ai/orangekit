@@ -128,6 +128,17 @@ _fx_static_tree() {
   printf -- '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash ${CLAUDE_PLUGIN_ROOT}/scripts/x.sh"}]}]}}\n' \
     > "$T/hooks/hooks.json"
   printf -- '#!/bin/bash\nexit 0\n' > "$T/scripts/x.sh"
+  # The **allowed forms** in a script that holds an ERR trap — the baseline for the three pipe lints (if these fire it is a false positive)
+  # The set line is written with printf — a `set -e` at the start of a line would make doctor.sh itself look like an ERR-trap holder
+  printf '#!/bin/bash\nset -Eeuo pipefail\n' > "$T/scripts/guarded.sh"
+  cat >> "$T/scripts/guarded.sh" <<'FXS'
+has() { grep <<<"$TEXT" -Eq -e "$1"; }
+M=$({ git status --porcelain 2>/dev/null || true; } | head -12)
+{ jq -r '.a' "$F" 2>/dev/null || true; } \
+  | awk '{ found = 1; exit } END { exit !found }'
+N=$(grep -c x "$F" 2>/dev/null || true)
+printf '%s\n' "${a}→${b}"
+FXS
   printf -- '{"plugins":[{"name":"fx","description":"1 hooks that verify themselves. 3 skills + axis guide packs (frontend 0 · backend 0), 2-axis presets (frontend 2 · backend 2)."}]}\n' \
     > "$T/.claude-plugin/marketplace.json"
   printf -- '# Anatomy\n\nReal counts — hooks 1 · T1 rule cards 2 · skills 3 · graph nodes 3 · edges 1\n' \
@@ -209,7 +220,7 @@ run_fast() {
   for f in scripts/*.sh; do
     [ -f "$f" ] || continue
     case "$f" in */lib/*) continue;; esac
-    if code_lines "$f" | grep -q '|| *echo *"\?0"\?'; then
+    if { code_lines "$f" || true; } | grep -q '|| *echo *"\?0"\?'; then
       hits="$hits $(basename "$f")"; n=$((n+1))
     fi
   done
@@ -244,13 +255,60 @@ run_fast() {
     ok "no unguarded glob pipe"
   fi
 
+  # An unguarded writer before an early-exit reader — same targets (scripts holding an ERR trap), same path to death.
+  # In `printf "$x" | grep -q` · `jq … | awk '…exit'` · `git status | head`, when the reader finishes first the writer dies
+  # of SIGPIPE (141) and pipefail makes that the pipeline's value. It happens only when the output exceeds the pipe buffer
+  # (~64KB), so small fixtures never showed it — measured: a secret passing in a large Write, false Stop blocks in long
+  # sessions, a lost handoff in a large working tree (consumer report 2026-10-23~28).
+  # Allowed forms: a variable goes through a here-string (`grep <<<"$x"`), a command through `{ cmd || true; } | reader`.
+  # `grep -c` exits 1 when the count is 0 — unguarded, "zero" is recorded as an abnormal exit.
+  local pw="" pc="" n=0 m=0
+  for f in scripts/*.sh; do
+    [ -f "$f" ] || continue
+    case "$f" in */lib/*) continue;; esac
+    grep -qE '^set -[A-Za-z]*e|^[[:space:]]*(source|\.)[[:space:]]+[^|]*lib/common\.sh' "$f" 2>/dev/null || continue
+    # Joining continued lines (`\`) is what makes a jq pipeline spread over several lines visible
+    if { code_lines "$f" | awk '{ if (sub(/\\$/, "")) { b = b $0; next } print b $0; b = "" }' || true; } \
+       | grep -qE "printf[[:space:]]+'%s(\\\\n)?'[[:space:]]+\"[^\"]*\"[[:space:]]*\|[[:space:]]*grep|(^|[(;&|]|\\\$\()[[:space:]]*(jq|git|find|cat)[[:space:]][^|]*\|[[:space:]]*(head([[:space:]]|\$)|grep[[:space:]][^|]*-[A-Za-z]*q|awk[[:space:]][^|]*exit)"; then
+      pw="$pw $(basename "$f")"; n=$((n+1))
+    fi
+    if { code_lines "$f" | grep -E 'grep[[:space:]]([^|;)]*[[:space:]])?-[A-Za-z]*c([[:space:]]|$)' || true; } | grep -qv '||'; then
+      pc="$pc $(basename "$f")"; m=$((m+1))
+    fi
+  done
+  if [ "$n" -gt 0 ]; then
+    bad "unguarded writer → early-exit reader: ${n} files" "$pw — on large input SIGPIPE 141 flips the verdict. grep <<<\"\$x\" or { cmd || true; } | reader"
+  else
+    ok "every writer before an early-exit reader is guarded"
+  fi
+  if [ "$m" -gt 0 ]; then
+    bad "unguarded grep -c: ${m} files" "$pc — exits 1 on zero → the ERR trap records an abnormal exit. || true is required"
+  else
+    ok "every grep -c is guarded"
+  fi
+
+  # A non-ASCII byte right after `$name` — macOS /bin/bash 3.2 in a UTF-8 locale reads that byte as part of the name and
+  # dies with unbound variable under `set -u` (`"$dmaj→$lmaj"`). With an empty LANG in the developer's shell it does not
+  # reproduce, so it happened only in users' terminals. Every shell script is a target — comments are excluded.
+  local ub
+  ub=$({ find scripts skills harness marketing -name '*.sh' -type f 2>/dev/null || true; } \
+       | while IFS= read -r f; do
+           LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^ -~]' "$f" 2>/dev/null \
+             | LC_ALL=C grep -vE '^[0-9]+:[[:space:]]*#' | sed "s|^|$f:|" | cut -d: -f1,2
+         done)
+  if [ -n "$ub" ]; then
+    bad "non-ASCII after \$name: $(grep -c . <<<"$ub") places" "$(head -3 <<<"$ub" | tr '\n' ' ')— unbound variable under bash 3.2 + UTF-8. Wrap it as \${name}"
+  else
+    ok "every variable expansion ends on ASCII (bash 3.2 safe)"
+  fi
+
   # git calls that do not verify HEAD — exit 128 in a repo with 0 commits (right after git init).
   # A new project's first session is exactly that state. Check first with rev-parse -q --verify HEAD.
   local gh="" n=0
   for f in scripts/*.sh; do
     [ -f "$f" ] || continue
     case "$f" in */lib/*) continue;; esac
-    code_lines "$f" | grep -qE 'git (log|describe)[[:space:]]|git rev-parse[[:space:]]+(--abbrev-ref[[:space:]]+)?HEAD' || continue
+    { code_lines "$f" || true; } | grep -qE 'git (log|describe)[[:space:]]|git rev-parse[[:space:]]+(--abbrev-ref[[:space:]]+)?HEAD' || continue
     grep -q 'rev-parse -q --verify HEAD' "$f" 2>/dev/null && continue
     gh="$gh $(basename "$f")"; n=$((n+1))
   done
@@ -263,10 +321,14 @@ run_fast() {
   # BSD BRE alternation — grep/sed on macOS do not support \| in BRE.
   # It **does not fail, it silently matches nothing**, so the check passes while catching nothing.
   # Use -E (ERE) and write it with |.
+  # E is left out of the option class — `\|` in ERE is a literal pipe and fine. `\\|` (backslash + pipe) is not
+  # alternation either. Both false positives were hidden because the SIGPIPE of the code_lines pipe switched this check
+  # off on large files.
   local bre="" n=0
   for f in scripts/*.sh skills/*/scripts/*.sh marketing/skills/*/scripts/*.sh harness/skills/*/scripts/*.sh; do
     [ -f "$f" ] || continue
-    code_lines "$f" 2>/dev/null | grep -qE "(grep|sed)([[:space:]]+-[a-df-zA-Z]+)*[[:space:]]+'[^']*\\\\\\|" || continue
+    { code_lines "$f" 2>/dev/null || true; } \
+      | grep -qE "(grep|sed)([[:space:]]+<<<\"[^\"]*\")?([[:space:]]+-[a-df-zA-DF-Z]+)*[[:space:]]+'([^'\\\\]|\\\\\\\\)*\\\\\\|" || continue
     bre="$bre $(basename "$f")"; n=$((n+1))
   done
   if [ "$n" -gt 0 ]; then
@@ -288,7 +350,7 @@ run_fast() {
     local viol=0
     for s in $stop_scripts; do
       [ -f "scripts/$s" ] || continue
-      if code_lines "scripts/$s" | grep -qE '"(decision|reason)"[[:space:]]*:'; then
+      if { code_lines "scripts/$s" || true; } | grep -qE '"(decision|reason)"[[:space:]]*:'; then
         bad "Stop hook '$s' uses unsupported fields (decision/reason)" \
             "Stop supports only additionalContext/continue/systemMessage. This output is silently ignored"
         viol=$((viol+1))
@@ -1514,7 +1576,7 @@ $c"
   fi
 
   # Unimplemented fields in the schema
-  if grep -q 'disabledSkills\|activeSkills' schema/orangekit.config.schema.json presets/*.json presets/*/*.json 2>/dev/null; then
+  if grep -qE 'disabledSkills|activeSkills' schema/orangekit.config.schema.json presets/*.json presets/*/*.json 2>/dev/null; then
     warn "unimplemented fields (activeSkills/disabledSkills) exist in the schema and presets" \
          "no code reads them to turn skills on and off. The gating does not work"
   else
@@ -2164,11 +2226,32 @@ CASES
                  "manual but disable-model-invocation is missing" "phase is not in the routing card" "nodes sharing the same path" \
                  "configuration fields declared with no code" "T0 budget claim" "plugin-relative paths in code blocks" "skill names missing" \
                  "plugin-context path in a rule card" "load-condition table claims a glob that is not declared" \
-                 "manual-only count claim" "no graph manual"; do
+                 "manual-only count claim" "no graph manual" \
+                 "unguarded writer" "unguarded grep -c" "non-ASCII after"; do
         printf '%s' "$base_out" | grep -q "$msg" \
           && bad "baseline false positive: '$msg'" "detected with no defect present — the check becomes unusable"
       done
       ok "no baseline fixture false positives"
+
+      # An unguarded writer before an early-exit reader — a variable (the B1 shape) and a continued jq line (the B2 shape).
+      # The lines to plant live in snippet files to avoid nested quoting.
+      cat > "$sfx/plant-printf" <<'FXP'
+hasi() { printf '%s' "$TEXT" | grep -Eqi -e "$1"; }
+FXP
+      cat > "$sfx/plant-jq" <<'FXP'
+jq -r '.b' "$F" 2>/dev/null \
+  | awk '{ ok = 1; exit } END { exit !ok }'
+FXP
+      printf '%s\n' 'D=$(grep -c y "$F")' > "$sfx/plant-grepc"
+      printf 'x="$a%s$b"\n' '→' > "$sfx/plant-arrow"   # the arrow goes in as an argument so this line itself does not trip the lint
+      _fx_static_case "$sfx" pipe-printf 'scripts/guarded.sh' 'grep -Eqi -e' \
+        'unguarded writer → early-exit reader' 'cat "$T/../plant-printf" >> "$T/scripts/guarded.sh"'
+      _fx_static_case "$sfx" pipe-jq 'scripts/guarded.sh' '\{ ok = 1; exit \}' \
+        'unguarded writer → early-exit reader' 'cat "$T/../plant-jq" >> "$T/scripts/guarded.sh"'
+      _fx_static_case "$sfx" grep-c-bare 'scripts/guarded.sh' '^D=\$\(grep -c' \
+        'unguarded grep -c' 'cat "$T/../plant-grepc" >> "$T/scripts/guarded.sh"'
+      _fx_static_case "$sfx" var-nonascii 'scripts/guarded.sh' 'a→' \
+        'non-ASCII after' 'cat "$T/../plant-arrow" >> "$T/scripts/guarded.sh"'
 
       _fx_static_case "$sfx" always-rule   'rules/workflow-routing.md' '^paths:' \
         "no always-loaded rule card" 'printf -- "---\npaths:\n  - \"src/**\"\n---\n" | cat - "$T/rules/workflow-routing.md" > "$T/r.tmp" && mv "$T/r.tmp" "$T/rules/workflow-routing.md"'
@@ -2745,7 +2828,8 @@ run_consumer() {
   printf 'export const A = () => <div>changed</div>;\n' > "$up/src/Card.tsx"
   mkdir -p "$up/.claude/.orangekit"; : > "$up/.claude/.orangekit/session-baseline.txt"
   rm -f "$up/.claude/.orangekit/ui-notice.stamp"
-  printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm run build"}}]}}' \
+  # A trace that this session edited Card.tsx (Write) is needed for build-gate to count the file as this session's
+  printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"src/Card.tsx"}},{"type":"tool_use","name":"Bash","input":{"command":"npm run build"}}]}}' \
     > "$tmp/ui-transcript.jsonl"
   code=0
   out=$(printf '{"stop_hook_active":false,"transcript_path":"%s"}' "$tmp/ui-transcript.jsonl" \
@@ -2781,7 +2865,7 @@ run_consumer() {
                "flutter analyze|pass" "flutter test|pass" "xcodebuild -scheme App test|pass" "./gradlew assembleDebug|pass" \
                "flutter pub get|block" "echo flutter test|block"; do
     vcmd="${vcase%|*}"; vwant="${vcase##*|}"
-    printf '%s\n' "$(jq -nc --arg c "$vcmd" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}')" > "$vt"
+    printf '%s\n' "$(jq -nc --arg c "$vcmd" '{type:"assistant",message:{content:[{type:"tool_use",name:"Edit",input:{file_path:"src/Card.tsx"}},{type:"tool_use",name:"Bash",input:{command:$c}}]}}')" > "$vt"
     printf 'export const A = () => <div>%s</div>;\n' "$RANDOM" > "$up/src/Card.tsx"
     code=0
     out=$(printf '{"stop_hook_active":false,"transcript_path":"%s"}' "$vt" \
@@ -2810,7 +2894,7 @@ run_consumer() {
     for dcase in "echo hi|block" "flutter test|pass"; do
       dcmd="${dcase%|*}"; dwant="${dcase##*|}"
       printf 'void main() { print(%s); }\n' "$RANDOM" > "$dp/lib/main.dart"
-      printf '%s\n' "$(jq -nc --arg c "$dcmd" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}')" > "$vt"
+      printf '%s\n' "$(jq -nc --arg c "$dcmd" '{type:"assistant",message:{content:[{type:"tool_use",name:"Edit",input:{file_path:"lib/main.dart"}},{type:"tool_use",name:"Bash",input:{command:$c}}]}}')" > "$vt"
       out=$(printf '{"stop_hook_active":false,"transcript_path":"%s"}' "$vt" \
             | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$dp" \
               bash "$cache/scripts/build-gate.sh" 2>/dev/null) || true
@@ -2822,6 +2906,71 @@ run_consumer() {
           || bad "build-gate: passed a session where only .dart changed, with no verification" "dart is missing from the source extension list"
       fi
     done
+  fi
+
+  # ── Large input — defects that appear only past the pipe buffer (~64KB) (consumer report 2026-10-23~28) ──
+  # With small fixtures the writer always finished before the reader, so the SIGPIPE class never showed.
+  # The static lint blocks the shape; here the real hooks are run on large input to see that they judge as intended.
+  sec "large input (past the pipe buffer)"
+  if command -v jq >/dev/null 2>&1; then
+    local bk="AKI""A""IOSFODNN7""EXAMPLE" bfill berr
+    bfill=$(yes '// filler' 2>/dev/null | head -30000)
+    code=0
+    berr=$(jq -nc --arg c "export const id = '$bk';
+$bfill" --arg p "$up/src/cfg.ts" '{hook_event_name:"PreToolUse",tool_name:"Write",tool_input:{file_path:$p,content:$c}}' \
+      | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$up" bash "$cache/scripts/security-check.sh" 2>&1 >/dev/null) || code=$?
+    if [ "$code" = 2 ] && printf '%s' "$berr" | grep -q 'AWS'; then
+      ok "security-check: secret on the first line of a 300KB Write → blocked (AWS reason)"
+    else
+      bad "security-check: secret on the first line of a 300KB Write gave exit $code" "the SIGPIPE 141 of printf | grep -q read as no match — a miss"
+    fi
+
+    # A long session that ran verification first — must pass
+    local bt="$tmp/big-transcript.jsonl"
+    { printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/Card.tsx"}},{"type":"tool_use","name":"Bash","input":{"command":"npx vitest run"}}]}}'
+      awk 'BEGIN { for (i = 0; i < 4000; i++) printf "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Bash\",\"input\":{\"command\":\"echo filler %d %0150d\"}}]}}\n", i, 0 }'
+    } > "$bt"
+    printf 'export const A = () => <div>%s</div>;\n' "$RANDOM" > "$up/src/Card.tsx"
+    out=$(printf '{"stop_hook_active":false,"transcript_path":"%s"}' "$bt" \
+          | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$up" bash "$cache/scripts/build-gate.sh" 2>/dev/null) || true
+    printf '%s' "$out" | grep -q '"continue"[[:space:]]*:[[:space:]]*false' \
+      && bad "build-gate: blocked a long session (transcript 600KB+) that ran verification" "the SIGPIPE 141 of jq | awk exit read as \"did not run\"" \
+      || ok "build-gate: verification run recognized in a long session → pass"
+
+    # A file another session edited — no trace in this session's transcript, so no block
+    printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"echo hi"}}]}}' > "$vt"
+    printf 'export const A = () => <div>%s</div>;\n' "$RANDOM" > "$up/src/Card.tsx"
+    out=$(printf '{"stop_hook_active":false,"transcript_path":"%s"}' "$vt" \
+          | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$up" bash "$cache/scripts/build-gate.sh" 2>/dev/null) || true
+    printf '%s' "$out" | grep -q '"continue"[[:space:]]*:[[:space:]]*false' \
+      && bad "build-gate: blocked over a file this session never touched" "counted a parallel session's edit as this session's" \
+      || ok "build-gate: another session's edit → no block (a session that Edited the same file is blocked above)"
+    # A file changed only through Bash (sed -i) is still this session's
+    printf '%s\n' "$(jq -nc '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:"sed -i \"\" s/a/b/ src/Card.tsx"}}]}}')" > "$vt"
+    out=$(printf '{"stop_hook_active":false,"transcript_path":"%s"}' "$vt" \
+          | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$up" bash "$cache/scripts/build-gate.sh" 2>/dev/null) || true
+    printf '%s' "$out" | grep -q '"continue"[[:space:]]*:[[:space:]]*false' \
+      && ok "build-gate: file changed with Bash (sed -i) + no verification → blocked" \
+      || bad "build-gate: let a file changed with Bash pass with no verification" "a path mentioned in a Bash command is not counted as this session's"
+  else
+    warn "large input not verified — jq missing" "undecidable is not folded into pass"
+  fi
+
+  # handoff — a large working tree (porcelain 90KB+) and a workspace with no [x] at all
+  local hp="$tmp/proj-large-tree" herr
+  _consumer_project "large-tree" "$hp" commit none
+  mkdir -p "$hp/dev/active/w"; printf -- '- [ ] remaining\n' > "$hp/dev/active/w/tasks.md"
+  (cd "$hp" && i=0; while [ "$i" -lt 1500 ]; do : > "untracked-file-with-a-rather-long-name-number-$i.ts"; i=$((i+1)); done)
+  code=0
+  out=$(printf '{"hook_event_name":"PreCompact"}' | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$hp" \
+        bash "$cache/scripts/handoff.sh" 2>"$tmp/handoff.err") || code=$?
+  herr=$(cat "$tmp/handoff.err" 2>/dev/null)
+  if [ "$code" -ne 0 ] || printf '%s' "$herr" | grep -q 'ERROR line'; then
+    bad "handoff: exit $code on a large tree · a workspace with no [x]" "$(printf '%s' "$herr" | head -1) — the handoff is lost or recorded as an abnormal exit"
+  elif ! printf '%s' "$out" | grep -q 'In progress: w'; then
+    bad "handoff: the handoff body did not come out in full" "it was cut off midway"
+  else
+    ok "handoff: large tree + workspace with no [x] → handoff produced, no abnormal exit"
   fi
 
   # ── response-language reach ───────────────────────────────────────

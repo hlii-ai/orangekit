@@ -39,7 +39,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   add ""
   add "- branch \`${BRANCH:-?}\` · HEAD \`${HEADL:-none}\`"
 
-  MODIFIED=$(git status --porcelain 2>/dev/null | head -12)
+  MODIFIED=$({ git status --porcelain 2>/dev/null || true; } | head -12)
   if [ -n "$MODIFIED" ]; then
     N=$(orangekit_num "$(git status --porcelain 2>/dev/null | wc -l)")
     add "- ${N} uncommitted:"
@@ -54,20 +54,20 @@ if [ -d "$ORANGEKIT_ROOT/dev/active" ]; then
     NAME=$(basename "$d")
     add ""
     add "### In progress: ${NAME}"
-    TF=$(find "$d" -name '*task*' -type f 2>/dev/null | head -1)
+    TF=$({ find "$d" -name '*task*' -type f 2>/dev/null || true; } | head -1)
     if [ -n "$TF" ] && [ -f "$TF" ]; then
-      DONE=$(orangekit_num "$(grep -c '^\s*- \[x\]' "$TF" 2>/dev/null)")
-      TODO=$(orangekit_num "$(grep -c '^\s*- \[ \]' "$TF" 2>/dev/null)")
+      DONE=$(orangekit_num "$(grep -c '^\s*- \[x\]' "$TF" 2>/dev/null || true)")
+      TODO=$(orangekit_num "$(grep -c '^\s*- \[ \]' "$TF" 2>/dev/null || true)")
       add "- progress ${DONE}/$((DONE+TODO))"
       if [ "$TODO" -gt 0 ]; then
         add "- remaining work:"
-        grep '^\s*- \[ \]' "$TF" 2>/dev/null | head -5 | sed 's/^\s*- \[ \]/  -/' | while IFS= read -r t; do
+        { grep '^\s*- \[ \]' "$TF" 2>/dev/null || true; } | head -5 | sed 's/^\s*- \[ \]/  -/' | while IFS= read -r t; do
           printf '%s\n' "$t"
         done | while IFS= read -r t; do add "$t"; done
       fi
       add "- file: \`${TF#$ORANGEKIT_ROOT/}\`"
     fi
-  done < <(find "$ORANGEKIT_ROOT/dev/active" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -3)
+  done < <({ find "$ORANGEKIT_ROOT/dev/active" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true; } | head -3)
 fi
 
 [ -z "$OUT" ] && exit 0
