@@ -12,14 +12,15 @@
 
 # `--owning <path>…` — not the hook but a lookup mode: prints, one per line, the rule cards and skills the gate would require before the first write to that path.
 # The planning stage (dev-docs-generator) uses it to fill in "Read first" for each slice — it must be the **same judgement** as the gate, so no copy is kept.
-if [ "${1:-}" = "--owning" ]; then INPUT='{}'; else INPUT=$(cat 2>/dev/null || printf '{}'); fi
+# `--scratch-db new|url|psql|drop|list <name>` — not the hook but the **dedicated path for scratch verification DBs** (see "Scratch-DB path" below).
+case "${1:-}" in --owning|--scratch-db) INPUT='{}' ;; *) INPUT=$(cat 2>/dev/null || printf '{}') ;; esac
 # shellcheck source=lib/common.sh
 source "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/lib/common.sh"
 
 # A failed root resolution must not stop the security check — only the heartbeat is best-effort
 ORANGEKIT_HOOK_NAME="security-check"
 ORANGEKIT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || printf '')}"
-[ -n "$ORANGEKIT_ROOT" ] && [ "${1:-}" != "--owning" ] && orangekit_heartbeat 0
+[ -n "$ORANGEKIT_ROOT" ] && [ "${1:-}" != "--owning" ] && [ "${1:-}" != "--scratch-db" ] && orangekit_heartbeat 0
 
 TOOL_NAME=$(orangekit_field "$INPUT" '.tool_name')
 FILE_PATH=$(orangekit_field "$INPUT" '.tool_input.file_path')
@@ -576,6 +577,53 @@ _expand_shell_literals() {
     { printf "%s", expand_assign(expand_loops(expand_funcs($0))) }'
 }
 
+# A loop word that comes from a file — `for d in $(sort -u /tmp/scratchdb); do … DROP DATABASE $d …` (benchmark B5 run6: every scratch DB was written
+# to a file as it was created, then all of them were dropped at the end). The hook **can read** that file before execution, so only when it is a regular file at an absolute path,
+# every word is name-shaped (32 or fewer), and this command does not write to that file, it is rewritten to `for d in w1 w2; do` and handed to the loop unrolling above.
+# If it cannot be read it is left as is → undecidable → blocked as today. The unrolled names still go through exemption ① and ② unchanged.
+_inline_listed_files() {
+  printf '%s' "$1" | awk 'BEGIN { RS = "\001" } {
+    s = $0; out = ""
+    while (match(s, /for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+"?\$\((cat|sort|sort[ \t]+-u|uniq|<)[ \t]*\/[A-Za-z0-9_.\/-]+[ \t]*\)"?[ \t]*;/)) {
+      hdr = substr(s, RSTART, RLENGTH); out = out substr(s, 1, RSTART - 1); s = substr(s, RSTART + RLENGTH)
+      f = hdr; sub(/^[^\/]*/, "", f); sub(/[ \t]*\)"?[ \t]*;$/, "", f)
+      v = hdr; sub(/^for[ \t]+/, "", v); sub(/[ \t].*$/, "", v)
+      ok = (f !~ /\.\./); n = 0; delete seen; words = ""
+      if (ok && (out s) ~ ("(>|tee[ \t]+(-a[ \t]+)?)[ \t]*" f "([^A-Za-z0-9_.\/-]|$)")) ok = 0
+      while (ok && (r = (getline line < f)) > 0) {
+        m = split(line, w, /[ \t\r\n]+/)   # RS is \001, so getline reads the whole file at once
+        for (i = 1; i <= m; i++) {
+          if (w[i] == "") continue
+          if (w[i] !~ /^[A-Za-z0-9_.@-]+$/) { ok = 0; break }
+          if (!(w[i] in seen)) { seen[w[i]] = 1; words = words " " w[i]; n++ }
+        }
+      }
+      if (r < 0) ok = 0
+      close(f)
+      if (ok && n > 0 && n <= 32) out = out "for " v " in" words ";"
+      else out = out hdr
+    }
+    printf "%s", out s }'
+}
+
+# Does it match a recorded creation name — exactly equal, or matching the fixed part of a name recorded with a piece that changes on every run (`@@u@@`)
+# (`SCR="ot_scratch_$(date +%s)"; … CREATE DATABASE $SCR` → recorded `ot_scratch_@@u@@` ↔ at drop time, `ot_scratch_1730300000` read from the file).
+# If the fixed part is under 3 characters anything would match, so it is not accepted
+_created_has() {   # $1 name  $2 records (one per line)
+  grep <<<"$2" -qxF -- "$1" && return 0
+  local p pre suf
+  while IFS= read -r p; do
+    case "$p" in *'@@u@@'*) ;; *) continue ;; esac
+    pre=${p%%@@u@@*}; suf=${p#*@@u@@}
+    case "$suf" in *'@@u@@'*) continue ;; esac
+    [ $(( ${#pre} + ${#suf} )) -ge 3 ] || continue
+    case "$1" in "$pre"*"$suf") ;; *) continue ;; esac
+    local mid=${1#"$pre"}; mid=${mid%"$suf"}
+    [ -n "$mid" ] && grep <<<"$mid" -Eq '^[a-z0-9_-]+$' && return 0
+  done <<< "$2"
+  return 1
+}
+
 # ── Exemption judgment for DROP — names by proof, tables by measurement (an exemption opens only when proven) ──
 # DATABASE: not the project DB (environment variables · `.env*`) + created by the agent (a CREATE in the same command, or recorded) or a name unique to each run
 # 0 = every DROP DATABASE in this segment is proven to be the deletion of a scratch DB. 1 = not so, or undecidable
@@ -592,7 +640,7 @@ $(cat "$f" 2>/dev/null)"
     case "$_SYS_DBS" in *" $n "*) return 1 ;; esac
     [ -z "$proj" ] && { proj=$(_project_db_names); [ -z "$proj" ] && return 1; }
     grep <<<"$proj" -qxF -- "$n" && return 1
-    grep <<<"$created" -qxF -- "$n" || return 1
+    _created_has "$n" "$created" || return 1
   done <<< "$targets"
   return 0
 }
@@ -809,6 +857,15 @@ _assigns_of() (   # $1 segment → the leading assignments "VAR<TAB>value" (the 
     | grep -oE '^((export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|\$\([^)]*\)|[^[:space:];&|]+)[[:space:]]*)+' \
     | grep -oE '[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|\$\([^)]*\)|[^[:space:];&|]+)' | sed -E 's/=/\t/' || true
 )
+_sed_base_of() (   # $1 assignment value → X when it strips only the last path piece of X, as in `$(echo "$X" | sed 's#/[^/]*$##')`
+  trap - ERR; set +e
+  local v re cut
+  v=$(printf '%s' "$1" | tr -d '[:space:]')
+  cut='\[\^/\][*+]\$'
+  re='^"?\$\((echo|printf'"'"'%s'"'"'|printf"%s")"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"?\|sed(-E|-r)?'"'"'s(#/'"$cut"'##|@/'"$cut"'@@|,/'"$cut"',,|:/'"$cut"'::)'"'"'\)"?$'
+  [[ "$v" =~ $re ]] && printf '%s' "${BASH_REMATCH[2]}"
+  return 0
+)
 _conn_update() (   # $1 assignment lines (VAR<TAB>value)  $2 the map so far ("VAR=db" · "VAR=@@base@@") → the new map. An assignment that does not resolve removes that variable
   trap - ERR; set +e
   local map="$2" var val db b
@@ -818,6 +875,8 @@ _conn_update() (   # $1 assignment lines (VAR<TAB>value)  $2 the map so far ("VA
     if grep <<<"$val" -Eq '^"?\$\{?DATABASE_URL\}?"?$'; then map="$map
 $var=@@url@@"; continue; fi
     b=$(printf '%s' "$val" | sed -nE 's/^"?\$\{([A-Za-z_][A-Za-z0-9_]*)%\/[^}]*\}"?$/\1/p')
+    # The same thing done with sed — `$(echo "$DATABASE_URL" | sed 's#/[^/]*$##')` (benchmark B5 run5: `"$B/rv_rollback"` appended to this base address could not be resolved, so it was blocked)
+    [ -z "$b" ] && b=$(_sed_base_of "$val")
     if [ "$b" = DATABASE_URL ] || { [ -n "$b" ] && grep <<<"$map" -qxF -- "$b=@@url@@"; }; then map="$map
 $var=@@base@@"; continue; fi
     for b in $(printf '%s\n' "$map" | awk -F= '$2=="@@base@@" {print $1}'); do
@@ -829,11 +888,120 @@ $var=$db"
   done <<< "$1"
   printf '%s' "$map"
 )
+# ── Scratch-DB path — proof by **record**, not by the characters of the command ──────────────────────────────
+# The exemptions above (a CREATE in the same command · a recorded name · resolving assignments, loops and functions) prove "scratch DB" from the **characters** of the command.
+# A shell can write the same thing in endlessly different syntax, so proof by characters never closes — every round blocked a new form (B2 re-generating the same command → B3 loop variable →
+# B4 shell function → B5 sed base address · list file). So there is **one path that always passes**:
+#   `security-check.sh --scratch-db new <name> [--template <DB>]`  creates a DB with the reserved prefix, records it in project state, and prints the connection URL
+#   `… --scratch-db psql <name> [psql args…]`                       attaches to that DB (deletes and DML included — it runs only inside that DB)
+#   `… --scratch-db url <name>` · `drop <name>|--all [--force]` · `list`
+# This mode makes the safety judgement itself, **from the record and the DB name** (prefix + in the record + not a project or system DB). The hook only has to recognise
+# a segment whose first token is this mode (`_scratch_cmd`), so the form closes to one. When it cannot decide (no DATABASE_URL · no psql) it does not create anything and says why.
+_SCRATCH_PREFIX="orangekit_scratch_"
+_SCRATCH_SELF="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/security-check.sh"
+_SCRATCH_HINT="If it is a scratch DB for verification, use the dedicated path — it always passes: bash \"$_SCRATCH_SELF\" --scratch-db new <name> [--template <DB>] → --scratch-db psql <name> -c \"…\" → --scratch-db drop <name>"
+_scratch_registry() { [ -n "${ORANGEKIT_ROOT:-}" ] && printf '%s/scratch-dbs' "$(orangekit_state_dir)"; }
+_scratch_url() {   # $1 DB name → DATABASE_URL with only the DB name replaced (the query string is kept)
+  printf '%s' "$DATABASE_URL" | sed -E "s#^([a-z0-9+]+://[^/]*)/[^?]*#\1/$1#"
+}
+_scratch_cmd() {   # $1 segment → is it a segment that runs this mode? (judged by the first token)
+  local t1 rest
+  t1=$(_first_tok "$1")
+  rest=$(printf '%s' "$1" | sed -E 's/^[[:space:]]*//; s/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*//')
+  case "$t1" in bash|sh) rest=${rest#* }; t1=$(_first_tok "$rest") ;; esac
+  t1=${t1//\"/}; t1=${t1//\'/}
+  # Only when it is **this plugin's own file** — so a same-named file the agent made (`./security-check.sh`) cannot earn the exemption
+  [ "$t1" = "$_SCRATCH_SELF" ] || return 1
+  rest=${rest#*security-check.sh}; rest=${rest#\"}; rest=${rest#\'}
+  [[ "$rest" =~ ^[[:space:]]+--scratch-db([[:space:]]|$) ]]
+}
+if [ "${1:-}" = "--scratch-db" ]; then
+  set +e; trap - ERR
+  _sub=${2:-}; _nm=${3:-}; _reg=$(_scratch_registry)
+  _say() { printf '%s\n' "$*" >&2; }
+  [ -n "$_sub" ] || { _say "Usage: --scratch-db new|url|psql|drop|list <name>"; exit 2; }
+  [ -n "$_reg" ] || { _say "Undecidable: the project root was not found, so no record can be kept — not creating a scratch DB"; exit 2; }
+  [ -n "${DATABASE_URL:-}" ] || { _say "Undecidable: DATABASE_URL is not set, so it is unknown which server to create on — not creating"; exit 2; }
+  command -v psql >/dev/null 2>&1 || { _say "Undecidable: psql is not installed"; exit 2; }
+  _full() { printf '%s%s' "$_SCRATCH_PREFIX" "$1"; }
+  _known() { [ -f "$_reg" ] && grep -qxF -- "$1" "$_reg"; }
+  _valid() { [[ "$1" =~ ^[a-z][a-z0-9_]{0,39}$ ]]; }
+  case "$_sub" in
+    list) [ -f "$_reg" ] && cat "$_reg"; exit 0 ;;
+    new)
+      _valid "$_nm" || { _say "The name must start with a lowercase letter and be [a-z0-9_], at most 40 characters"; exit 2; }
+      _db=$(_full "$_nm"); _tpl=""
+      if [ "${4:-}" = "--template" ]; then
+        _tpl=${5:-}; [[ "$_tpl" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { _say "The --template name is not valid"; exit 2; }
+      fi
+      grep <<<"$(_project_db_names)" -qxF -- "$_db" && { _say "Not creating — same name as a project DB: $_db"; exit 2; }
+      psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$_db\"${_tpl:+ TEMPLATE \"$_tpl\"}" >&2 || exit 1
+      mkdir -p "$(dirname "$_reg")" && { _known "$_db" || printf '%s\n' "$_db" >> "$_reg"; }
+      _scratch_url "$_db"; printf '\n'; exit 0 ;;
+    url|psql)
+      _db=$(_full "$_nm"); _known "$_db" || { _say "Not a recorded scratch DB: $_db — run --scratch-db new $_nm first"; exit 2; }
+      [ "$_sub" = url ] && { _scratch_url "$_db"; printf '\n'; exit 0; }
+      shift 3; exec psql "$(_scratch_url "$_db")" "$@" ;;
+    drop)
+      _force=""; for _a in "$@"; do [ "$_a" = --force ] && _force=" WITH (FORCE)"; done
+      if [ "$_nm" = --all ]; then _list=$([ -f "$_reg" ] && cat "$_reg"); else _list=$(_full "$_nm"); _known "$_list" || { _say "Not dropping a scratch DB that is not in the record: $_list"; exit 2; }; fi
+      _rc=0
+      while IFS= read -r _db; do
+        [ -n "$_db" ] || continue
+        case "$_db" in "$_SCRATCH_PREFIX"*) ;; *) _say "Not dropping a name without the prefix: $_db"; _rc=2; continue ;; esac
+        grep <<<"$(_project_db_names)" -qxF -- "$_db" && { _say "Not dropping a project DB: $_db"; _rc=2; continue; }
+        if psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$_db\"$_force" >&2; then
+          grep -vxF -- "$_db" "$_reg" > "$_reg.tmp" 2>/dev/null; mv "$_reg.tmp" "$_reg"; printf 'dropped %s\n' "$_db"
+        else _rc=1; fi
+      done <<< "$_list"
+      exit "$_rc" ;;
+    *) _say "Unknown subcommand: $_sub"; exit 2 ;;
+  esac
+fi
+
+# The PAT of `pkill -f PAT` · `kill $(pgrep -f PAT)` · `pgrep -f PAT | xargs kill` (one per line). Emits only quote-stripped literals,
+# and skips options that take a value (-u root and the like). A pattern anchored with `^` or `$` cannot match the shell's command line (which has `bash -c …` in front), so it is not emitted
+_self_kill_patterns() (
+  trap - ERR; set +e
+  printf '%s' "$1" | awk 'BEGIN { RS = "\001" } {
+    s = $0; n = 0; L = length(s); cur = ""; q = ""; inw = 0
+    for (i = 1; i <= L; i++) {
+      c = substr(s, i, 1)
+      if (q != "") { if (c == q) q = ""; else cur = cur c; continue }
+      if (c == "\"" || c == "\047") { q = c; inw = 1; continue }
+      if (c == "$" && substr(s, i + 1, 1) == "(") { if (inw) { t[++n] = cur; cur = ""; inw = 0 } t[++n] = "$("; i++; continue }
+      if (c ~ /[ \t\n]/) { if (inw) { t[++n] = cur; cur = ""; inw = 0 } continue }
+      if (c ~ /[;&|()]/) { if (inw) { t[++n] = cur; cur = ""; inw = 0 } t[++n] = c; continue }
+      cur = cur c; inw = 1
+    }
+    if (inw) t[++n] = cur
+    for (i = 1; i <= n; i++) {
+      if (t[i] != "pkill" && t[i] != "pgrep") continue
+      cmd = t[i]; full = 0; j = i + 1
+      while (j <= n && t[j] ~ /^-/) {
+        if (t[j] == "--") { j++; break }
+        if (t[j] == "--full") full = 1
+        else if (t[j] ~ /^--(signal|pidfile|uid|euid|group|pgroup|parent|session|terminal|ns)$/) j++
+        else if (t[j] ~ /^-[A-Za-z0-9]+$/) { if (t[j] ~ /f/) full = 1; if (t[j] ~ /[gGPstuUF]$/) j++ }
+        j++
+      }
+      if (!full || j > n || t[j] ~ /^([;&|()]|\$\()$/) continue
+      pat = t[j]
+      if (pat ~ /^\^/ || pat ~ /\$$/ || pat == "") continue
+      if (cmd == "pgrep") {
+        killed = 0
+        if (i > 1 && t[i - 1] == "$(") for (k = i - 2; k >= 1 && t[k] !~ /^[;&|]$/; k--) if (t[k] == "kill") killed = 1
+        for (k = j + 1; k <= n && t[k] !~ /^[;&]$/; k++) if (t[k] == "|") { for (m = k + 1; m <= n && t[m] !~ /^[;&|]$/; m++) if (t[m] == "kill") killed = 1; break }
+        if (!killed) continue
+      }
+      print pat
+    } }'
+)
 destructive_gate() {
   # Judged after stripping the heredoc body (= data). The secret check **does not strip** —
   # the axis is the opposite: writing a secret is itself the exposure, so the body is exactly what is judged.
   _record_db_creator_fns "$1"
-  local DCMD; DCMD=$(_expand_shell_literals "$(_strip_heredoc_bodies "$1")")
+  local DCMD; DCMD=$(_expand_shell_literals "$(_inline_listed_files "$(_strip_heredoc_bodies "$1")")")
   _GATE_CMD="$DCMD"
   local target="" _D
   dhas() { grep <<<"$_D" -Eqi -e "$1"; }
@@ -871,7 +1039,7 @@ $(_db_creates_via_fns "$seg")
     _exec_seg "$seg" || continue
     _D="$seg"
     scratch_seg=0
-    if _scratch_db_ok "$(_psql_conn_db "$seg" "$segmap" || printf '@@none@@')" "$created_here"; then
+    if _scratch_cmd "$seg" || _scratch_db_ok "$(_psql_conn_db "$seg" "$segmap" || printf '@@none@@')" "$created_here"; then
       scratch_seg=1
       if grep <<<"$seg" -Eq '<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*'; then
         hd_delim=$(grep <<<"$seg" -oE '<<-?[[:space:]]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*' | head -1 | sed -E "s/^<<-?[[:space:]]*['\"]?//")
@@ -881,7 +1049,7 @@ $(_db_creates_via_fns "$seg")
       # Work inside a scratch DB is exempt — but a DROP DATABASE that deletes a **different** DB from inside it still goes through the name proof
       dhas '(^|[^a-z_])drop[[:space:]]+database([^a-z_]|$)' && ! _scratch_dbs_ok "$seg" "$created_here" \
         && dblock "DROP of a table/database/schema via DDL" "That object and every row inside it disappears. Without a backup there is no recovery" \
-                  "If it is a scratch DB for verification, write the name as a literal and re-create it with CREATE DATABASE in the same command"
+                  "$_SCRATCH_HINT"
       continue
     fi
 
@@ -889,19 +1057,19 @@ $(_db_creates_via_fns "$seg")
       && ! _drop_exempt "$seg" "$created_here" \
       && dblock "DROP of a table/database/schema via DDL" \
                 "That object and every row inside it disappears. Without a backup there is no recovery" \
-                "Take a backup first (pg_dump or similar), run it inside a transaction, check the result, then commit. If it is a scratch DB for verification, write the name as a literal and re-create it with CREATE DATABASE in the same command, or delete only DBs this project created — the project DB (the connection URL in environment variables · .env*) and system DBs are still blocked, and if no connection URL can be found the exemption is not granted"
+                "Take a backup first (pg_dump or similar), run it inside a transaction, check the result, then commit. $_SCRATCH_HINT. The project DB (the connection URL in environment variables · .env*) and system DBs are still blocked"
 
     # coreutils `truncate -s 0 file` carries a dash, so it does not match
     dhas '(^|[^a-z_])truncate[[:space:]]+(table[[:space:]]+)?["a-z_]' \
       && dblock "TRUNCATE — emptying an entire table" \
                 "Every row is deleted and a rollback or recovery is usually impossible (triggers are skipped too)" \
-                "Narrow the range with DELETE ... WHERE, or run it after a backup"
+                "Narrow the range with DELETE ... WHERE, or run it after a backup. $_SCRATCH_HINT"
 
     # DELETE without WHERE — only when the table name is followed directly by `;` or the end (no match when WHERE is present)
     dhas '(^|[^a-z_])delete[[:space:]]+from[[:space:]]+["a-z_][a-z0-9_."]*[[:space:]]*(;|$)' \
       && dblock "DELETE FROM without WHERE" \
                 "Every row in the target table is deleted" \
-                "Narrow the range with a WHERE clause, and first check the number of affected rows with SELECT COUNT(*) on the same condition"
+                "Narrow the range with a WHERE clause, and first check the number of affected rows with SELECT COUNT(*) on the same condition. $_SCRATCH_HINT"
 
     dhas 'supabase[[:space:]]+db[[:space:]]+reset' \
       && dblock "supabase db reset — resetting the local DB" \
@@ -978,6 +1146,27 @@ $(_db_creates_via_fns "$seg")
         [ "$pmode" = "force" ] && dwarn "force push to a feature branch ($target)" "If the branch is shared, use --force-with-lease" ;;
     esac
   fi
+
+  # ── A process kill that kills its own shell — sent back before execution ────────────
+  # `pkill -f PAT` (or `kill $(pgrep -f PAT)`) searches the whole command line for PAT, and the command line of the shell running this command also contains PAT
+  # literally, so it **kills its own shell too** — the commands after it never run and the call ends with exit 143/144. Measured (benchmark run4~6): it repeated in every tool
+  # (baseline 7 · Superpowers 10 · gstack 6 · OrangeKit 1.11.0 16 times), and the same failure more than 3 times was recorded as "stuck".
+  # Judged only when certain — the pattern reads as a quoted literal and **that pattern actually matches the characters of this command**. A `[s]erver.mjs` form does not match, so it passes.
+  # Only Linux procps pkill and pgrep kill their own shell — the BSD/macOS versions exclude their own ancestor processes by default (measured: macOS survives and
+  # a procps-ng 4.0.2 container gets exit 143). It does not happen anywhere else, so it is not blocked
+  local kp kflat kprocps=0
+  { pkill --version 2>&1 || true; } | grep -q procps && kprocps=1
+  kflat=$(printf '%s' "$1" | tr '\n' ' ')   # A shell command line is one string — aligned with grep's line-by-line judgement
+  if [ "$kprocps" = 1 ]; then while IFS= read -r kp; do
+    [ -n "$kp" ] || continue
+    if grep <<<"$kflat" -Eq -- "$kp" 2>/dev/null; then
+      printf '❌ Blocked: this command kills its own shell — `%s`\n\n' "$kp" >&2
+      printf 'Impact: `pkill -f` and `pgrep -f` search the whole command line, and the command line of the shell running this command also contains this pattern, so it is terminated along with the target. The commands after it do not run and the call ends with exit 143/144.\n' >&2
+      printf 'Fixed form: wrap the first character of the pattern in brackets — `pkill -f "%s"` (as a regex it finds the same process but does not match the characters of this command). If you know the PID, `kill <PID>` is the surest.\n' \
+        "$(printf '%s' "$kp" | sed -E 's/^([A-Za-z0-9])/[\1]/')" >&2
+      exit 2
+    fi
+  done < <(_self_kill_patterns "$DCMD"); fi
 
   # ── Recoverable, but silently lost — warning only ───────────────────
   if dhas '(^|[^a-z_])rm[[:space:]]+(-[a-zA-Z]*[rR][a-zA-Z]*[[:space:]]+)*-?[a-zA-Z]*[fF]' \

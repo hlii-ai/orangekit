@@ -11,7 +11,7 @@ paths:
   - "alembic/**"
   - "**/*.sql"
 ---
-<!-- orangekit-rule-version: 3.41.0 -->
+<!-- orangekit-rule-version: 3.43.0 -->
 
 # Data Modeling Card
 
@@ -189,6 +189,9 @@ Mandatory checks when creating a new table:
 - [ ] Tables that require business history → create the `_{table}_history` history table at the same time (→ `change-history.md`)
 - [ ] When idempotency is needed: an `idempotency_key` UNIQUE column + TTL cleanup (→ `idempotency.md`)
 - [ ] Personal or sensitive columns: a retention period and what enforces it (job · TTL) + a per-subject erasure path (anonymize the references then hard delete the subject, or an intended subject FK `ON DELETE CASCADE`). If undecided, record the reason for indefinite retention in the table definition (→ `deletion-strategy.md`)
+
+**Scratch DB for verification** — to try a migration on an empty DB or a copy, create it with `<plugin-root>/scripts/security-check.sh --scratch-db new <name> [--template <DB>]` (it prints the connection URL), work in it with `--scratch-db psql <name> …`, and remove it with `--scratch-db drop <name>|--all`.
+**This is the one form the safeguard always lets through** — dropping or running DML on a scratch DB you made by hand is blocked unless it is proven to be a scratch DB.
 
 ---
 

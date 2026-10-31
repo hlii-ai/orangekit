@@ -2024,11 +2024,70 @@ CASES
     _td_run 2 "a heredoc DROP TABLE on a project-DB connection stays blocked" - "$(printf 'MIG=$(echo "$DATABASE_URL" | sed %ss#/app$#/migtest2#%s); psql "$DATABASE_URL" -qc "CREATE DATABASE migtest2"; psql "$DATABASE_URL" -q <<%sSQL%s\nDROP TABLE users;\nSQL\npsql "$MIG" -qc "select 1"' "'" "'" "'" "'")"
     # In heredoc SQL the DROP is on a different line from psql, so the connection cannot be proven — it is blocked as today (a known limit)
     _td_run 2 "DROP TABLE in heredoc SQL (connection unproven)" - "$(printf 'psql "$DATABASE_URL" <<%sSQL%s\nDROP TABLE IF EXISTS t1;\nSQL' "'" "'")"
+    # A base address stripped with sed [B5 run5] — the same thing as `${DATABASE_URL%/*}`
+    _td_run 0 "scratch DB created from a sed-stripped base address" - "B=\$(echo \"\$DATABASE_URL\" | sed 's#/[^/]*\$##'); psql \"\$DATABASE_URL\" -qc \"CREATE DATABASE rv_b5 TEMPLATE base\""
+    _td_run 0 "DELETE inside a scratch DB attached to that base address [B5 run5]" - "B=\$(echo \"\$DATABASE_URL\" | sed 's#/[^/]*\$##'); RV=\"\$B/rv_b5\"; psql \"\$RV\" -qc \"DELETE FROM point_lot_movements\""
+    _td_run 2 "sed base address + the project DB name" - "B=\$(echo \"\$DATABASE_URL\" | sed 's#/[^/]*\$##'); P=\"\$B/app\"; psql \"\$P\" -qc \"DELETE FROM t\""
+    _td_run 2 "sed does something else (does not strip the last piece)" - "B=\$(echo \"\$DATABASE_URL\" | sed 's#app#app#'); RV=\"\$B/rv_b5\"; psql \"\$RV\" -qc \"DELETE FROM t\""
+    # Create under a name that differs on every run, write it to a list file, and at the end read that file and drop [B5 run6]
+    _td_run 0 "scratch DB with a per-run name created (recorded in a list file)" - "SCR=\"ot_scr_\$(date +%s)\"; psql \"\$DATABASE_URL\" -qc \"CREATE DATABASE \$SCR\" && echo \"\$SCR\" >> $td/scr.list"
+    printf 'ot_scr_1730300000\not_scr_1730300555\n' > "$td/scr.list"
+    _td_run 0 "scratch DBs cleaned up by reading the list file [B5 run6]" - "for d in \$(sort -u $td/scr.list); do psql \"\$DATABASE_URL\" -qc \"DROP DATABASE IF EXISTS \$d\"; done"
+    printf 'ot_scr_1730300000\napp\n' > "$td/scr.list"
+    _td_run 2 "the list file has a project DB mixed in" - "for d in \$(sort -u $td/scr.list); do psql \"\$DATABASE_URL\" -qc \"DROP DATABASE IF EXISTS \$d\"; done"
+    printf 'other_db_1\n' > "$td/scr.list"
+    _td_run 2 "a name in the list file differs from the form created in this session" - "for d in \$(sort -u $td/scr.list); do psql \"\$DATABASE_URL\" -qc \"DROP DATABASE IF EXISTS \$d\"; done"
+    _td_run 2 "the same command edits the list file first" - "echo app >> $td/scr.list; for d in \$(sort -u $td/scr.list); do psql \"\$DATABASE_URL\" -qc \"DROP DATABASE IF EXISTS \$d\"; done"
+    rm -f "$td/scr.list"
+    _td_run 2 "no list file (undecidable)" - "for d in \$(sort -u $td/scr.list); do psql \"\$DATABASE_URL\" -qc \"DROP DATABASE IF EXISTS \$d\"; done"
+    # Dedicated scratch-DB path (--scratch-db) — proof by characters never closes, so one path that always passes. The exemption applies only when **this plugin's own file** is the first token
+    local tdself="$ROOT/scripts/security-check.sh"
+    _td_run 0 "DROP TABLE inside the path" users=rows "bash \"$tdself\" --scratch-db psql rb -c \"DROP TABLE users\""
+    _td_run 0 "heredoc DELETE inside the path" - "$(printf 'bash "%s" --scratch-db psql rb -q <<%sSQL%s\nDELETE FROM point_entries;\nSQL' "$tdself" "'" "'")"
+    _td_run 2 "dropping the project DB from inside the path" - "bash \"$tdself\" --scratch-db psql rb -c \"DROP DATABASE app\""
+    _td_run 2 "the path is not the first command" users=rows "echo --scratch-db; psql \"\$DATABASE_URL\" -qc \"DROP TABLE users\""
+    _td_run 2 "a different script with the same name" users=rows "bash ./security-check.sh --scratch-db psql rb -c \"DROP TABLE users\""
     [ "$tdbad" -eq 0 ] && ok "security-check: shell-value expansion · table measurement $tdok/$tdok — only provable scratch objects open; project, system and unmeasurable stay blocked"
   else
     warn "temp directory or jq missing" "the boundary of shell-value expansion and table measurement is unproven"
   fi
   rm -rf "${td:-/nonexistent}"
+
+  # ── pkill -f that kills its own shell — blocked only on procps (Linux), passes on BSD · macOS ─────────────
+  # In benchmark run4~6 every tool killed its own shell with `pkill -f "node server.mjs"; npm run build` (exit 143/144, the following commands never ran).
+  # To prove: ① on procps it blocks and gives **the reason** (its own shell) ② the bracket form · ^ anchor · PID kill · text inside a message pass ③ with BSD pkill everything passes
+  local sk skok=0 skbad=0 skw skc skl skkind skerr skcode
+  sk=$(mktemp -d 2>/dev/null) && mkdir -p "$sk/procps" "$sk/bsd" "$sk/proj" && {
+    printf '#!/bin/bash\n[ "$1" = --version ] && { echo "pkill from procps-ng 4.0.2"; exit 0; }\nexit 1\n' > "$sk/procps/pkill"
+    printf '#!/bin/bash\necho "pkill: illegal option -- -" >&2; exit 2\n' > "$sk/bsd/pkill"
+    chmod +x "$sk/procps/pkill" "$sk/bsd/pkill"
+    while IFS='|' read -r skkind skw skl skc; do
+      [ -n "$skkind" ] || continue
+      skcode=0
+      skerr=$(jq -nc --arg c "$skc" '{tool_name:"Bash",tool_input:{command:$c}}' \
+        | env -i PATH="$sk/$skkind:$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$sk/proj" ORANGEKIT_STATE_DIR="$sk/proj/.state" \
+            bash "$ROOT/scripts/security-check.sh" 2>&1 >/dev/null) || skcode=$?
+      if [ "$skcode" = "$skw" ] && ! printf '%s' "$skerr" | grep -q 'ERROR line' \
+         && { [ "$skw" = 0 ] || printf '%s' "$skerr" | grep -q 'own shell'; }; then skok=$((skok+1))
+      else skbad=$((skbad+1)); bad "security-check self-kill ($skkind): $skl → exit $skcode (expected $skw)" \
+        "$([ "$skw" = 0 ] && printf 'false positive — a safe kill command is blocked' || printf 'missed block — the command kills its own shell and what follows never runs')"; fi
+    done <<'SKCASES'
+procps|2|the pkill -f pattern is in this very command [B5 r4]|npm run db:migrate | tail -1; pkill -f "node server.mjs"; npm run build
+procps|2|pkill -9 -f|pkill -9 -f node.server; echo done
+procps|2|kill $(pgrep -f …)|kill $(pgrep -f 'next dev') 2>/dev/null; echo stopped
+procps|2|pgrep -f result piped to xargs kill|pgrep -f vitest | xargs kill -9
+procps|0|bracket form [s]erver|pkill -f "[s]erver.mjs"; npm run build
+procps|0|^-anchored pattern (cannot match the shell command line)|kill $(pgrep -f '^node server.mjs') 2>/dev/null
+procps|0|pkill without -f (process name)|pkill node
+procps|0|pgrep -f without kill (lookup only)|pgrep -f "node server.mjs"; echo listed
+procps|0|text inside a message|echo "pkill -f server.mjs"
+bsd|0|BSD pkill excludes its ancestors, so it passes|npm run db:migrate | tail -1; pkill -f "node server.mjs"; npm run build
+bsd|0|pgrep result piped to xargs kill on BSD|pgrep -f vitest | xargs kill -9
+SKCASES
+    [ "$skbad" -eq 0 ] && ok "security-check: self-kill $skok/$skok — blocked only on procps; bracket form, anchored patterns and BSD pass"
+  }
+  rm -rf "${sk:-/nonexistent}"
+
 
   # ── Prior-knowledge gate (rule cards · skills) ──────────────────────────────
   # An agent finishes its judgement in its head and goes straight to writing the file — a `paths:` card comes up only when read and a skill is called only when
@@ -3003,6 +3062,23 @@ $bfill" --arg p "$up/src/cfg.ts" '{hook_event_name:"PreToolUse",tool_name:"Write
   printf '%s' "$lout" | grep -q '{{' \
     && bad "a placeholder was left in an unconfigured project's T0" "the fallback label is empty" \
     || ok "unconfigured-project fallback (no placeholder leak)"
+
+  # One open workspace + an unfinished slice — does the briefing print the workspace name and that slice's "Read first" (before the first write after a new session or compaction)?
+  # Also watches for a regression of the defect where the name came out empty with a single workspace (read dropped input without a trailing newline). A finished slice (✅) is skipped
+  mkdir -p "$lp/dev/active/feat-x"
+  printf '### S0. Foundation ✅\n- Read first: [done-cards]\n- [x] a\n\n### S1. Sync\n- Read first: `.claude/rules/data-modeling.md` · `/test-driven-development`\n- [ ] b\n' \
+    > "$lp/dev/active/feat-x/tasks.md"
+  lout=$(printf '{}' | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$lp" \
+         ORANGEKIT_STATE_DIR="$lp/.epcc" bash "$cache/scripts/session-brief.sh" 2>/dev/null || true)
+  if printf '%s' "$lout" | grep -q 'open work: `feat-x`' \
+     && printf '%s' "$lout" | grep -q 'S1. Sync.*read first, before the first write: `.claude/rules/data-modeling.md` · `/test-driven-development`' \
+     && ! printf '%s' "$lout" | grep -q 'done-cards'; then
+    ok "the briefing prints the open workspace name and the next slice's "Read first""
+  else
+    bad "the briefing's open-work / next-slice line is wrong" "the cards to read are not visible before the first write of a new session, so the gate sends it back"
+  fi
+  rm -rf "$lp/dev"
+
 
   # Block proof — does a fixture with the substituter torn out actually get blocked by --fast, and **for the intended reason**
   local bcache="$tmp/cache-broken" bout=""

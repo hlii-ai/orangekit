@@ -125,8 +125,18 @@ if [ -d "$ORANGEKIT_ROOT/dev/active" ]; then
   OPEN=$({ find "$ORANGEKIT_ROOT/dev/active" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true; } | head -5)
   if [ -n "$OPEN" ]; then
     printf -- '- open work: '
-    printf '%s' "$OPEN" | while IFS= read -r d; do printf '`%s` ' "$(basename "$d")"; done
+    printf '%s\n' "$OPEN" | while IFS= read -r d; do printf '`%s` ' "$(basename "$d")"; done   # without a trailing newline, read drops the last workspace
     printf '\n'
+    # The next slice's "Read first" — after a new session or a compaction, the cards read earlier are not in this session. An instruction to read them at the start of a slice
+    # did not make anyone read them again (benchmark B5: stage 4, a new session, had a bundle and still 5 send-backs). The briefing puts that line in front of the first write
+    printf '%s\n' "$OPEN" | while IFS= read -r d; do
+      tf="$d/tasks.md"; [ -f "$tf" ] || continue
+      awk -v ws="$(basename "$d")" '
+        /^### / { if (pending) exit; head = $0; sub(/^### +/, "", head); rf = ""; pending = 0; done = ($0 ~ /✅/); next }
+        head != "" && !done && /^- (먼저 읽을 것|Read first):/ { rf = $0; sub(/^- (먼저 읽을 것|Read first):[ \t]*/, "", rf) }
+        head != "" && !done && /^- \[ \]/ { pending = 1 }
+        END { if (pending && rf != "") printf "- next slice `%s` (%s) — read first, before the first write: %s\n", head, ws, rf }' "$tf" 2>/dev/null || true
+    done
   fi
 fi
 

@@ -58,6 +58,10 @@ For each slice, fill in **Read first** — pass the file paths that slice will c
 **same judgement** as the prior-knowledge gate (do not write a copy of that judgement by hand). Read them when you start the slice,
 and the send-back and rewrite right before a write do not happen. Do not read them all at session start —
 the farther they are from the point of writing, the more the rules get buried.
+- The paths are **not only code** — also include the design and contract documents (`dev/docs/**`) and the migrations that slice will edit.
+  If the cards that own documents (doc-dependency · data-modeling) are missing, the write is sent back the moment a document is written (benchmark B5: 3 of the 5 stage-4 send-backs)
+- The `/skill` lines in the output are **not something to read but something to invoke with the Skill tool** — if you read only the cards and skip the skill, the first new source file
+  is sent back (benchmark B5: 3 cases of `/test-driven-development`)
 
 Group the checklist into **vertical slices** — each slice cuts thinly through every layer so it can be demonstrated on its own,
 fits into a single fresh context, and declares its predecessor slices under `Blocked by`. A wide refactoring is
@@ -74,7 +78,7 @@ Present the list of generated documents plus the approach summary from the plan,
 - Does each slice state `Blocked by`, and does one slice fit into a single fresh context?
 - If the work touches both frontend and backend, does `dev/docs/api/wire-contract.md` exist with this feature's endpoints in §4?
 - Is the plan's verification path an executable command?
-- Does each slice have `Read first` (if the `--owning` output is empty, "none")
+- Does each slice have `Read first` (if the `--owning` output is empty, "none") — was it computed with the `dev/docs/**` paths that slice will edit included?
 
 ## Reference documents
 
