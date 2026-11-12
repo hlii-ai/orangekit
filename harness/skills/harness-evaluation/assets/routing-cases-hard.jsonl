@@ -119,3 +119,7 @@
 {"id":"h-figma-asset-extractor-1","query":"Our designer finished every screen in Figma. Before we start building, pull everything out of this file — components, colors, fonts, images — and organize it. https://www.figma.com/design/AbCdEfGhIjKlMnOpQrStUv/app","expect":["figma-asset-extractor"],"kind":"pos"}
 {"id":"h-figma-asset-extractor-2","query":"The plan and design are final in Figma. Turn them into assets in the project so the AI can build exactly that.","expect":["figma-asset-extractor"],"kind":"pos"}
 {"id":"h-figma-asset-extractor-near-1","query":"We have no design at all yet. Start by picking a color and font pairing that suits a healthcare app.","expect":["ui-ux-design"],"kind":"near"}
+{"id":"h-orangekit-feedback-1","query":"The session briefing says an orangekit bug report was drafted. Let's look it over and send it to the maintainers.","expect":["orangekit-feedback"],"kind":"pos"}
+{"id":"h-orangekit-feedback-2","query":"The orangekit security hook keeps crashing with exit 1 on my git push commands — can you report that upstream to the plugin people?","expect":["orangekit-feedback"],"kind":"pos"}
+{"id":"h-orangekit-feedback-3","query":"Users say the checkout page throws a 500 when the cart is empty. Track the bug down and fix it.","expect":["none"],"kind":"near"}
+{"id":"h-orangekit-feedback-4","query":"Open a GitHub issue in our repo for the flaky login test so the team can pick it up.","expect":["none"],"kind":"near"}

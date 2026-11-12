@@ -1,0 +1,20 @@
+# Every text file reaches every OS with LF endings. Git for Windows defaults to core.autocrlf=true, and a checkout made
+# that way turns `fi` into `fi\r` — every hook dies with "command not found" and agent frontmatter stops parsing.
+# An attribute in the repository outranks the user's core.autocrlf, so this holds for clones made by the plugin installer too.
+# doctor --default proves no shipped script or document carries CRLF ("CRLF line endings").
+* text=auto eol=lf
+
+# Binary assets — never converted
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.pdf  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+
+# Data tables keep their bytes — some were committed with CRLF, and their reader (python csv) accepts either ending
+*.csv  -text

@@ -1,6 +1,6 @@
 ---
 name: image-generator
-description: Creates raster images such as icons, logo drafts, illustrations, mockups, OG images, and hero art — with an API key it generates directly with gpt-image-2.5-flare, without one it produces a prompt to paste into ChatGPT. Use when a picture, thumbnail, cover image, or app icon is needed. Diagrams and charts go to diagram-design; design systems (color, fonts) go to /ui-ux-design.
+description: Creates raster images such as icons, logo drafts, illustrations, mockups, OG images, and hero art — with an API key it generates directly with gpt-image-2.5-flare, without one it can generate through a logged-in Codex CLI after asking, or produces a prompt to paste into ChatGPT. Use when a picture, thumbnail, cover image, or app icon is needed. Diagrams and charts go to diagram-design; design systems (color, fonts) go to /ui-ux-design.
 ---
 
 # /image-generator — raster image generation
@@ -31,8 +31,10 @@ bash ${CLAUDE_SKILL_DIR}/scripts/image-gen.sh --probe
 | Output | exit | Next |
 | --- | --- | --- |
 | `ready` | 0 | go to Step 1 (the API path is available) |
+| `codex` | 0 | no key, but the Codex CLI is logged in — go to **Step 1b** (ask first) |
+| `codex-login` | 2 | Codex CLI installed but not logged in — tell the user `! codex login` enables the Codex path, then continue in Step 4 handoff mode |
 | `no-key` | 2 | **do not block** — go to Step 4, handoff mode |
-| `unavailable` | 2 | python3 missing. Likewise, go to handoff mode |
+| `unavailable` | 2 | python3 does not run (on Windows often the Store alias). Likewise, go to handoff mode |
 
 **Do not read undecidable as failure.** Having no key is a normal state, and what to do then is not to
 stop but **to hand over a prompt a person can use**.
@@ -56,6 +58,19 @@ Without recording it you ask every time, and a mechanism that asks every time ge
 
 The key is **not stored.** Only the environment variable `OPENAI_API_KEY` is used — not `.env`, not
 `orangekit.config.json`, not shell configuration (this harness's `security-check` hook blocks that).
+
+## Step 1b — confirmation before the Codex CLI path (every request)
+
+If `assets.imageProvider` is `"manual"`, the user chose to make images themselves — go to Step 4 without asking.
+Otherwise **ask before every Codex generation** — this path runs on the user's own ChatGPT account, so it is their call
+each time, not a setting. Ask once per request (one question covers every image in that request), with
+`AskUserQuestion`, verbatim:
+
+> **Generate this with the Codex CLI?** No API key is needed — it runs on your ChatGPT login and counts toward your
+> plan's usage limits (it is not billed per image like the API). The prompt is sent to OpenAI.
+
+Options: "Generate with Codex CLI" · "I'll make it myself (prompt only)". The second goes to Step 4.
+Do not record this answer in the config — the next request asks again.
 
 ## Step 2 — writing the prompt (both paths share this)
 
@@ -105,6 +120,25 @@ the user — say "it cost this much", not "it would have cost about this much".
 After generating, **compare the requested dimensions with the actual dimensions.** The model can
 restructure the prompt and throw the ratio off. If it is off, tell the user and ask whether to re-pull — do not let it slide silently.
 
+## Step 3b — generation through the Codex CLI (only after a yes in Step 1b)
+
+Write the prompt from Step 2 to a file (quoting accidents again), then:
+
+```bash
+bash ${CLAUDE_SKILL_DIR}/scripts/image-gen.sh --codex --prompt-file <prompt file> --out <save path>.png
+```
+
+| exit | Meaning | Next |
+| --- | --- | --- |
+| 0 | the image came out of `$CODEX_HOME/generated_images/`, was copied to the save path and its signature checked | verify the dimensions (below) |
+| 2 | this Codex CLI has no built-in `image_gen` in `codex exec`, or it is not logged in | say so plainly, then Step 4 handoff mode |
+| 1 | Codex ran but produced no image, or timed out | report the reason; offer Step 4 |
+
+`--size` · `--quality` · `--background` are API-only — Codex picks the rendering. **Put the dimensions and any
+transparent background in the prompt itself**, and compare the result with what was asked, the same as Step 3.
+The script refuses a file that did not appear in Codex's `generated_images` — a placeholder drawn with code is not
+a generated image. Codex runs in a read-only sandbox; only the script writes to the project.
+
 ## Step 4 — handoff mode (no key, or the user makes it themselves)
 
 **This is not a failure path but a regular path.** The job is not "it cannot be made" but
@@ -149,6 +183,9 @@ When the file arrives, **verify the spec** — dimensions, format, non-zero byte
 - **Transparent background**: `background=transparent` is valid per the API docs, but gpt-image-2.5-flare's
   actual alpha quality has not been verified in this repository. If you need a clean cutout, check the result by eye
 - **Dimension determinism**: the model restructures the prompt, so the requested dimensions and the result can diverge
-- **Going through Codex is not possible**: the Codex CLI's built-in `image_gen` is desktop-app only.
-  It was measured as absent from both the `codex exec` and `codex app-server` tool lists (2026-09) —
-  so this skill does not call Codex; it calls the API directly
+- **The Codex CLI path depends on the Codex version**: `image_gen` was absent from `codex exec` in codex 0.154.0
+  (2026-09) and works in codex-cli 0.163.0 (measured 2026-11-08: a 1024×1024 request returned a 1254×1254 PNG in
+  ~50 s). The script assumes neither — Codex answers `IMAGEGEN_UNAVAILABLE` when the tool is missing and the run
+  ends as undecidable (exit 2), so the skill falls back to handoff instead of failing
+- **Codex picks the output size**: the requested dimensions are a request, not a guarantee. When they differ,
+  tell the user and offer a local resize (`sips -z H W <file>` on macOS) rather than another Codex run

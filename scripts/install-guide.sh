@@ -68,6 +68,9 @@
 
 set -Eeuo pipefail
 
+# Windows shims (Python resolution, CRLF stripping) — canonical in scripts/lib/win-compat.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/win-compat.sh" 2>/dev/null || true
+
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 G="$PLUGIN_ROOT/guides"
@@ -105,6 +108,11 @@ done
 [ "$SELFTEST" -eq 1 ] || [ -n "$SAVE_SEAM" ] || [ -n "$FE" ] || [ -n "$BE" ] || [ -n "$APP" ] || { printf 'FATAL: one of --frontend · --backend · --app is required\n' >&2; exit 2; }
 
 stamp_of() { grep -m1 -oE 'orangekit-(pack|seam): [^ ]+ v[0-9]+\.[0-9]+\.[0-9]+' "$1" 2>/dev/null | awk '{print $3}' || true; }
+# Is version $1 newer than $2 (x.y.z, numeric per part)? An installed copy newer than the plugin's own is kept: it came from
+# a newer or forked plugin, and replacing it would downgrade the project (measured: /orangekit-update on a project a fork
+# set up would have turned backend/fastapi v3.36.0 guides back into v3.14.0). --force still replaces it.
+ver_gt() { awk -v a="$1" -v b="$2" 'BEGIN { split(a, x, "."); split(b, y, "."); for (i = 1; i <= 3; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 } exit 1 }'; }
+
 TODAY=$(date +%Y-%m-%d)
 installed=0; updated=0; skipped=0
 
@@ -125,6 +133,10 @@ put() { # $1=source $2=target
     else
       printf '    = %-30s user edit — preserved\n' "$base"
     fi
+    skipped=$((skipped+1)); return 0
+  fi
+  if [ "$FORCE" -eq 0 ] && [ "$tv" != none ] && [ "$sv" != none ] && ver_gt "${tv#v}" "${sv#v}"; then
+    printf '    = %-30s newer than the plugin (%s > %s) — kept\n' "$base" "$tv" "$sv"
     skipped=$((skipped+1)); return 0
   fi
   printf '    ↑ %-30s %s → %s (backed up)\n' "$base" "$tv" "$sv"

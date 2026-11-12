@@ -17,6 +17,9 @@
 #   Extra fields: severity_counts{blocker,critical,major,minor,info} · total (total issue count as counted by the server)
 set -u
 
+# Windows shims (Python resolution, CRLF stripping) — canonical in <plugin>/scripts/lib/win-compat.sh
+_okc="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)/scripts/lib/win-compat.sh"; [ -f "$_okc" ] && . "$_okc"; unset _okc
+
 MODE="${1:-build}"; shift 2>/dev/null || true
 CMD="${*:-}"
 

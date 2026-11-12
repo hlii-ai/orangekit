@@ -1,6 +1,6 @@
 ---
 name: orangekit-migrate
-description: Converts a project running the ORANGEKIT Devkit v2 harness to v3 — removes dead hooks, rearranges the rules into three tiers, renames the agents, and updates an outdated orangekit.config.json. Use for "harness migration", "v3 conversion", or "orangekit upgrade". Manual invocation only.
+description: Converts a project running the ORANGEKIT Devkit v2 harness to v3 — removes dead hooks, rearranges the rules into three tiers, renames the agents, and updates an outdated orangekit.config.json. Use for "harness migration" or "v3 conversion". To bring a v3 project's installed files up to a newer plugin version use /orangekit-update. Manual invocation only.
 disable-model-invocation: true
 ---
 

@@ -1,0 +1,150 @@
+# The plugin's hooks run under bash on every OS Claude Code supports: macOS (/bin/bash 3.2 · BSD tools),
+# Linux (GNU tools · mawk · procps) and Windows (Git Bash · MSYS). A suite that only ever runs on one of them lets the
+# other two break silently — CRLF checkouts, GNU `stat -f`, the Store python3 alias and BSD `awk -v` all did.
+# The Windows runner keeps git's core.autocrlf=true, so the checkout itself is the CRLF test that .gitattributes answers.
+name: test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege; actions: read lets the last step read this job's step times back from the API
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  suite:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Environment
+        run: |
+          bash --version | head -1
+          jq --version
+          python3 --version || python --version
+          git config --get core.autocrlf || echo "core.autocrlf unset"
+
+      - name: Shipped scripts are LF after checkout
+        run: |
+          # Actions runs bash with -e -o pipefail: grep -l exits 1 on a clean file, so it is guarded
+          # tr counts bytes: Git Bash grep strips a trailing CR in text mode and would see none
+          crlf=$(git ls-files '*.sh' | while IFS= read -r f; do [ "$(tr -dc '\r' < "$f" | wc -c)" -gt 0 ] && echo "$f"; done || true)
+          [ -z "$crlf" ] || { echo "CRLF in: $crlf"; exit 1; }
+
+      - name: doctor --default
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash scripts/doctor.sh --default
+      - name: doctor --self-test
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash scripts/doctor.sh --self-test
+      - name: doctor --consumer
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash scripts/doctor.sh --consumer
+      - name: skill-lint
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: |
+          bash skills/skill-enhancer/scripts/skill-lint.sh --self-test
+          bash skills/skill-enhancer/scripts/skill-lint.sh skills/*/ marketing/skills/*/ harness/skills/*/
+      - name: orangekit-update --self-test
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash skills/orangekit-update/scripts/orangekit-update.sh --self-test
+      - name: orangekit-feedback drafts --self-test
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash skills/orangekit-feedback/scripts/drafts.sh --self-test
+      - name: image-gen --self-test
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash skills/image-generator/scripts/image-gen.sh --self-test
+      - name: guide-gate --self-test
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash skills/stack-guide-generator/scripts/guide-gate.sh --self-test
+      - name: pack-smoke --self-test
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash skills/stack-guide-generator/scripts/pack-smoke.sh --self-test
+      - name: pack-refresh --self-test
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash harness/skills/pack-refresh/scripts/pack-refresh.sh --self-test
+      - name: routing-eval --self-test
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: bash harness/skills/harness-evaluation/scripts/routing-eval.sh --self-test
+
+      # Windows only: scripts/fixtures/session-warmup.py proves the SessionStart warm-up lifecycle on POSIX and skips under native
+      # Windows Python. This is its Git Bash half: the hook returns while the worker runs, and the worker's 20 s group kill
+      # (set -m · nohup · kill -KILL -- -<group>) reaches a native jq.exe that would otherwise run for hours.
+      - name: SessionStart warm-up lifecycle (Windows, native Git Bash)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        run: |
+          T="$RUNNER_TEMP/warm" && mkdir -p "$T/shim" "$T/st" && git init -q "$T" && realjq=$(type -P jq)   # before the shim is on PATH
+          printf '%s\n' '{"type":"user","message":"warm-up lifecycle"}' > "$T/t.jsonl"
+          # The index build is the only `jq -nrR` call: replace it with a native jq.exe busy far past the 20 s limit,
+          # reading no pipe — so only the group kill can end it, not an EOF
+          cat > "$T/shim/jq" <<'SH'
+          #!/bin/bash
+          case " $* " in *" -nrR "*) echo $$ > "$WARM_MARK"; "$WARM_JQ" -n 'last(range(1e12))' >/dev/null; exit 0 ;; esac
+          exec "$WARM_JQ" "$@"
+          SH
+          chmod +x "$T/shim/jq"
+          njq() { tasklist //FI "IMAGENAME eq jq.exe" //NH | grep -ci 'jq\.exe' || true; }
+          start=$SECONDS
+          # $( ) returns only when every writer of the pipe is gone, as Claude Code waits: a worker holding stdout/stderr hangs it
+          out=$(jq -nc --arg tp "$T/t.jsonl" --arg c "$T" '{session_id:"warm",transcript_path:$tp,cwd:$c,source:"resume"}' \
+            | PATH="$T/shim:$PATH" WARM_MARK="$T/mark" WARM_JQ="$realjq" CLAUDE_PLUGIN_ROOT="$GITHUB_WORKSPACE" \
+              CLAUDE_PROJECT_DIR="$T" ORANGEKIT_STATE_DIR="$T/st" bash scripts/session-brief.sh 2>&1)
+          took=$((SECONDS-start)); echo "SessionStart returned in $took s ($(printf '%s' "$out" | wc -c) bytes of brief)"
+          n=0; while [ ! -s "$T/mark" ] && [ $n -lt 50 ]; do sleep 0.2; n=$((n+1)); done
+          [ -s "$T/mark" ] || { echo "FAIL the warm worker never reached the index build"; exit 1; }
+          w=$(cat "$T/mark"); echo "worker running · busy jq.exe: $(njq)"
+          # Diagnostics: MSYS pids/groups and each jq.exe's Windows parent — what the 20 s kill has to reach
+          ps || true
+          powershell -NoProfile -Command - <<'PS' || true
+          Get-CimInstance Win32_Process -Filter "Name = 'jq.exe'" | ForEach-Object { 'jq.exe {0} parent {1}' -f $_.ProcessId, $_.ParentProcessId }
+          PS
+          while [ $((SECONDS-start)) -lt 40 ] && { [ "$(njq)" -gt 0 ] || kill -0 "$w" 2>/dev/null; }; do sleep 1; done
+          left=$(njq); echo "after $((SECONDS-start)) s: jq.exe $left · worker $(kill -0 "$w" 2>/dev/null && echo alive || echo gone) · state dir: $(ls "$T/st" | tr '\n' ' ')"
+          taskkill //F //IM jq.exe >/dev/null 2>&1 || true
+          [ "$took" -lt 15 ] || { echo "FAIL SessionStart waited for the worker"; exit 1; }
+          [ "$left" = 0 ] && ! kill -0 "$w" 2>/dev/null || { echo "FAIL the 20 s group kill left the worker or jq.exe running"; exit 1; }
+          ! ls "$T/st" | grep -q '^transcript-index\.' || { echo "FAIL a partial cache or private file survived the kill"; exit 1; }
+
+      # Measurement, not a gate: security-check spawns ~70–90 processes per Bash call (measured on macOS), and process
+      # creation is far slower under Git Bash. The hook timeout is 15s — past it the command runs unchecked
+      - name: Hook latency (security-check, typical Bash calls)
+        if: ${{ !cancelled() }}   # keep going after a failure so every OS reports every step
+        run: |
+          p="$RUNNER_TEMP/latency" && mkdir -p "$p" && cd "$p" && git init -q
+          TIMEFORMAT='%R s'
+          for c in "git status" "npm test" "ls -la && cat package.json | head -20"; do
+            printf '%-40s ' "$c"
+            { time (jq -nc --arg c "$c" --arg cwd "$p" '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:$c},cwd:$cwd,session_id:"ci"}' \
+                | CLAUDE_PLUGIN_ROOT="$GITHUB_WORKSPACE" CLAUDE_PROJECT_DIR="$p" bash "$GITHUB_WORKSPACE/scripts/security-check.sh" >/dev/null 2>&1); } 2>&1
+          done
+          # Processes per hook call (doctor prints only pass/fail): on Windows each jq adds one tr, any Python probe would add more
+          bash "$GITHUB_WORKSPACE/scripts/fixtures/proc-budget.sh" "$GITHUB_WORKSPACE"
+
+      # Per-step durations of this job, so runs can be compared without opening each step in the UI
+      - name: Step times
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          api="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs"
+          job='.jobs[] | select(.name | contains("${{ matrix.os }}"))'
+          # The API records a finished step a few seconds late (run 8 missed the last one or two): wait ≤ 30 s for every step before this one
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            gh api "$api" --jq "$job"' | (.steps[] | select(.name == "Step times") | .number) as $n
+              | [.steps[] | select(.number < $n) | .completed_at] | all(. != null)' 2>/dev/null | grep -qx true && break
+            sleep 3
+          done
+          gh api "$api" --jq "$job"' | .steps[] | select(.completed_at != null)
+            | ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) as $s
+            | "\(if $s >= 90 then "\($s / 60 * 10 | floor / 10) min" else "\($s) s" end)\t\(.conclusion)\t\(.name)"' \
+            | awk -F'\t' '{ printf "%-9s %-9s %s\n", $1, $2, $3 }' || echo "step times unavailable (API or token)"

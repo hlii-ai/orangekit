@@ -39,11 +39,14 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   add ""
   add "- branch \`${BRANCH:-?}\` · HEAD \`${HEADL:-none}\`"
 
-  MODIFIED=$({ git status --porcelain 2>/dev/null || true; } | head -12)
-  if [ -n "$MODIFIED" ]; then
-    N=$(orangekit_num "$(git status --porcelain 2>/dev/null | wc -l)")
+  # One git status for both the list and the count (it used to run twice)
+  ST=$(git status --porcelain 2>/dev/null || true)
+  if [ -n "$ST" ]; then
+    # Lines counted while reading (= wc -l of the porcelain, which ends every line with a newline); the first 12 are listed
+    N=0; LIST=""
+    while IFS= read -r l; do N=$((N + 1)); [ "$N" -le 12 ] && LIST+="$l"$'\n'; done <<< "$ST"
     add "- ${N} uncommitted:"
-    while IFS= read -r l; do [ -n "$l" ] && add "  - \`${l}\`"; done <<< "$MODIFIED"
+    while IFS= read -r l; do [ -n "$l" ] && add "  - \`${l}\`"; done <<< "${LIST%$'\n'}"
   fi
 fi
 
@@ -56,13 +59,13 @@ if [ -d "$ORANGEKIT_ROOT/dev/active" ]; then
     add "### In progress: ${NAME}"
     TF=$({ find "$d" -name '*task*' -type f 2>/dev/null || true; } | head -1)
     if [ -n "$TF" ] && [ -f "$TF" ]; then
-      DONE=$(orangekit_num "$(grep -c '^\s*- \[x\]' "$TF" 2>/dev/null || true)")
-      TODO=$(orangekit_num "$(grep -c '^\s*- \[ \]' "$TF" 2>/dev/null || true)")
+      DONE=$(orangekit_num "$(grep -c '^[[:space:]]*- \[x\]' "$TF" 2>/dev/null || true)")
+      TODO=$(orangekit_num "$(grep -c '^[[:space:]]*- \[ \]' "$TF" 2>/dev/null || true)")
       add "- progress ${DONE}/$((DONE+TODO))"
       if [ "$TODO" -gt 0 ]; then
         add "- remaining work:"
         # The last stage of a pipe runs in a subshell, so add() would only change a copy of OUT — process substitution keeps the loop in this shell
-        while IFS= read -r t; do add "$t"; done < <({ grep '^\s*- \[ \]' "$TF" 2>/dev/null || true; } | head -5 | sed 's/^\s*- \[ \]/  -/')
+        while IFS= read -r t; do add "$t"; done < <({ grep '^[[:space:]]*- \[ \]' "$TF" 2>/dev/null || true; } | head -5 | sed 's/^[[:space:]]*- \[ \]/  -/')
       fi
       add "- file: \`${TF#$ORANGEKIT_ROOT/}\`"
     fi

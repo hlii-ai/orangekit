@@ -107,7 +107,7 @@ function onShouldStartLoadWithRequest(req: ShouldStartLoadRequest): boolean {
 ## 4. Receiving messages — origin → parse → schema
 
 ```tsx
-// src/webview/TrustedWebView.tsx — the message receiver
+// src/webview/TrustedWebView.tsx — the message receiver (inside TrustedWebView, §6 — it closes over onBridgeMessage and send)
 function onMessage(event: WebViewMessageEvent) {
   if (!isTrustedOrigin(event.nativeEvent.url, config.trustedWebOrigins)) return;
   let msg: unknown;
@@ -116,7 +116,7 @@ function onMessage(event: WebViewMessageEvent) {
   } catch {
     return; // ignore malformed messages — so a string the web throws cannot kill the app
   }
-  onBridgeMessage(msg); // schema check·branching is in shell-bridge.md
+  onBridgeMessage(msg, send); // schema check·branching is in shell-bridge.md; send is the reply path (§6)
 }
 ```
 
@@ -154,18 +154,27 @@ const leak = `window.__TOKEN__ = ${JSON.stringify(tokens.accessToken)}; true;`;
 
 ```tsx
 // src/webview/TrustedWebView.tsx
-type Props = { uri: string; onBridgeMessage: (msg: unknown) => void };
+type Send = (payload: unknown) => void;
+type Props = { uri: string; onBridgeMessage: (msg: unknown, send: Send) => void };
 
 export function TrustedWebView({ uri, onBridgeMessage }: Props) {
-  // onMessage · onShouldStartLoadWithRequest · shellFlag are §3–§5
+  // onShouldStartLoadWithRequest · shellFlag are §3 · §5 (module scope)
   const ref = useRef<ComponentRef<typeof WebView>>(null); // useRef<WebView> folds props to never and is a type error
   const currentUrl = useRef(uri); // the top-level page currently showing
 
   // Native → web: judge the top-level URL again right before sending
-  const send = (payload: unknown) => {
+  const send: Send = (payload) => {
     if (!isTrustedOrigin(currentUrl.current, config.trustedWebOrigins)) return;
     ref.current?.postMessage(JSON.stringify(payload));
   };
+
+  // Web → native: §4, declared here because it hands send to onBridgeMessage as the reply path
+  function onMessage(event: WebViewMessageEvent) {
+    if (!isTrustedOrigin(event.nativeEvent.url, config.trustedWebOrigins)) return;
+    let msg: unknown;
+    try { msg = JSON.parse(event.nativeEvent.data); } catch { return; }
+    onBridgeMessage(msg, send);
+  }
 
   return (
     <WebView
@@ -183,7 +192,7 @@ export function TrustedWebView({ uri, onBridgeMessage }: Props) {
 }
 ```
 
-`send` is handed over as the reply path of `onBridgeMessage` (that wiring is in `shell-bridge.md`). `WebView` is the class `WebView<P = undefined>`,
+`send` is handed over as the reply path of `onBridgeMessage` — the second argument (what each message answers is in `shell-bridge.md`). `WebView` is the class `WebView<P = undefined>`,
 so passing a `useRef<WebView>` to `ref` makes the props type `never` <!-- verified: react-native-webview@13.17.0 index.d.ts + @types/react@19 · ran typescript@6 tsc -->.
 
 | Direction | Trust verdict | Rationale |

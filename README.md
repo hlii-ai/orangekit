@@ -2,7 +2,7 @@
 
 AI Native Dev Harness for Claude Code — reversibility-axis workflow, self-testing hooks, graph instrumentation.
 
-![version](https://img.shields.io/badge/version-1.14.1-blue)
+![version](https://img.shields.io/badge/version-1.15.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## What it is
@@ -118,7 +118,7 @@ A Phase number marks order, not obligation — when the 4 entry conditions hold,
 | **Hooks** | 5 scripts / 6 registrations | SessionStart · PreToolUse · Stop · PreCompact · SessionEnd · PostToolUse |
 | **Rules** | T0 41 lines + T1 9 cards 1,162 lines | T0 is injected by a hook at all times (plugin-owned). Of T1, `workflow-routing` is **always on, every session**; the rest load conditionally on a path match |
 | **Agents** | 2 | `orangekit-planner` (no writes) · `orangekit-reviewer` (read-only) |
-| **Skills** | 27 | Survey · planning · implementation · verification · security · PR workflow + stack guide generator + skill enhancer (the 5 marketing skills are split into `orangekit-marketing`, the 1 harness evaluation skill into the `orangekit-harness` plugin) |
+| **Skills** | 29 | Survey · planning · implementation · verification · security · PR workflow + stack guide generator + skill enhancer (the 5 marketing skills are split into `orangekit-marketing`, the 1 harness evaluation skill into the `orangekit-harness` plugin) |
 | **Presets** | 3-axis 5+5+11 | Web screens: nextjs·react-vite·vue·vanilla·none / App: react-native·flutter·ios-swift·android-kotlin·native-dual / Backend: supabase·firebase·aws-serverless·aws-container·gcp-serverless·fastapi·node-api·node-nest·fastify·rust-axum·none |
 
 ### Hooks
@@ -160,7 +160,7 @@ and conventions matching the preset; they carry no version stamp, so plugin upda
 
 Without the permission, the violation is impossible. Removing permission comes before instructing.
 
-### 27 skills — what invokes them
+### 29 skills — what invokes them
 
 The canonical source for invocation conditions is the Phase table in `.claude/rules/workflow-routing.md`. Below is a quotation of it, and
 `doctor --fast` fails if a skill name is missing from that table.
@@ -170,8 +170,8 @@ The canonical source for invocation conditions is the Phase table in `.claude/ru
 | **Phase table** (P0~P6) | `brainstorming` · `research` · `business-planner` · `service-planner` · `council-review` · `prompt-enhancer` · `prd-generator` · `dev-docs-generator` · `test-driven-development` · `completion-review` · `codex-cross-check` |
 | **Doc dependency** (when `dev/docs/prd/` is edited) | `prd-reviewer` |
 | **description** (the model fires it when the condition holds) | `receiving-code-review` · `security-review` · `shortcut-ledger` · `pr-prep` · `codebase-survey` · `ui-ux-design` · `figma-asset-extractor` · `image-generator` · `skill-enhancer` |
-| **Another skill or hook** | `stack-guide-generator` (← `orangekit-init` · session briefing) |
-| **The user only** (`disable-model-invocation` — description not resident) | `orangekit-init` · `orangekit-migrate` · `health-check` · `fix-issue` · `execution-dashboard` |
+| **Another skill or hook** | `stack-guide-generator` (← `orangekit-init` · session briefing) · `orangekit-feedback` (← session briefing, when a hook error was drafted) |
+| **The user only** (`disable-model-invocation` — description not resident) | `orangekit-init` · `orangekit-migrate` · `orangekit-update` · `health-check` · `fix-issue` · `execution-dashboard` |
 
 ## Self-test — `doctor`
 
@@ -200,7 +200,7 @@ What it checks:
 ## Graph declaration
 
 `workflow.graph.json` declares the nodes (agents · skills · hooks), the edges (transition conditions)
-and the **error edges** in machine-readable form. Currently 50 nodes · 93 edges.
+and the **error edges** in machine-readable form. Currently 52 nodes · 97 edges.
 
 `doctor --graph` verifies:
 - whether every edge's target actually exists
@@ -298,7 +298,7 @@ It checks with `doctor --default` after each step as it goes, and preserves proj
 | Verification strength | S/M/L size judgement | **reversibility axis (decided by path)** |
 | Phase | P0~P6 (`.claude/rules/task-workflow.md` loaded always) | **P0~P6 kept** — moved to `workflow-routing.md`, the always-loaded property preserved |
 | Agents | no frontmatter, access to every tool | **full contract + least privilege** |
-| Skills | 37 | **27** (removed only what native does better; added the guide generator, the enhancer, the shortcut ledger and the Figma extractor) |
+| Skills | 37 | **29** (removed only what native does better; added the guide generator, the enhancer, the shortcut ledger, the Figma extractor, the feedback reporter and the project updater) |
 | Verification | none | **`doctor`, 5 modes** |
 | Graph | scattered through prose | **`workflow.graph.json` + instrumentation** |
 

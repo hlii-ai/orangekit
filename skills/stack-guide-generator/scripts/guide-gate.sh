@@ -22,6 +22,7 @@
 #       "why models get it wrong" and precedence sentence as a pack card, but requires evidence (official URL ·
 #       check date · installed version) instead of a policy table and a stamp.
 #   guide-gate.sh --pair --contract <contract-file> --frontend <dir> --backend <dir>
+#   guide-gate.sh --pair --contract <bridge-contract-file> --frontend <dir> --app <dir>   (hybrid RN shell)
 #   guide-gate.sh --self-test   synthetic fixtures only (fast — run it on every harness change)
 #   guide-gate.sh --regress     + actually checks every shipped pack and every pre-built seam.
 #       Synthetic fixtures catch **misses**, real assets catch **false positives**. It is slow, so run it before shipping.
@@ -33,6 +34,9 @@
 # Exit codes: 0 = FAIL 0, 1 = FAIL present, 2 = usage error
 
 set -uo pipefail   # no -e: run every check to the end and emit the whole report
+
+# Windows shims (Python resolution, CRLF stripping) — canonical in <plugin>/scripts/lib/win-compat.sh
+_okc="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)/scripts/lib/win-compat.sh"; [ -f "$_okc" ] && . "$_okc"; unset _okc
 
 FAIL=0; WARN=0; PASS=0; REVIEW=0
 C_R=$'\033[31m'; C_G=$'\033[32m'; C_Y=$'\033[33m'; C_C=$'\033[36m'; C_D=$'\033[2m'; C_0=$'\033[0m'
@@ -56,22 +60,32 @@ trap 'rm -rf "$TMP"' EXIT
 # Keeps only lines inside a code fence that are not comments and are not in an anti-pattern (❌/Bad) span.
 # Both idioms count as markers: `// ❌` / `// ✅`, `// Bad` / `// Good`.
 # If the prose line right before a fence is ❌/Bad, the whole fence starts as an anti-pattern.
-# Output: <file>\t<line number>\t<text>\t<fence ID>
+# Output: <file>\t<line number>\t<text>\t<fence ID>\t<declared code file>
 # The 4th column exists for fence-level checks (security shape·duplicate fence). The first 3 columns are unchanged, so
 # existing `cut -f3` consumers are unaffected.
+# The 5th column is the code file the fence says it is: a `<!-- file: x -->` line right before it, or a first line that is a
+# path comment (`// src/test/env.ts — …` · `# tests/conftest.py`). Empty when the fence names none. Policy exemptions
+# are declared by code file (`src/test/env.ts`), so they are enforced by code file too (_policy_fence_filter).
 codelines() {
   awk '
+    function declpath(s,   m) {
+      if (match(s, /<!--[[:space:]]*file:[[:space:]]*[^ >]+/)) { m=substr(s,RSTART,RLENGTH); sub(/.*file:[[:space:]]*/,"",m); return m }
+      return ""
+    }
     # ❌/✅ outrank the English words as markers. The word test has to exclude _ and digits at its
     # boundary so contract identifiers (BAD_SHAPE·BAD_REQUEST) are not mistaken for anti-pattern markers —
     # if they are, code extraction switches off from there and every later check is silently skipped (a miss).
     function isbad(s)  { return (index(s,"❌")>0 || (index(s,"✅")==0 && s ~ /(^|[^A-Za-z0-9_])(Bad|BAD)([^A-Za-z0-9_]|$)/)) }
     function isgood(s) { return (index(s,"✅")>0 || (index(s,"❌")==0 && s ~ /(^|[^A-Za-z0-9_])(Good|GOOD)([^A-Za-z0-9_]|$)/)) }
     function iscomment(s) { return (s ~ /^[[:space:]]*(\/\/|#|\*|\/\*|--)/) }
-    FNR==1 { inf=0; pol=1; lastprose=""; fn=0 }
-    /^[[:space:]]*```/ { if (!inf) { inf=1; fn++; pol = isbad(lastprose) ? 0 : 1 } else { inf=0 }; next }
-    !inf { if ($0 ~ /[^[:space:]]/) lastprose=$0; next }
+    FNR==1 { inf=0; pol=1; lastprose=""; pdecl=""; fn=0 }
+    /^[[:space:]]*```/ { if (!inf) { inf=1; fn++; fl=0; pol = isbad(lastprose) ? 0 : 1; decl=pdecl } else { inf=0; pdecl="" }; next }
+    !inf { if ($0 ~ /[^[:space:]]/) { lastprose=$0; pdecl=declpath($0) }; next }
+    { fl++ }
+    fl==1 && decl=="" && $0 ~ /^[[:space:]]*(\/\/|#|--)[[:space:]]*[A-Za-z0-9_.\/-]+\.[A-Za-z]+([[:space:]]|$)/ {
+      decl=$0; sub(/^[[:space:]]*(\/\/|#|--)[[:space:]]*/,"",decl); sub(/[[:space:]].*/,"",decl) }
     iscomment($0) { if (isbad($0)) pol=0; else if (isgood($0)) pol=1; next }
-    pol { print FILENAME "\t" FNR "\t" $0 "\t" FILENAME "#" fn }
+    pol { print FILENAME "\t" FNR "\t" $0 "\t" FILENAME "#" fn "\t" decl }
   ' "$@"
 }
 
@@ -285,10 +299,17 @@ _policy_rows_look_present() { # $1=policy file
 # **Type symbols in a JS pack are declared only in JSDoc comments** — `iscomment()` drops lines starting with `*`,
 # so such a declaration **cannot exist** in codelines(). Measured on vanilla (the first JavaScript axis):
 # `Task` FAILed as "no definition" even though it was defined. That is where the checker knew only one language.
+# grep reads a here-string, not a pipe: `codelines | cut | grep -q` under pipefail returned 141 once the code passed the pipe buffer
+# (~64 KB) and the match came early — a defined symbol read as "no definition", a forbidden example as absent (N4)
 _has_def() { # $1=file $2=symbol
-  codelines "$1" | cut -f3 | grep -qE "$(_defpat "$2")" && return 0
+  grep -qE "$(_defpat "$2")" <<<"$(codelines "$1" | cut -f3)" && return 0
   grep -qE "@typedef[[:space:]]*\{.*\}[[:space:]]*$2\b|@typedef[[:space:]]+$2\b" "$1" && return 0
   return 1
+}
+
+_code_has_fixed() { # $1=literal $2…=files → 0 if a code line of those files contains the literal (same here-string reason as _has_def)
+  local lit="$1"; shift
+  grep -qF -- "$lit" <<<"$(codelines "$@" | cut -f3)"
 }
 
 _defpat() { # $1=symbol name → grep -E pattern
@@ -487,6 +508,11 @@ check_stamp() {
     [ -n "$stamp" ] && { case "$stamp" in *pkgs=*) ok "the stamp carries pkgs=";; *) warn "the stamp has no pkgs=" "the version-drift check gets nothing to compare against";; esac; }
   else
     [ -n "$base" ] && ok "verification baseline present" || warn "verification baseline (orangekit-guide-baseline) missing" "for a pre-built guide the baseline is the only basis for judging staleness"
+    # An installed copy (assembly.json beside it) always carries a stamp: the installer writes `assembled`, the generator
+    # `generated`. A hub copied by hand had neither, and guide-freshness could not read its packages (consumer run)
+    if [ -f "$G/assembly.json" ] && [ -z "$stamp" ]; then
+      bad "installed guide has no orangekit-guide stamp" "write the generation stamp (Step 7) — drift checks cannot read this guide"
+    fi
   fi
 
   local decl; decl="$stamp$base"
@@ -576,7 +602,21 @@ check_pack_iface() {
     > "$TMP/req.tsv"
 
   local n; n=$(num "$(grep -c . "$TMP/req.tsv" | tr -d ' ')")
-  [ "$n" -eq 0 ] && { warn "could not read requires entries from the pack ledger" "format: | \`symbol\` | kind | shape | reason |"; return; }
+  if [ "$n" -eq 0 ]; then
+    # A pack can declare 0 requires on purpose (the fastify pack since 3.35.0: the wire contract and auth variants own the HTTP layer).
+    # An empty table under its header, or an explicit "None." / "Empty" / "there are 0", is an answer, not a parse failure
+    # Only an explicit answer counts: "None." / "Empty" / "there are 0", or a table header whose body has NO data rows.
+    # A header followed by rows this parser could not read is a format error and must still warn (it used to read as 0)
+    if awk '/^## requires/{f=1;next} /^## /{f=0} f' "$led" \
+       | awk 'BEGIN{IGNORECASE=1} tolower($0) ~ /^none([^a-z]|$)|^\*\*empty|there are 0/ {say=1}
+              /^\|/ { if (tolower($0) ~ /^\|[[:space:]]*symbol[[:space:]]*\|/) hdr=1; else if ($0 !~ /^\|[[:space:]:|-]+$/) rows=1 }
+              END { exit !(say || (hdr && !rows)) }'; then
+      ok "the pack declares 0 requires — nothing for the combination to satisfy"
+    else
+      warn "could not read requires entries from the pack ledger" "format: | \`symbol\` | kind | shape | reason |"
+    fi
+    return
+  fi
 
   local sym kind miss=0 skipped=0
   while IFS=$'\t' read -r sym kind; do
@@ -648,12 +688,12 @@ $f"
     [ -z "$targets" ] && { rev "policy '$id' has 0 target files" "scope=$scope except=$except — check the scope"; continue; }
 
     # shellcheck disable=SC2086
-    hits=$(codelines $targets | cut -f3 | grep -cE "$rx" 2>/dev/null || true)
+    hits=$(codelines $targets | _policy_fence_filter "$except" | cut -f3 | grep -cE "$rx" 2>/dev/null || true)
     hits=$(num "$hits")
     if [ "$verdict" = "forbid" ]; then
       if [ "$hits" -gt 0 ]; then
         # shellcheck disable=SC2086
-        bad "policy violation '$id' — ${hits} forbidden pattern hits" "$(codelines $targets | grep -E "$rx" | head -2 | awk -F'\t' '{printf "%s:%s ", substr($1,match($1,/[^\/]*$/)), $2}')"
+        bad "policy violation '$id' — ${hits} forbidden pattern hits" "$(codelines $targets | _policy_fence_filter "$except" | grep -E "$rx" | head -2 | awk -F'\t' '{printf "%s:%s ", substr($1,match($1,/[^\/]*$/)), $2}')"
         viol=$((viol+1))
       else pass=$((pass+1)); fi
     else
@@ -687,6 +727,40 @@ _parse_policies() {
         # An 8-column table (with the new counterexample column) has NF>=10. A 7-column table yields an empty counterexample.
         cx = (NF>=10) ? $8 : ""
         if ($2!="") print $2"\t"$3"\t"$4"\t"$5"\t"$6"\t"ex"\t"has"\t"cx }' > "$2"
+}
+
+# Drops code lines from fences whose declared code file is exempt. The exemption column holds two kinds of entry:
+#   `testing.md`                                       a whole guide file (matched by _policy_targets, as before)
+#   `src/test/*` · `*.test.ts` · `global-setup.ts`     a code file, matched against the fence's declared path (5th column)
+# Why both: a policy's description names its exceptions as code files ("where a test injects the DB: src/test/env.ts"), but
+# the md-only column could exempt only the whole testing.md. A seam or hub fence for the same code file then FAILed, and the
+# generator rewrote correct test code to satisfy the gate (field report, 1.4.2). `*` stays within one path segment; a bare
+# name also matches under any directory (`global-setup.ts` ↔ `src/test/global-setup.ts`). A fence that declares no file is
+# never exempt.
+# The patterns reach awk as **one comma-joined line**: BSD awk (macOS) rejects a -v value that holds a newline ("newline in
+# string"), and a first version joined them with newlines — awk printed nothing, every hit vanished, and the policy passed
+# everything (fail-open, caught on macOS only). If awk still refuses the value, nothing is exempted — fail closed.
+_policy_fence_filter() { # stdin=codelines rows · $1=exemption column
+  local pats="" e rest="${1:-}"
+  # Split on commas by parameter expansion — `for e in $(…)` would glob `src/test/*` against the current directory
+  while [ -n "$rest" ]; do
+    e=${rest%%,*}
+    if [ "$e" = "$rest" ]; then rest=""; else rest=${rest#*,}; fi
+    e=$(printf '%s' "$e" | tr -d ' ')
+    case "$e" in ""|"—"|"-"|*.md) continue ;; esac
+    pats="${pats:+$pats,}$e"
+  done
+  if [ -z "$pats" ]; then cat; return 0; fi
+  awk -v pats="$pats" 'BEGIN { exit 0 }' </dev/null >/dev/null 2>&1 || { cat; return 0; }
+  awk -F'\t' -v pats="$pats" '
+    BEGIN { n = split(pats, P, ",") }
+    function glob2re(g,   r) { r = g; gsub(/[.+^$(){}|\[\]\\]/, "\\\\&", r); gsub(/\*/, "[^/]*", r); gsub(/\?/, ".", r); return r }
+    {
+      d = $NF; skip = 0   # last column, not $5: a tab inside a code line shifts the middle columns
+      if (d != "") for (i = 1; i <= n; i++) { re = glob2re(P[i]); if (d ~ ("^" re "$") || d ~ ("/" re "$")) { skip = 1; break } }
+      if (!skip) print
+    }'
+  return 0
 }
 
 # The target file list of one policy. If packfiles is empty, scope=seam ends up with 0 targets.
@@ -765,7 +839,7 @@ check_policy_proof() {
       targets=$(_policy_targets "$G" "$scope" "$except" "$packfiles")
       if [ -z "$targets" ]; then skip=$((skip+1)); pass=$((pass+1)); continue; fi
       # shellcheck disable=SC2086
-      if codelines $targets | cut -f3 | grep -qF -- "$ex" 2>/dev/null; then
+      if _code_has_fixed "$ex" $targets 2>/dev/null; then
         bad "policy '$id' — the proof example really exists in the body" "an example of the forbidden pattern is on a code line = it violates its own policy"
         viol=$((viol+1)); continue
       fi
@@ -1573,12 +1647,12 @@ check_pack_policies() {
       continue
     fi
     # shellcheck disable=SC2086
-    hits=$(num "$(codelines $targets | cut -f3 | grep -cE "$rx" 2>/dev/null || true)")
+    hits=$(num "$(codelines $targets | _policy_fence_filter "$except" | cut -f3 | grep -cE "$rx" 2>/dev/null || true)")
     if [ "$verdict" = "forbid" ]; then
       if [ "$hits" -gt 0 ]; then
         # shellcheck disable=SC2086
         bad "the pack violates its own policy '$id' — ${hits} forbidden pattern hits" \
-            "$(codelines $targets | grep -E "$rx" | head -2 | awk -F'\t' '{printf "%s:%s ", substr($1,match($1,/[^\/]*$/)), $2}')"
+            "$(codelines $targets | _policy_fence_filter "$except" | grep -E "$rx" | head -2 | awk -F'\t' '{printf "%s:%s ", substr($1,match($1,/[^\/]*$/)), $2}')"
         viol=$((viol+1))
       else pass=$((pass+1)); fi
     else
@@ -1941,12 +2015,12 @@ _resolve() {
 # Keeps only the rows of the contract that are cross-check material: list items and table rows. Backticks in prose
 # and block quotes (>) are description, not contract values — counting them turns a sentence like "the measurement showed
 # the backend used `/notes`" into a contract requirement (14 misreadings confirmed during development).
-# The '> surface: frontend|backend' declaration at the head of a section is read and tags that section's rows.
+# The '> surface: frontend|backend|app' declaration at the head of a section is read and tags that section's rows.
 # With no declaration it is both — existing contracts keep working.
 contract_rows_tagged() {
   awk '
     /^## /            { sfc="both" }
-    /^>[[:space:]]*surface:[[:space:]]*(frontend|backend|both)[[:space:]]*$/ {
+    /^>[[:space:]]*surface:[[:space:]]*(frontend|backend|app|both)[[:space:]]*$/ {
                         sub(/^>[[:space:]]*surface:[[:space:]]*/,""); gsub(/[[:space:]]/,"");
                         sfc=$0; next }
     # A bullet must have **whitespace after it** — if `**bold**` prose is read as a list,
@@ -1965,12 +2039,31 @@ contract_rows() { grep -E '^[[:space:]]*([-*][[:space:]]|\|)' "$1" | grep -vE '^
 run_pair() {
   printf "\n${C_D}guide-gate --pair${C_0}  contract: %s\n" "$CONTRACT"
   [ -f "$CONTRACT" ] || { printf "contract file missing: %s\n" "$CONTRACT" >&2; exit 2; }
-  [ -d "$FE" ] && [ -d "$BE" ] || { printf "guide directory missing (--frontend/--backend)\n" >&2; exit 2; }
+  # A bridge contract (web ↔ native shell) pairs the frontend with the app, the HTTP contract pairs it with the backend.
+  # Checked against the backend, every bridge token reads as missing (measured: "7 contract tokens are absent from backend").
+  local S2="backend" D2="$BE"
+  if grep -q '<!-- orangekit-bridge-contract' "$CONTRACT"; then
+    [ -z "$BE" ] || { printf -- "a bridge contract pairs --frontend with --app, not --backend\n" >&2; exit 2; }
+    S2="app"; D2="$APP"
+  elif [ -n "$APP" ]; then
+    printf -- "--app pairs only with a bridge contract (assets/bridge-contract.template.md)\n" >&2; exit 2
+  fi
+  [ -d "$FE" ] && [ -d "$D2" ] || { printf "guide directory missing (--frontend/--%s)\n" "$S2" >&2; exit 2; }
+
+  if [ "$S2" = "app" ]; then
+    sec "bridge contract filled in"
+    # A placeholder's < follows a space, a cell edge or a colon — a type like Promise<void> is not one
+    local ph; ph=$(num "$(contract_rows "$CONTRACT" | grep -cE '(^|[^A-Za-z0-9_])<[^>]+>')")
+    [ "$ph" -gt 0 ] && bad "${ph} bridge contract rows still hold a <placeholder>" "fill §4 routes and §5 screens with this project's values" \
+      || ok "no placeholder left in the bridge contract rows"
+  fi
 
   # Domain vocabulary: if §0 of the contract is empty, the two guides end up describing different resources.
   # In the measurement both pre-built pairs had frontend /tasks ↔ backend /notes.
-  sec "domain vocabulary"
-  if grep -q '^## 0\. Domain vocabulary' "$CONTRACT"; then
+  # The bridge has no HTTP resources — its route names are compared as tokens below.
+  [ "$S2" = "backend" ] && sec "domain vocabulary"
+  if [ "$S2" = "app" ]; then :
+  elif grep -q '^## 0\. Domain vocabulary' "$CONTRACT"; then
     local vocab; vocab=$(awk '/^## 0\. Domain vocabulary/{f=1;next} /^## /{f=0} f' "$CONTRACT" \
       | grep -E '^[[:space:]]*[-*][[:space:]]' \
       | grep -oE '`[A-Za-z_/][A-Za-z0-9_/-]*`' | tr -d '`' | sort -u)
@@ -2003,9 +2096,9 @@ run_pair() {
         | grep -oE '(^|[^0-9A-Za-z_])[1-5][0-9][0-9]([^0-9A-Za-z_]|$)' | grep -oE '[0-9]{3}'
     } | grep -vE "$NOISE" | sort -u
   }
-  _tok '^(both|frontend|backend)$' > "$TMP/tokens.txt"
+  _tok "^(both|frontend|$S2)\$" > "$TMP/tokens.txt"
   _tok '^(both|frontend)$' > "$TMP/tok_fe.txt"
-  _tok '^(both|backend)$'  > "$TMP/tok_be.txt"
+  _tok "^(both|$S2)\$"     > "$TMP/tok_be.txt"
 
   local ntok; ntok=$(num "$(wc -l < "$TMP/tokens.txt")")
   if [ "$ntok" -lt 5 ]; then
@@ -2021,11 +2114,13 @@ run_pair() {
   done < "$TMP/tok_fe.txt"
   while read -r t; do
     [ -z "$t" ] && continue
-    grep -rqw "$t" $(guide_files "$BE") 2>/dev/null || { mb="$mb $t"; nb=$((nb+1)); }
+    grep -rqw "$t" $(guide_files "$D2") 2>/dev/null || { mb="$mb $t"; nb=$((nb+1)); }
   done < "$TMP/tok_be.txt"
 
   [ "$nf" -gt 0 ] && bad "${nf} contract tokens are absent from frontend:$mf" "the frontend does not handle this part of the contract" || ok "every frontend contract token appears"
-  [ "$nb" -gt 0 ] && bad "${nb} contract tokens are absent from backend:$mb"  "the backend does not emit this part of the contract" || ok "every backend contract token appears"
+  [ "$nb" -gt 0 ] && bad "${nb} contract tokens are absent from $S2:$mb"  "the $S2 does not handle this part of the contract" || ok "every $S2 contract token appears"
+
+  [ "$S2" = "app" ] && { check_bridge_shapes; return 0; }   # pagination and endpoints are HTTP-only
 
   sec "pagination model exclusivity"
   local model
@@ -2061,6 +2156,137 @@ run_pair() {
     || rev "${miss} frontend call paths not found in the backend:$missing" "normal for an illustrative fictional path, but if it is the real contract one side is missing"
 }
 
+# Payload shape (bridge only): the token check passes when both sides name `auth.token` but one sends { accessToken, expiresAt }
+# and the other reads { token }. For each §2 message row, the keys each guide's code uses for that message must equal the
+# row's `payload` keys (`none` = no payload at all — BEFORE's measured bug was `payload: {}` against an omitted payload).
+# A guide "uses" a message through (a) an object literal or TS type with `type: 'x'` on one line — its `payload: { … }` top-level
+# keys, or no payload when the object closes without one — and (b) `.payload.k` reads and `{ k } = ….payload` inside a
+# `case 'x':` / `=== 'x'` block (ended by the next line at the same or lower indent). Fences only, via codelines (comments
+# and ❌ spans excluded). Anything else — a multi-line literal, `payload: p`, a spread — is not guessed: a message with no
+# readable usage is REVIEW, never FAIL. A key missing on reads alone is REVIEW too (a receiver may ignore a key).
+check_bridge_shapes() {
+  sec "bridge payload shape"
+  awk -F'|' '
+    /^## / { insec = ($0 ~ /^## [0-9]+\.[[:space:]]*Messages/); pc=0; next }
+    !insec || $0 !~ /^[[:space:]]*\|/ { next }
+    { sub(/\r$/,"") }
+    !pc { for (i=2; i<=NF; i++) if ($i ~ /payload/) pc=i; if (!pc) insec=0; next }
+    $0 ~ /^[[:space:]|:-]+$/ { next }
+    !match($2, /`[^`]+`/) { next }
+    { t=substr($2,RSTART+1,RLENGTH-2); p=$pc; k=""
+      if (p ~ /^[[:space:]]*none[[:space:]]*$/) { print t "\tnone\t"; next }
+      while (match(p, /`[^`]+`/)) { k = k " " substr(p,RSTART+1,RLENGTH-2); p=substr(p,RSTART+RLENGTH) }
+      print t "\t" (k=="" ? "unparsed" : "keys") "\t" substr(k,2) }
+  ' "$CONTRACT" > "$TMP/shape.txt"
+
+  local nmsg; nmsg=$(num "$(awk -F'\t' '$2!="unparsed"' "$TMP/shape.txt" | wc -l)")
+  if [ "$nmsg" -eq 0 ]; then
+    rev "no §2 Messages table with a payload column was found" "write each payload key in its own backticks, or none (assets/bridge-contract.template.md §2)"
+    return 0
+  fi
+  local odd; odd=$(awk -F'\t' '$2=="unparsed"{printf " %s",$1}' "$TMP/shape.txt")
+  [ -n "$odd" ] && rev "the payload cell of these messages names no key in backticks:$odd" "write each key in its own backticks, or none — the shape check skips them"
+
+  local side dir out f r
+  for side in frontend app; do
+    [ "$side" = frontend ] && dir="$FE" || dir="$APP"
+    # shellcheck disable=SC2046
+    out=$(codelines $(guide_files "$dir") | awk -F'\t' -v SHAPES="$TMP/shape.txt" '
+      BEGIN { while ((getline l < SHAPES) > 0) { split(l, a, "\t"); if (a[2]!="unparsed") { kind[a[1]]=a[2]; want[a[1]]=a[3] } } }
+      function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+      # s at i is an opening {; fills SEG[1..NSEG] with its top-level members, returns the index of its closing } (0 = not on this line)
+      function scan(s, i,   d, ch, q, seg) {
+        NSEG=0; d=0; q=""; seg=""
+        for (; i<=length(s); i++) {
+          ch=substr(s,i,1)
+          if (q!="") { seg=seg ch; if (ch=="\\") { i++; seg=seg substr(s,i,1) } else if (ch==q) q=""; continue }
+          if (ch=="\"" || ch=="\x27" || ch=="`") { q=ch; seg=seg ch; continue }
+          if (ch ~ /[[({]/) { d++; if (d==1) continue }
+          else if (ch ~ /[])}]/) { d--; if (d==0) { SEG[++NSEG]=seg; return i } }
+          if (d==1 && (ch=="," || ch==";")) { SEG[++NSEG]=seg; seg=""; continue }
+          seg=seg ch
+        }
+        return 0
+      }
+      function keyof(s) { s=trim(s); if (s=="") return ""
+        if (match(s, /^["\x27]?[A-Za-z_$][A-Za-z0-9_$]*["\x27]?\??[[:space:]]*(:|$)/)) {
+          s=substr(s,1,RLENGTH); gsub(/["\x27?:[:space:]]/, "", s); return s }
+        return "?" }
+      # the object literal / type around a `type: x` at position p of s
+      function literal(t, s, p,   j, d, ch, e, n, i, pl, k, keys, bad) {
+        d=0
+        for (j=p-1; j>=1; j--) { ch=substr(s,j,1)
+          if (ch ~ /[])}]/) d++
+          else if (ch ~ /[[({]/) { if (d==0) break; d-- } }
+        if (j<1 || substr(s,j,1)!="{") { unp[t]++; return }
+        if (!scan(s, j)) { unp[t]++; return }
+        pl=""; for (i=1; i<=NSEG; i++) if (keyof(SEG[i])=="payload") pl=SEG[i]
+        if (pl=="") { decl[t]++; return }
+        sub(/^[^:]*:[[:space:]]*/, "", pl); pl=trim(pl)
+        if (substr(pl,1,1)!="{" || scan(pl, 1)!=length(pl)) { unp[t]++; return }
+        n=NSEG; keys=""; bad=0
+        for (i=1; i<=n; i++) { k=keyof(SEG[i]); if (k=="?") bad=1; else if (k!="") keys=keys " " k }
+        if (bad) { unp[t]++; return }
+        decl[t]++; haspl[t]=1; addkeys(t, keys, DK)
+      }
+      function addkeys(t, keys, A,   m, x, i) { m=split(keys, x, " "); for (i=1; i<=m; i++) A[t SUBSEP x[i]]=1 }
+      {
+        s=$3; sub(/\r$/, "", s)
+        if ($4!=fid) { fid=$4; cur="" }
+        ind=match(s, /[^[:space:]]/) ? RSTART : 0
+        if (cur!="" && ind && ind<=cind) cur=""
+        # block starts: one known type per line, else ambiguous
+        r=s; hit=""; nh=0
+        while (match(r, /(case|===)[[:space:]]*["\x27][^"\x27]+["\x27]/)) {
+          x=substr(r,RSTART,RLENGTH); r=substr(r,RSTART+RLENGTH)
+          sub(/^(case|===)[[:space:]]*["\x27]/, "", x); sub(/["\x27]$/, "", x)
+          if (x in kind && x!=hit) { hit=x; nh++ } }
+        if (nh==1) { cur=hit; cind=ind } else if (nh>1) cur=""
+        if (cur!="") {
+          r=s; while (match(r, /payload\??\.[A-Za-z_$][A-Za-z0-9_$]*/)) {
+            x=substr(r,RSTART,RLENGTH); r=substr(r,RSTART+RLENGTH); sub(/^payload\??\./, "", x); RK[cur SUBSEP x]=1; nread[cur]++ }
+          if (match(s, /\{[^{}]*\}[[:space:]]*=[[:space:]]*[A-Za-z_$.?]*payload[[:space:]]*;?[[:space:]]*$/)) {
+            x=substr(s,RSTART+1); sub(/\}.*/, "", x); gsub(/:[^,]*/, "", x); gsub(/[[:space:]]/, "", x); gsub(/,/, " ", x)
+            addkeys(cur, x, RK); nread[cur]++ }
+        }
+        # literals / types: every `type: x` on the line
+        r=s; off=0
+        while (match(r, /["\x27]?type["\x27]?\??[[:space:]]*:[[:space:]]*["\x27`][^"\x27`]+["\x27`]/)) {
+          x=substr(r,RSTART,RLENGTH); p=off+RSTART; off+=RSTART+RLENGTH-1; r=substr(r,RSTART+RLENGTH)
+          sub(/^[^:]*:[[:space:]]*./, "", x); x=substr(x, 1, length(x)-1)
+          if (x in kind) literal(x, s, p) }
+      }
+      END {
+        for (t in kind) {
+          if (!decl[t] && !nread[t]) { rv = rv " `" t "`" (unp[t] ? " (not a one-line literal)" : ""); continue }
+          m=split(want[t], w, " "); delete W; for (i=1; i<=m; i++) W[w[i]]=1
+          ex=""; for (k in DK) { split(k, z, SUBSEP); if (z[1]==t && !(z[2] in W)) ex=ex " " z[2] }
+          for (k in RK) { split(k, z, SUBSEP); if (z[1]==t && !(z[2] in W) && !((t SUBSEP z[2]) in DK)) ex=ex " " z[2] }
+          mi=""; for (i=1; i<=m; i++) if (!((t SUBSEP w[i]) in DK) && !((t SUBSEP w[i]) in RK)) mi=mi " " w[i]
+          if (kind[t]=="none" && haspl[t] && ex=="") ex=" {}"
+          d=""
+          if (ex!="") d = d (kind[t]=="none" ? " sends a payload the contract says is none:" : " extra:") ex
+          if (mi!="" && decl[t]) d = d (d=="" ? "" : ";") " missing:" mi
+          if (d!="") fl = fl "\n`" t "`" d
+          else if (mi!="") rv = rv " `" t "` (reads only, never" mi ")"
+          else okn++
+        }
+        printf "OK\t%d\nFAIL\t%s\nREVIEW\t%s\n", okn, substr(fl,2), rv
+      }')
+    f=$(printf '%s\n' "$out" | awk '/^FAIL\t/{sub(/^FAIL\t/,""); p=1} /^REVIEW\t/{p=0} p' | sed '/^$/d')
+    r=$(printf '%s\n' "$out" | sed -n 's/^REVIEW	//p')
+    if [ -n "$f" ]; then
+      bad "$side payload keys differ from the bridge contract §2: $(printf '%s' "$f" | tr '\n' '|' | sed 's/|/ · /g')" \
+        "both sides must use exactly the payload keys of the §2 row (none = no payload key at all)"
+    else
+      ok "$side: $(printf '%s\n' "$out" | sed -n 's/^OK	//p') message payloads match the contract"
+    fi
+    [ -n "$r" ] && rev "$side: cannot tell which payload keys these messages use:$r" \
+      "write each message as a one-line literal or type — { type: 'x', payload: { a, b } } — so the gate can read it"
+  done
+  return 0
+}
+
 # ════════════════════════════════════════════════════════════════════
 # --self-test : proof of blocking ability (the positive-fixture pattern of doctor.sh)
 # ════════════════════════════════════════════════════════════════════
@@ -2088,6 +2314,7 @@ run_self_test() {
   _fx_assert "$fx/fence/sample-backend-guide"     1 "unclosed code fence"  --generated
   _fx_assert "$fx/section/sample-backend-guide"   1 "required section missing"        --generated
   _fx_assert "$fx/nostamp/sample-backend-guide"   1 "generation stamp missing"      --generated
+  _fx_assert "$fx/nostamp-installed/sample-backend-guide" 1 "installed guide has no orangekit-guide stamp"
   _fx_assert "$fx/leak/sample-backend-guide"      1 "cross-leak keyword"      --generated --forbid prisma
   _fx_assert "$fx/leakword/sample-backend-guide"  0 "an ordinary English word (cannot express) is not a leak" --generated --forbid express
   _fx_assert "$fx/leakcap/sample-backend-guide"   1 "the product spelling (Express) is still a leak" --generated --forbid express
@@ -2095,14 +2322,39 @@ run_self_test() {
   _fx_assert "$fx/clean/sample-backend-guide"     1 "ledger mismatch (consumer absent)" --generated --ledger "$fx/clean/ledger-bad.md"
   _fx_assert "$fx/clean/sample-backend-guide"     1 "symbol not entered in the ledger"      --generated --ledger "$fx/clean/ledger-short.md"
 
+  sec "code larger than the pipe buffer (SIGPIPE under pipefail)"
+  # A definition and a forbidden example on the FIRST code line of a ~270 KB resource: grep -q stops at once, and in the old
+  # `codelines | cut | grep -q` form the writer died of SIGPIPE (141) — the symbol read as undefined, the forbidden example as absent
+  local big="$TMP/big-resource.md" bi=0
+  { printf '# big\n\n```ts\nexport function makeThing(a: number) { return a }\n'
+    while [ $bi -lt 8000 ]; do printf 'export const filler_%05d = %d;\n' $bi $bi; bi=$((bi+1)); done
+    printf '```\n'; } > "$big"
+  if _has_def "$big" makeThing; then ok "a definition at the top of a 270 KB resource is found"
+  else bad "a definition at the top of a 270 KB resource reads as missing" "_has_def must not pipe codelines into grep -q (SIGPIPE 141 under pipefail)"; fi
+  if _code_has_fixed 'function makeThing(' "$big"; then ok "a forbidden example at the top of a 270 KB resource is found"
+  else bad "a forbidden example at the top of a 270 KB resource reads as absent" "the forbid proof check must not pipe codelines into grep -q"; fi
+
   # pack/seam boundary (v3.12.0) — pack assets are injected with --plugin-guides
   local PG="$fx/pg" A="$fx/clean/asm.json"
   cp "$fx/pg/backend/fxpack/policies.md" "$fx/pg/backend/fxpack/.keep-policies" 2>/dev/null || true
   _fx_assert "$fx/clean/sample-backend-guide" 0 "pack requires satisfied + generated excluded" --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-ok.md
   _fx_assert "$fx/clean/sample-backend-guide" 1 "pack requires unsatisfied"        --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger.md
+  # WARN does not change the exit code, so the verdict is read from the output
+  local _o
+  _o=$(bash "$0" --guide "$fx/clean/sample-backend-guide" --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-empty.md 2>&1)
+  if printf '%s' "$_o" | grep -q 'declares 0 requires' && ! printf '%s' "$_o" | grep -q 'could not read requires'; then ok "a pack that declares 0 requires is not reported as unreadable"
+  else bad "a pack that declares 0 requires is reported as unreadable" "the gate warned 'could not read requires entries' for an empty requires section"; fi
+  _o=$(bash "$0" --guide "$fx/clean/sample-backend-guide" --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-badrows.md 2>&1)
+  if printf '%s' "$_o" | grep -q 'could not read requires' && ! printf '%s' "$_o" | grep -q 'declares 0 requires'; then ok "a requires table with unreadable rows still warns (not read as 0 requires)"
+  else bad "unreadable requires rows were read as 'declares 0 requires'" "a format error would hide every requires check"; fi
+  _o=$(bash "$0" --guide "$fx/clean/sample-backend-guide" --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-noreq.md 2>&1)
+  if printf '%s' "$_o" | grep -q 'could not read requires'; then ok "a ledger with no requires section still warns (not silenced)"
+  else bad "a ledger with no requires section no longer warns" "the empty-requires allowance swallowed a missing section"; fi
   _fx_assert "$fx/clean/sample-backend-guide" 1 "pack policy violation (forbid)"     --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-ok.md --pack-policies-name policies-forbid.md
   _fx_assert "$fx/clean/sample-backend-guide" 1 "pack policy violation (require absent)" --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-ok.md --pack-policies-name policies-require-missing.md
   _fx_assert "$fx/clean/sample-backend-guide" 0 "the policy exception column actually takes effect"  --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-ok.md --pack-policies-name policies-excepted.md
+  _fx_assert "$fx/envok/sample-backend-guide"  0 "a seam fence that declares an exempt code file (src/test/*) passes the env policy" --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-ok.md --pack-policies-name policies-env.md
+  _fx_assert "$fx/envbad/sample-backend-guide" 1 "the same env read in an undeclared fence is still a violation" --generated --assembly "$A" --plugin-guides "$PG" --pack-ledger-name ledger-ok.md --pack-policies-name policies-env.md
 
   # ── standalone axis pack check (v3.13.0) ──
   # A pack could not be verified without a seam. --pack is that place, and it is the fan-in point of parallel authoring.
@@ -2185,6 +2437,39 @@ run_self_test() {
   # is split at spaces, the gate **reads 0 files and passes everything** (it does not FAIL, it goes blind)
   mkdir -p "$fx/pk/sp ace" && cp -R "$fx/pk/noimport" "$fx/pk/sp ace/" \
     && _fx_assert_pack "$fx/pk/sp ace/noimport/fxpack2" 1 "a defect is caught even with a space in the path (the file list is not split)"
+
+  sec "wire contract pairing (--pair)"
+  if _fx_build_bridge "$fx/br"; then
+    _fx_assert_pair 0 "an HTTP contract both sides follow (frontend ↔ backend, unchanged)" "every backend contract token appears" \
+      --contract "$fx/br/wire.md" --frontend "$fx/br/wfe" --backend "$fx/br/wbe"
+    _fx_assert_pair 1 "an HTTP contract the backend breaks still FAILs" "absent from backend: 404 NOT_FOUND" \
+      --contract "$fx/br/wire.md" --frontend "$fx/br/wfe" --backend "$fx/br/wbe-bad"
+    _fx_assert_pair 0 "a bridge both sides follow (frontend ↔ app)" "every app contract token appears" \
+      --contract "$fx/br/bridge.md" --frontend "$fx/br/fe" --app "$fx/br/app"
+    _fx_assert_pair 1 "the native allowlist holds web paths, not the route names the web sends" "absent from app" \
+      --contract "$fx/br/bridge.md" --frontend "$fx/br/fe" --app "$fx/br/app-bad"
+    _fx_assert_pair 1 "the bridge template shipped unfilled" "still hold a <placeholder>" \
+      --contract "$fx/br/unfilled.md" --frontend "$fx/br/fe" --app "$fx/br/app"
+    _fx_assert_pair 2 "a bridge contract checked against the backend" "not --backend" \
+      --contract "$fx/br/bridge.md" --frontend "$fx/br/fe" --backend "$fx/br/app"
+    _fx_assert_pair 2 "--app with an HTTP contract" "only with a bridge contract" \
+      --contract "$fx/br/http.md" --frontend "$fx/br/fe" --app "$fx/br/app"
+    _fx_assert_pair 0 "payload keys both sides use match §2" "app: 7 message payloads match" \
+      --contract "$fx/br/bridge.md" --frontend "$fx/br/sfe" --app "$fx/br/sapp"
+    _fx_assert_pair 1 "the app drops a §2 payload key (auth.token without expiresAt)" "missing: expiresAt" \
+      --contract "$fx/br/bridge.md" --frontend "$fx/br/sfe" --app "$fx/br/sapp-miss"
+    _fx_assert_pair 1 "the frontend reads a payload key §2 does not list" "extra: token" \
+      --contract "$fx/br/bridge.md" --frontend "$fx/br/sfe-extra" --app "$fx/br/sapp"
+    _fx_assert_pair 1 "a payload on a message §2 says is none" "contract says is none: reason" \
+      --contract "$fx/br/bridge.md" --frontend "$fx/br/sfe" --app "$fx/br/sapp-none"
+    _fx_assert_pair 0 "usage the gate cannot read is REVIEW, not FAIL" "cannot tell which payload keys" \
+      --contract "$fx/br/bridge.md" --frontend "$fx/br/fe" --app "$fx/br/app"
+    if bash "$0" --pair --contract "$fx/br/wire.md" --frontend "$fx/br/wfe" --backend "$fx/br/wbe" 2>&1 | grep -q 'payload shape'; then
+      bad "an HTTP --pair ran the bridge payload shape check"
+    else ok "an HTTP --pair has no payload shape check (unchanged)"; fi
+  else
+    bad "failed to build the --pair fixtures" "assets/bridge-contract.template.md is missing or its placeholders changed"
+  fi
 
   [ "$REGRESS" -eq 0 ] && { sec "regression corpus"; skip_note; }
 
@@ -3022,6 +3307,102 @@ FXP11
   return 0
 }
 
+# A blocked fixture must be blocked for the intended reason ($3), not for whatever FAIL comes first
+_fx_assert_pair() {
+  local want="$1" label="$2" why="$3"; shift 3
+  local out code=0
+  out=$(bash "$0" --pair "$@" 2>&1) || code=$?
+  if [ "$code" -eq "$want" ] && { [ -z "$why" ] || printf '%s' "$out" | grep -qF -- "$why"; }; then
+    ok "$label → exit $code"
+  else
+    bad "$label → exit $code (expected $want${why:+ for '$why'})" "$(printf '%s' "$out" | grep -E '✗|pass |bridge|--app' | head -3 | tr '\n' ';')"
+  fi
+}
+
+# Built from the shipped template, so the template and the gate cannot drift apart — if the marker or a surface tag
+# leaves the template, the harmless pair stops passing.
+_fx_build_bridge() {
+  local d="$1" tpl; tpl="$(dirname "$0")/../assets/bridge-contract.template.md"
+  [ -f "$tpl" ] || return 1
+  mkdir -p "$d/fe" "$d/app" "$d/app-bad" "$d/wfe" "$d/wbe" "$d/wbe-bad" || return 1
+  cp "$tpl" "$d/unfilled.md"
+  sed -e 's/^- Routes: <.*/- Routes: `camera` · `map`/' \
+      -e 's/^| <the native route group.*/| `(app)\/index` | `TrustedWebView` | `\/` |/' "$tpl" > "$d/bridge.md"
+  grep -q '^- Routes: `camera`' "$d/bridge.md" && grep -q '^| `(app)/index`' "$d/bridge.md" || return 1
+  grep -v 'orangekit-bridge-contract' "$d/bridge.md" > "$d/http.md"
+
+  cat > "$d/fe/SKILL.md" <<'FXBFE'
+# frontend fixture
+```ts
+const BRIDGE_VERSION = 1;
+type Msg = { type: string; version: number; payload?: unknown };
+post({ type: 'bridge.ready' }); post({ type: 'auth.refresh' }); post({ type: 'auth.signOut' });
+post({ type: 'nav.openNative', payload: { route: 'camera' } }); // or 'map'
+on('auth.token', (p) => save(p.accessToken, p.expiresAt));
+on('auth.cleared', endLocal); on('auth.unavailable', keepSession);
+```
+Served with `Content-Security-Policy: frame-src 'none'`.
+FXBFE
+  cat > "$d/app/SKILL.md" <<'FXBAPP'
+# app fixture
+```ts
+const BRIDGE_VERSION = 1;
+type Msg = { type: string; version: number; payload?: unknown };
+// receives bridge.ready · auth.refresh · auth.signOut · nav.openNative { route }
+// sends auth.token { accessToken, expiresAt } · auth.cleared · auth.unavailable
+const NATIVE_ROUTES = ['camera', 'map'];
+if (!isTrustedOrigin(url)) return;
+```
+`(app)/index` renders `TrustedWebView`.
+FXBAPP
+  sed -e "s#\['camera', 'map'\]#['/tasks', '/settings']#" "$d/app/SKILL.md" > "$d/app-bad/SKILL.md"
+
+  # Payload shapes against §2 of the template (auth.token: accessToken · expiresAt, nav.openNative: route, the rest none).
+  # The plain fe/app fixtures above use no readable literal, so they double as the "cannot tell → REVIEW" case.
+  local v
+  for v in sfe sapp sapp-miss sfe-extra sapp-none; do mkdir -p "$d/$v" || return 1; done
+  cat > "$d/shape.fence" <<'FXSHAPE'
+```ts
+type WebToNative = { type: 'bridge.ready' } | { type: 'auth.refresh' } | { type: 'auth.signOut' } | { type: 'nav.openNative'; payload: { route: string } };
+type NativeToWeb = { type: 'auth.token'; payload: { accessToken: string; expiresAt: number } } | { type: 'auth.cleared' } | { type: 'auth.unavailable' };
+function onNative(msg: NativeToWeb) {
+  switch (msg.type) {
+    case 'auth.token': {
+      const { accessToken, expiresAt } = msg.payload;
+      save(accessToken, expiresAt);
+      break;
+    }
+    case 'auth.cleared':
+      endLocal();
+  }
+}
+send({ type: 'auth.token', payload: { accessToken: t, expiresAt: exp * 1000 } });
+```
+FXSHAPE
+  cat "$d/fe/SKILL.md" "$d/shape.fence" > "$d/sfe/SKILL.md"
+  cat "$d/app/SKILL.md" "$d/shape.fence" > "$d/sapp/SKILL.md"
+  sed -e 's/accessToken: string; expiresAt: number/accessToken: string/' -e 's/, expiresAt: exp \* 1000//' \
+      -e 's/const { accessToken, expiresAt }/const { accessToken }/' "$d/sapp/SKILL.md" > "$d/sapp-miss/SKILL.md"
+  sed -e 's/save(accessToken, expiresAt);/save(accessToken, expiresAt, msg.payload.token);/' "$d/sfe/SKILL.md" > "$d/sfe-extra/SKILL.md"
+  sed -e "s/send({ type: 'auth.token'/send({ type: 'auth.cleared', payload: { reason: 'expired' } }); &/" "$d/sapp/SKILL.md" > "$d/sapp-none/SKILL.md"
+  ! cmp -s "$d/sapp/SKILL.md" "$d/sapp-miss/SKILL.md" && ! cmp -s "$d/sfe/SKILL.md" "$d/sfe-extra/SKILL.md" \
+    && ! cmp -s "$d/sapp/SKILL.md" "$d/sapp-none/SKILL.md" || return 1
+
+  # A plain HTTP contract (no bridge marker) keeps pairing frontend ↔ backend exactly as before
+  cat > "$d/wire.md" <<'FXWC'
+## 0. Domain vocabulary
+- Entity: `Task`
+## 1. Success response envelope
+- Shape: `data` · `nextCursor` — pagination model: cursor
+## 4. Error code ↔ status mapping
+| `VALIDATION_FAILED` | `422` |
+| `NOT_FOUND` | `404` |
+FXWC
+  printf '# fe\n```ts\ntype Task = {}; const { data, nextCursor } = res; // VALIDATION_FAILED 422 · NOT_FOUND 404\n```\n' > "$d/wfe/SKILL.md"
+  printf '# be\n```ts\ntype Task = {}; reply({ data, nextCursor }); // VALIDATION_FAILED 422 · NOT_FOUND 404\n```\n' > "$d/wbe/SKILL.md"
+  sed 's/ · NOT_FOUND 404//' "$d/wbe/SKILL.md" > "$d/wbe-bad/SKILL.md"
+}
+
 _fx_assert() {
   local dir="$1" want="$2" label="$3"; shift 3
   local out code=0
@@ -3198,6 +3579,18 @@ FXL3
   cp -R "$fx/clean/sample-backend-guide" "$fx/leakword/" && cp -R "$fx/clean/sample-backend-guide" "$fx/leakcap/"
   printf '\nThe type system cannot express this invariant, so the test pins it.\n' >> "$fx/leakword/sample-backend-guide/resources/f.md"
   printf '\nMiddleware order is the same as in Express.\n' >> "$fx/leakcap/sample-backend-guide/resources/f.md"
+  # The same hub as an installed copy (assembly.json beside it), checked without --generated — how a hand-built hub slipped through
+  mkdir -p "$fx/nostamp-installed" && cp -R "$fx/nostamp/sample-backend-guide" "$fx/nostamp-installed/" \
+    && printf '{}\n' > "$fx/nostamp-installed/sample-backend-guide/assembly.json"
+  # Env exemptions by declared code file (field report, 1.4.2): a seam's test-setup fence reads process.env exactly as the
+  # policy description allows, yet only whole md files could be exempted. Three shapes — a path comment, a `<!-- file: -->`
+  # marker, and the same read with no declared file (must still FAIL — the exemption may not leak to undeclared fences)
+  mkdir -p "$fx/envok" "$fx/envbad"
+  cp -R "$fx/clean/sample-backend-guide" "$fx/envok/" && cp -R "$fx/clean/sample-backend-guide" "$fx/envbad/"
+  printf '\n```ts\n// src/test/env.ts — injects the isolated DB before the app loads\nprocess.env.DATABASE_URL = TEST_URL\n```\n' >> "$fx/envok/sample-backend-guide/resources/b.md"
+  printf '\n<!-- file: src/test/global-setup.ts -->\n```ts\nconst url = process.env.TEST_DATABASE_URL\n```\n' >> "$fx/envok/sample-backend-guide/resources/c.md"
+  printf '\n```ts\n// src/test/tabbed.ts\nprocess.env.TABBED = 1\t// a tab on the matching line shifts the columns\n```\n' >> "$fx/envok/sample-backend-guide/resources/c.md"
+  printf '\n```ts\n// src/test/env.ts\nprocess.env.DATABASE_URL = TEST_URL\n```\n\n```ts\nconst url = process.env.DATABASE_URL\n```\n' >> "$fx/envbad/sample-backend-guide/resources/b.md"
 
   # ── pack/seam fixtures (the new surface that appeared in v3.12.0) ──
   # Shipping the axis pack and the seam separately creates two new classes of defect:
@@ -3224,6 +3617,24 @@ FXLED
 | `SomeGeneratedType` | generated | a tool artifact | to prove the check exclusion |
 FXLEDOK
 
+  # A pack that declares 0 requires on purpose (empty table, or an explicit "None."), and one with no requires section at all
+  cat > "$pk/ledger-empty.md" <<'FXLEDE'
+## requires — the seam must supply them
+None. The pack owns the whole layer.
+FXLEDE
+  cat > "$pk/ledger-badrows.md" <<'FXLEDB'
+## requires — the seam must supply them
+| symbol | kind | shape | reason |
+| --- | --- | --- | --- |
+| connect without backticks | project | fn | seam |
+FXLEDB
+  cat > "$pk/ledger-noreq.md" <<'FXLEDN'
+## provides
+| symbol | kind |
+| --- | --- |
+| `connect` | project |
+FXLEDN
+
   cat > "$pk/policies.md" <<'FXPOL'
 ## Machine checks
 | id | verdict | scope | regex | exception file | proof example | counterexample | description |
@@ -3245,6 +3656,14 @@ FXPOLV
 | `must-have-graphql` | require | guide | `from 'graphql'` | — | `import { gql } from 'graphql'` | for the block proof |
 FXPOLR
 
+  cat > "$pk/policies-env.md" <<'FXPOLENV'
+## Machine checks
+| id | verdict | scope | regex | exception file | proof example | counterexample | description |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `zod-present` | require | guide | `from 'zod'` | — | `import { z } from 'zod'` | `import { v } from 'valibot'` | keeps the base fixture valid |
+| `env-single-entry` | forbid | guide | `process\.env` | `testing.md, src/test/*` | `const url = process.env.DATABASE_URL` | `const { PORT } = process.env` | a code-file exemption covers only fences that declare that file |
+FXPOLENV
+
   cat > "$pk/policies-excepted.md" <<'FXPOLE'
 ## Machine checks
 | id | verdict | scope | regex | exception file | proof example | counterexample | description |
@@ -3258,7 +3677,7 @@ FXPOLE
 
 # ════════════════════════════════════════════════════════════════════
 MODE=""; GUIDE=""; LEDGER=""; FORBID=""; PM=""; GENERATED=0
-CONTRACT=""; FE=""; BE=""; ASSEMBLY=""; CLAIMS_OUT=""; PACK_LEDGER_NAME="ledger.md"; PACK_POLICIES_NAME="policies.md"
+CONTRACT=""; FE=""; BE=""; APP=""; ASSEMBLY=""; CLAIMS_OUT=""; PACK_LEDGER_NAME="ledger.md"; PACK_POLICIES_NAME="policies.md"
 REGRESS=0
 # Word splitting happens **only at newlines and tabs**. There are more than 20 places that expand a file list
 # (`$(guide_files …)` · `$FILES`) unquoted, and with the default IFS a space in the path (`My Projects` · a Windows user home)
@@ -3279,6 +3698,7 @@ while [ $# -gt 0 ]; do
     --contract)  CONTRACT="${2:-}"; shift 2 || exit 2 ;;
     --frontend)  FE="${2:-}"; shift 2 || exit 2 ;;
     --backend)   BE="${2:-}"; shift 2 || exit 2 ;;
+    --app)       APP="${2:-}"; shift 2 || exit 2 ;;
     --ledger)    LEDGER="${2:-}"; shift 2 || exit 2 ;;
     --forbid)    FORBID="${2:-}"; shift 2 || exit 2 ;;
     --pm)        PM="${2:-}"; shift 2 || exit 2 ;;
@@ -3288,7 +3708,7 @@ while [ $# -gt 0 ]; do
     --pack-ledger-name)   PACK_LEDGER_NAME="${2:-}"; shift 2 || exit 2 ;;   # --self-test only
     --pack-policies-name) PACK_POLICIES_NAME="${2:-}"; shift 2 || exit 2 ;; # --self-test only
     --generated) GENERATED=1; shift ;;
-    -h|--help)   sed -n '2,32p' "$0" | sed -E 's/^#[[:space:]]?//'; exit 0 ;;
+    -h|--help)   sed -n '2,33p' "$0" | sed -E 's/^#[[:space:]]?//'; exit 0 ;;
     *)           printf "unknown option: %s (see --help)\n" "$1" >&2; exit 2 ;;
   esac
 done

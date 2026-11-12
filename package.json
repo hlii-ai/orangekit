@@ -1,6 +1,6 @@
 {
   "name": "orangekit",
-  "version": "1.14.1",
+  "version": "1.15.0",
   "description": "OrangeKit Claude Code Devkit — AI Native Dev Harness Runtime Plugin",
   "author": "OrangeKit",
   "license": "MIT",
@@ -40,7 +40,7 @@
   "scripts": {
     "doctor": "bash scripts/doctor.sh",
     "doctor:all": "bash scripts/doctor.sh --all",
-    "test": "bash scripts/doctor.sh --default && bash scripts/doctor.sh --self-test && bash scripts/doctor.sh --consumer && bash skills/skill-enhancer/scripts/skill-lint.sh --self-test && bash skills/skill-enhancer/scripts/skill-lint.sh skills/*/ marketing/skills/*/ harness/skills/*/ && bash harness/skills/harness-evaluation/scripts/routing-eval.sh --self-test && bash skills/ui-ux-design/scripts/ui-probe.sh --self-test && python3 skills/figma-asset-extractor/scripts/figma_bundle.py --self-test",
+    "test": "bash scripts/doctor.sh --default && bash scripts/doctor.sh --self-test && bash scripts/doctor.sh --consumer && bash skills/skill-enhancer/scripts/skill-lint.sh --self-test && bash skills/skill-enhancer/scripts/skill-lint.sh skills/*/ marketing/skills/*/ harness/skills/*/ && bash harness/skills/harness-evaluation/scripts/routing-eval.sh --self-test && bash skills/orangekit-update/scripts/orangekit-update.sh --self-test && bash skills/orangekit-feedback/scripts/drafts.sh --self-test && bash skills/ui-ux-design/scripts/ui-probe.sh --self-test && python3 skills/figma-asset-extractor/scripts/figma_bundle.py --self-test",
     "test:render": "bash skills/ui-ux-design/scripts/ui-probe.sh --self-test"
   },
   "devDependencies": {

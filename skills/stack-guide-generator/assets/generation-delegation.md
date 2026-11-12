@@ -34,7 +34,7 @@ across everything, repair round trips) and its mitigations are all there.
 
 What to hand over: **the confirmed stack specification for every axis being generated** (versions included — for the app axis, `techStack.app` · `appShell` · the app preset notes) · the Step 2 combination dependency items
 (where the server code lives · the security boundary · whether there is a policy engine · the language) · **the full text of the Step 3-0 contract file**
-(for two or more guides, identical in all of them down to the wording) · **the package manager** (the preset's `packageManager`) ·
+(for two or more guides, identical in all of them down to the wording — for a hybrid RN shell, the bridge contract file too, to the frontend and app generators) · **the package manager** (the preset's `packageManager`) ·
 **the list of pinned packages and major versions** (this becomes `pkgs=` in the generation stamp — without it the later drift
 check has nothing to compare against) · absolute paths to the spec and the gate script · the output location ·
 the generation rules below · "return the final text as data (file list · line counts · slot mapping · empty slots · **the ledger**)".

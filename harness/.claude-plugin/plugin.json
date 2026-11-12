@@ -2,7 +2,7 @@
   "name": "orangekit-harness",
   "version": "1.3.0",
   "displayName": "OrangeKit Harness Dev Kit",
-  "description": "Harness authoring only — a full 8-axis evaluation of the graph engine. Installed only by the people who build this plugin",
+  "description": "Harness authoring only — a full 8-axis evaluation of the graph engine, and a proven-before-bump refresh of guide packs. Installed only by the people who build this plugin",
   "author": {
     "name": "OrangeKit"
   },

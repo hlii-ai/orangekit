@@ -6,10 +6,14 @@
 SHIM=${1:?plugin root}/bin
 pass=0 fail=0
 target() { (exec -a "node server.mjs" sleep 300) >/dev/null 2>&1 & echo $!; }
-alive() { kill -0 "$1" 2>/dev/null; }
+# A killed target is a zombie until its new parent reaps it, and kill -0 succeeds on a zombie. In a container PID 1 reaps
+# asynchronously, so checking right after the kill read "still alive" at random (flaky on Ubuntu 22.04: a different case
+# failed on each run). A zombie counts as dead, and a target expected dead gets up to 2s to go
+alive() { kill -0 "$1" 2>/dev/null || return 1; [ "$(awk '{print $3}' "/proc/$1/stat" 2>/dev/null)" = Z ] && return 1; return 0; }
 check() { # name, expect_after(1/0), expect_target_dead(1/0), out, rc, tpid
-  local ok=1
+  local ok=1 i=0
   case "$4" in *AFTER*) a=1 ;; *) a=0 ;; esac
+  if [ "$3" = 1 ]; then while alive "$6" && [ $i -lt 20 ]; do sleep 0.1; i=$((i+1)); done; fi
   alive "$6" && d=0 || d=1
   [ "$a" = "$2" ] && [ "$d" = "$3" ] || ok=0
   if [ $ok = 1 ]; then pass=$((pass+1)); echo "ok   $1 (rc=$5)"; else fail=$((fail+1)); echo "FAIL $1 (after=$a dead=$d rc=$5) :: $4"; fi

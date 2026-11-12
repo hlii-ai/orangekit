@@ -45,6 +45,11 @@ say() { [ "$QUIET" -eq 1 ] || printf "$@"; }
 [ -d "$SRC" ] || { printf 'FATAL: no plugin rules/: %s\n' "$SRC" >&2; exit 2; }
 
 version_of() { grep -m1 -oE 'orangekit-rule-version: [0-9]+\.[0-9]+\.[0-9]+' "$1" 2>/dev/null | awk '{print $2}' || true; }
+# Is version $1 newer than $2 (x.y.z, numeric per part)? An installed copy newer than the plugin's own is kept: it came from
+# a newer or forked plugin, and replacing it would downgrade the project (measured: /orangekit-update on a project a fork
+# set up would have turned backend/fastapi v3.36.0 guides back into v3.14.0). --force still replaces it.
+ver_gt() { awk -v a="$1" -v b="$2" 'BEGIN { split(a, x, "."); split(b, y, "."); for (i = 1; i <= 3; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 } exit 1 }'; }
+
 
 say 'T1 rule install\n  plugin:  %s\n  project: %s\n\n' "$SRC" "$DST"
 
@@ -72,6 +77,12 @@ for f in "$SRC"/*.md; do
   tv=$(version_of "$target"); tv="${tv:-0.0.0}"
   if [ "$sv" = "$tv" ] && [ "$FORCE" -eq 0 ]; then
     say '  = %-24s (v%s) same — skipped\n' "$base" "$tv"
+    skipped=$((skipped+1))
+    continue
+  fi
+
+  if [ "$FORCE" -eq 0 ] && ver_gt "$tv" "$sv"; then
+    say '  = %-24s v%s newer than the plugin (v%s) — kept\n' "$base" "$tv" "$sv"
     skipped=$((skipped+1))
     continue
   fi
@@ -110,6 +121,7 @@ if [ -d "$REFSRC" ]; then
     [ "$MISSING_ONLY" -eq 1 ] && continue
     rsv=$(version_of "$rf"); rsv="${rsv:-0.0.0}"
     rtv=$(version_of "$rt"); rtv="${rtv:-0.0.0}"
+    if [ "$FORCE" -eq 0 ] && ver_gt "$rtv" "$rsv"; then continue; fi   # newer than the plugin — kept
     if [ "$rsv" != "$rtv" ] || [ "$FORCE" -eq 1 ]; then
       if [ "$DRY" -eq 0 ]; then
         cmp -s "$rf" "$rt" || cp "$rt" "$rt.bak"

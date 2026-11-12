@@ -16,7 +16,9 @@ INPUT=$(cat 2>/dev/null || printf '{}')
 source "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/lib/common.sh"
 
 ORANGEKIT_HOOK_NAME="track-skill"
-ORANGEKIT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || printf '')}"
+# Through orangekit_slashes like every path from Claude Code — on Windows CLAUDE_PROJECT_DIR is C:\…, and a root left in that
+# form never prefixes a normalized C:/… file path (the knowledge gate then found no owner: fail-open)
+ORANGEKIT_ROOT=$(orangekit_slashes "${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || printf '')}")
 [ -z "$ORANGEKIT_ROOT" ] && exit 0
 
 # The heartbeat is **the first action** (the same placement as security-check.sh). Placed after the early exit below,

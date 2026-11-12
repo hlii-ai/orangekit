@@ -24,6 +24,9 @@
 
 set -uo pipefail   # no -e: every package is queried to the end so the whole report comes out
 
+# Windows shims (Python resolution, CRLF stripping) — canonical in scripts/lib/win-compat.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/win-compat.sh" 2>/dev/null || true
+
 FAIL=0; WARN=0; PASS=0; SKIP=0
 C_R=$'\033[31m'; C_G=$'\033[32m'; C_Y=$'\033[33m'; C_C=$'\033[36m'; C_D=$'\033[2m'; C_0=$'\033[0m'
 [ -t 1 ] || { C_R=""; C_G=""; C_Y=""; C_C=""; C_D=""; C_0=""; }

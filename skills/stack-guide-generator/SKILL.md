@@ -88,7 +88,7 @@ cat .orangekit/guide-job.json 2>/dev/null
 | `packs` | Paths of the assembled packs. That axis is an "axis that has a pack", so read the three files in Step 2 |
 | `app` | The app axis value (`presets.app`). If it is not `none`, `app-guide` is a target — if a pack exists, its path is carried in `packs.app` |
 | `auditRound` | How many audit rounds have been launched so far. **At 1, launch no more audits** ("Audit and repair budget") |
-| `notes` | The axis preset notes (serverCode · securityBoundary · policyEngine · language · appNotes) **＋ dimensions that are not axes** (deliveryModel · clientKind · pwa · appShell · nativeStack). The entire input for combination dependencies and conditional slot decisions |
+| `notes` | The axis preset notes (serverCode · securityBoundary · policyEngine · language · appNotes) **＋ dimensions that are not axes** (deliveryModel · clientKind · pwa · appShell · nativeStack · authKind). The entire input for combination dependencies and conditional slot decisions |
 
 | `need` item | Meaning | What to build |
 | --- | --- | --- |
@@ -268,8 +268,10 @@ if the counterpart already exists, read it and fill in the same form (skip only 
 **If the project has its own spec (`dev/docs/api/` etc.), copy from it instead of inventing** — there is a measured case where
 an invented contract created fields that did not exist and cost one more repair round.
 **app-guide receives the same contract file** — the app is a client calling the same API too. For a hybrid
-RN shell, add one more section to the contract file for **web ↔ native bridge messages** and paste it into both frontend-guide and
-app-guide (`--pair` compares only frontend and backend, so this section is checked by the Step 5 audit).
+RN shell, fill in **`assets/bridge-contract.template.md` as a second scratch file** — never as a section of the HTTP contract,
+or `--pair` demands the bridge tokens of the backend — and paste it verbatim into both frontend-guide and app-guide. Step 4 compares
+the two against it with `--pair --app`. Its token flow is the user's choice (the template says how to ask it).
+Measured: two runs that wrote the bridge as prose had every audit `high` on this boundary.
 
 ### Step 3-1: Generation delegation — three layers, parallel by coupling cluster
 

@@ -202,7 +202,7 @@ before adopting it, and rebuts wrong findings with grounds.
 
 ## 5. Skill catalogue — an index by situation
 
-**27 skills — no need to memorize them.** Claude invokes what fits the situation. This table is for "when you want to invoke one yourself".
+**29 skills — no need to memorize them.** Claude invokes what fits the situation. This table is for "when you want to invoke one yourself".
 
 ### Planning and design
 

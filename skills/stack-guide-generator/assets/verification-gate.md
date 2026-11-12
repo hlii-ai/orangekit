@@ -32,6 +32,9 @@ bash ${CLAUDE_SKILL_DIR}/scripts/guide-gate.sh --guide <guide path> --generated 
 # If you built both guides, contract coherence too — an audit that reads one side cannot catch this mismatch
 bash ${CLAUDE_SKILL_DIR}/scripts/guide-gate.sh --pair --contract <the Step 3-0 contract file> \
   --frontend <frontend path> --backend <backend path>
+# Hybrid RN shell: the bridge contract pairs the web screens with the app (a bridge contract given --backend exits 2)
+bash ${CLAUDE_SKILL_DIR}/scripts/guide-gate.sh --pair --contract <the Step 3-0 bridge contract file> \
+  --frontend <frontend path> --app <app path>
 ```
 
 **Leave `--assembly` out and the pack boundary check turns off entirely.** Give it the `assembly.json`

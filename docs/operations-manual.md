@@ -32,9 +32,9 @@ This repository is **the source of a Claude Code plugin**. It is not a consumer 
 | **Hooks** | `hooks/hooks.json` + `scripts/*.sh` | 5 | plugin | sourcing `common.sh` · per-event output format · fixtures · graph nodes |
 | **Rule cards** | `rules/*.md` | 9 T1 cards | plugin → consumer `.claude/rules/` | `paths:` reach · version stamp · line budget |
 | **Operating contract (T0)** | `templates/operating-contract.md` | a 42-line budget | plugin | injected every session, always — **the most expensive seat** |
-| **Skills** | `skills/*/SKILL.md` | 27 | plugin | description budget (12,000 bytes) · graph declaration |
+| **Skills** | `skills/*/SKILL.md` | 29 | plugin | description budget (12,000 bytes) · graph declaration |
 | **Agents** | `agents/*.md` | 2 | plugin | **does not inherit `.claude/rules/`** — norms go directly into the prompt |
-| **Graph** | `workflow.graph.json` | 50 nodes · 93 edges | plugin | the declaration of every asset. doctor `--graph` cross-checks it |
+| **Graph** | `workflow.graph.json` | 52 nodes · 97 edges | plugin | the declaration of every asset. doctor `--graph` cross-checks it |
 
 ### Load time is cost
 
@@ -43,7 +43,7 @@ This repository is **the source of a Claude Code plugin**. It is not a consumer 
 | **T0** operating contract | every session, always | the full amount every session — the 42-line budget comes from here |
 | **T1 always on** `workflow-routing.md` | every session, always | ditto — **it must not be given a `paths:`** (it turns conditional and is absent exactly when needed) |
 | **T1 conditional** the other 8 cards | when a path matches | only in that piece of work |
-| **skill descriptions** | always (the body on invocation) | the total across 27 is what is budgeted |
+| **skill descriptions** | always (the body on invocation) | the total across 29 is what is budgeted |
 
 > 🔑 **The key judgement** — where a new norm goes is decided by "when is it needed". Needed before a file is
 > opened → always on; needed when a particular file is touched → conditional. **Get it wrong and it does not
@@ -133,7 +133,7 @@ Do not hardcode the right answer for one case; keep only interventions that get 
 
 ### 2.4 Fixing a skill
 
-- **A description is a resident cost** — a budget of 27 totaling 12,000 bytes. Increase it and every session pays
+- **A description is a resident cost** — a budget of 29 totaling 12,000 bytes. Increase it and every session pays
 - The body is loaded only on invocation, so the detail goes in the body
 - A skill-only script goes in `skills/<skill>/scripts/` and is invoked with **`${CLAUDE_SKILL_DIR}`**.
   Home-made notation is not substituted and fails on the consumer side (doctor detects it)

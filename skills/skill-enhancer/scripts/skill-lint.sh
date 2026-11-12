@@ -32,7 +32,9 @@ sec()  { printf "\n${C_D}── %s ───────────────
 num() { local v; v=$(printf '%s' "${1:-}" | tr -d '[:space:]'); case "$v" in ''|*[!0-9]*) printf '0';; *) printf '%s' "$v";; esac; }
 
 # Character count — 1024 is a character limit, not a byte limit. Counting with wc -c would over-penalize non-ASCII text.
-chars() { printf '%s' "$1" | LC_ALL=en_US.UTF-8 wc -m | tr -d ' '; }
+# Locale-free: drop UTF-8 continuation bytes (0x80–0xBF) and count what is left — one byte per character. `wc -m` under a
+# named locale (en_US.UTF-8) silently counted bytes where that locale is not generated (minimal Linux, WSL: only C.UTF-8)
+chars() { printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' '; }
 
 lint_one() {
   local dir="${1%/}" sm fm name desc dlen body_lines base

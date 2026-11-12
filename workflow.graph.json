@@ -412,6 +412,14 @@
       "manual": true
     },
     {
+      "id": "orangekit-update",
+      "kind": "skill",
+      "path": "skills/orangekit-update/SKILL.md",
+      "when": "manual invocation — the session briefing points to it when T1 cards, stack cards or guides are behind the installed plugin",
+      "manual": true,
+      "note": "orchestrates install-rules.sh + install-guide.sh (it decides nothing they decide); v2 → orangekit-migrate · premise moved → stack-guide-generator"
+    },
+    {
       "id": "execution-dashboard",
       "kind": "skill",
       "path": "skills/execution-dashboard/SKILL.md",
@@ -424,6 +432,13 @@
       "path": "skills/fix-issue/SKILL.md",
       "when": "manual invocation only, by the user",
       "manual": true
+    },
+    {
+      "id": "orangekit-feedback",
+      "kind": "skill",
+      "path": "skills/orangekit-feedback/SKILL.md",
+      "when": "offered once per session when new orangekit hook errors exist (session-brief drafts the report); on yes, files an issue on the orangekit repository after a duplicate search and the user's confirmation of the full body",
+      "manual": false
     },
     {
       "id": "health-check",
@@ -815,6 +830,28 @@
     {
       "from": "session-start",
       "to": "orangekit-init"
+    },
+    {
+      "from": "session-start",
+      "to": "orangekit-feedback",
+      "cond": "new orangekit hook errors since the last session — the drafted report is offered once; yes → orangekit-feedback",
+      "instrumented": true,
+      "conditionalEmit": "only when a hook failed since the previous session — silent in a healthy session"
+    },
+    {
+      "from": "session-start",
+      "to": "orangekit-update",
+      "cond": "plugin-installed files behind the plugin (rule-card drift · missing cards · guide fixes) — the briefing points to /orangekit-update"
+    },
+    {
+      "from": "orangekit-update",
+      "to": "orangekit-migrate",
+      "cond": "a v2 harness is still installed — nothing is updated until it is migrated"
+    },
+    {
+      "from": "orangekit-update",
+      "to": "stack-guide-generator",
+      "cond": "a guide's stack premise moved — not updated; moved across when the project raises the dependency"
     },
     {
       "from": "build",

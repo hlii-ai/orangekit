@@ -32,6 +32,9 @@
 
 set -uo pipefail   # no -e: run every check to the end and emit the whole report
 
+# Windows shims (Python resolution, CRLF stripping) — canonical in <plugin>/scripts/lib/win-compat.sh
+_okc="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)/scripts/lib/win-compat.sh"; [ -f "$_okc" ] && . "$_okc"; unset _okc
+
 FAIL=0; WARN=0; PASS=0; SKIP=0
 C_R=$'\033[31m'; C_G=$'\033[32m'; C_Y=$'\033[33m'; C_C=$'\033[36m'; C_D=$'\033[2m'; C_0=$'\033[0m'
 [ -t 1 ] || { C_R=""; C_G=""; C_Y=""; C_C=""; C_D=""; C_0=""; }
@@ -814,16 +817,30 @@ export const b = derive(1, (x) => x)
 FXJSS
 
   local out code
+  # A check this host cannot run is SKIP, not FAIL (the three-state rule) — and not a vacuous ✓ either. Without node the
+  # syntax·type·vector stages skip themselves, so a "must be blocked" case exits 0 and a "must pass" case passes
+  # without having been checked; without pydantic the schema is never executed. Measured on a clean Debian/Ubuntu
+  # (no node) 10 FAILs, on macOS without pydantic 1 FAIL — all of them "not run", none of them a defect.
+  local have_node=0 have_pyd=0
+  command -v node >/dev/null 2>&1 && have_node=1
+  python3 -c 'import pydantic' >/dev/null 2>&1 && have_pyd=1
+  _needs() {  # $1 node|pydantic · $2 what is skipped → 0 run it · 1 skipped (reported)
+    case "$1" in node) [ "$have_node" -eq 1 ] && return 0 ;; pydantic) [ "$have_pyd" -eq 1 ] && return 0 ;; esac
+    skip "$2 — needs $1, not run" "install $1 and run again; what was not run is not reported as run"
+    return 1
+  }
   sec "positive fixtures (must be blocked)"
   out=$(bash "$0" --pack "$fx/broken" --no-vectors 2>&1); code=$?
   [ "$code" -eq 0 ] && ok "the extraction·stub stage lets a defect-free pack through → exit 0" || bad "the extraction stage failed for no reason → exit $code"
 
+  if _needs node "pre-repair safeReturnTo blocked by the vector trials"; then
   code=0; out=$(bash "$0" --pack "$fx/broken" 2>&1) || code=$?
   if [ "$code" -eq 1 ] && printf '%s' "$out" | grep -q 'failed to block'; then
     ok "pre-repair safeReturnTo → exit 1 ($(printf '%s' "$out" | grep -oE '[0-9]+/[0-9]+ vectors failed to block'))"
     printf '%s\n' "$out" | grep -E '^      .*A[0-9]' | head -3
   else
     bad "pre-repair safeReturnTo was not blocked → exit $code" "$(printf '%s' "$out" | grep -E '✓|✗|–' | tail -2 | tr '\n' ';')"
+  fi
   fi
 
   code=0; out=$(bash "$0" --pack "$fx/pathbad" --no-vectors 2>&1) || code=$?
@@ -834,6 +851,7 @@ FXJSS
     bad "it does not catch a path mismatch → exit $code" "$(printf '%s' "$out" | grep -E '✗|!' | head -2 | tr '\n' ';')"
   fi
 
+  if _needs pydantic "a default on a partial-update schema is caught"; then
   code=0; out=$(bash "$0" --pack "$fx/py-bad" --no-vectors 2>&1) || code=$?
   if [ "$code" -eq 1 ] && printf '%s' "$out" | grep -q 'a partial update fills in fields it never sent'; then
     ok "a default on a partial-update schema → exit 1 (for the intended reason)"
@@ -843,12 +861,16 @@ FXJSS
   else
     bad "exit 1 but for **a different reason**" "$(printf '%s' "$out" | grep '✗' | head -2 | tr '\n' ';')"
   fi
+  fi
 
   sec "harmless fixtures (must pass)"
+  if _needs pydantic "a correct Pydantic schema passes"; then
   code=0; out=$(bash "$0" --pack "$fx/py-ok" --no-vectors 2>&1) || code=$?
   [ "$code" -eq 0 ] && ok "every optional field defaulting to None → exit 0 (no false positive)" \
     || bad "it FAILs a correct Pydantic schema → exit $code" "$(printf '%s' "$out" | grep '✗' | head -2 | tr '\n' ';')"
+  fi
 
+  if _needs node "markup classification · generated tsconfig (checkJs · include)"; then
   code=0; out=$(bash "$0" --pack "$fx/js-markup" --no-vectors --keep --out "$fx/out-js" 2>&1) || code=$?
   if printf '%s' "$out" | grep -q 'a format this toolchain does not parse'; then
     ok "html·css whole-file claims → reported as unchecked rather than as syntax errors"
@@ -880,6 +902,7 @@ FXJSS
   else
     bad "checkJs was turned on in a TS pack" "config fragments (the vite.config.js family) newly become check targets and false positives result"
   fi
+  fi
 
   # ── decorator pack (measured on node-nest) ─────────────────────────
   # Two things are asserted. Not the verdict itself but **the premise of the verdict** — tsc is absent offline.
@@ -910,6 +933,7 @@ export class TasksService {
 ```
 FXDECO
 
+  if _needs node "decorator pack: experimentalDecorators · real-tree placement"; then
   code=0; out=$(bash "$0" --pack "$fx/deco" --no-vectors --keep --out "$fx/out-deco" 2>&1) || code=$?
   if [ -f "$fx/out-deco/tsconfig.json" ] && grep -q '"experimentalDecorators": true' "$fx/out-deco/tsconfig.json"; then
     ok "decorator pack → experimentalDecorators on (with it off, correct Nest code fails wholesale with TS1240)"
@@ -925,6 +949,7 @@ FXDECO
     ok "TS pack with no decorators → experimentalDecorators off (the detection is not always-on)"
   else
     bad "there are no decorators yet experimentalDecorators was turned on" "a detection that is unconditionally true separates nothing"
+  fi
   fi
 
 
@@ -961,15 +986,19 @@ export function msg(e: unknown): string {
 ```
 FXJSX
   code=0; out=$(bash "$0" --pack "$fx/jsx" --no-vectors --keep --out "$fx/out-jsx" 2>&1) || code=$?
+  if _needs node "a JSX whole file lands in the real tree"; then
   if [ -f "$fx/out-jsx/src/components/Badge.tsx" ]; then
     ok "a JSX whole file lands in the real tree (screens·components do not leak out of the typecheck)"
   else
     bad "the JSX whole file is not in the real tree" "it was restored but not placed in the typecheck target tree — even with tsc it is never checked"
   fi
+  fi
+  if _needs node "an extensionless import resolves to the shipped .tsx"; then   # without node .orphan.txt is never written — a ✓ was vacuous
   if grep -q 'Badge' "$fx/out-jsx/.orphan.txt" 2>/dev/null; then
     bad "an extensionless import misjudged a shipped .tsx as an orphan" "$(tr '\n' ';' < "$fx/out-jsx/.orphan.txt")"
   else
     ok "an extensionless import resolves to the .tsx the pack shipped (no orphan misjudgment)"
+  fi
   fi
   if grep -qE '^export declare const ApiError: \(new ' "$fx/out-jsx/src/api/http.ts" 2>/dev/null; then
     ok "the seam stub carries a construct signature (instanceof narrows unknown)"
@@ -1004,9 +1033,11 @@ FXJSX
     bad "the JSDoc type import was not reflected in the stub" "a JS pack does not pull types in with import { }"
   fi
 
+  if _needs node "post-repair safeReturnTo passes the vector trials"; then
   code=0; out=$(bash "$0" --pack "$fx/fixed" 2>&1) || code=$?
   if [ "$code" -eq 0 ]; then ok "post-repair safeReturnTo → exit 0 (no false positive)"
   else bad "the repaired shape was a false positive → exit $code" "$(printf '%s' "$out" | grep '✗' | head -2 | tr '\n' ';')"; fi
+  fi
 
   # Variants — when a vulnerable form exists in only one variant, a run over the base resources/ alone **never sees** that file
   mkdir -p "$fx/vfx/resources" "$fx/vfx/variants/auth/a1" "$fx/vfx/variants/auth/a2"
@@ -1015,11 +1046,13 @@ FXJSX
   printf '# Base\n' > "$fx/vfx/resources/base.md"
   cp "$fx/fixed/resources/routing.md" "$fx/vfx/variants/auth/a1/routing.md"
   cp "$fx/broken/resources/routing.md" "$fx/vfx/variants/auth/a2/routing.md"
+  if _needs node "variant combinations: vulnerable form caught · repaired form passes"; then
   code=0; out=$(bash "$0" --pack "$fx/vfx" 2>&1) || code=$?
   if [ "$code" -eq 1 ] && printf '%s' "$out" | grep -q 'combination \[auth=a2\] FAIL'; then ok "a vulnerable form in only one variant is caught by the combination run → exit 1"
   else bad "missed the vulnerable form in a variant → exit $code" "$(printf '%s' "$out" | grep -E '✗|combination' | head -3 | tr '\n' ';')"; fi
   if printf '%s' "$out" | grep -q 'combination \[auth=a1\] passed'; then ok "the repaired variant passes (verdict per combination)"
   else bad "the repaired variant combination did not pass"; fi
+  fi
 }
 
 # ════════════════════════════════════════════════════════════════════

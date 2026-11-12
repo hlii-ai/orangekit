@@ -20,6 +20,9 @@
 
 set -uo pipefail   # no -e: run every check to the end so the report is complete
 
+# Windows shims (Python resolution, CRLF stripping) — canonical in scripts/lib/win-compat.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/win-compat.sh" 2>/dev/null || true
+
 # There are two roots — merging them breaks the plugin structure checks inside a consumer project:
 #   PLUGIN_ROOT: plugin asset checks (fast/graph/self-test) — the script's own location is the truth
 #   PROJ:        project state checks (usage/lessons) — hook logs and lessons live on the consumer side
@@ -52,6 +55,16 @@ warn() { WARN=$((WARN+1)); printf "  ${C_Y}!${C_0} %s\n" "$1"; [ -n "${2:-}" ] &
 sec()  { printf "\n${C_D}── %s ─────────────────────────────${C_0}\n" "$1"; }
 
 num() { local v; v=$(printf '%s' "${1:-}" | tr -d '[:space:]'); case "$v" in ''|*[!0-9]*) printf '0';; *) printf '%s' "$v";; esac; }
+
+# `env -i` for the hook fixtures, keeping what a native Windows program needs to start. jq.exe launched with no SYSTEMROOT
+# returned nothing, every hook input read as empty, and the knowledge-gate fixtures all "passed" on windows-latest
+_envi() {
+  local keep=() v
+  for v in SYSTEMROOT WINDIR TEMP TMP COMSPEC PATHEXT; do
+    eval "[ -n \"\${$v:-}\" ] && keep+=(\"$v=\${$v}\")"
+  done
+  env -i ${keep[@]+"${keep[@]}"} "$@"
+}
 
 # The T0 budget is canonical **in this one place**. After the check rose to 42 the card body was left quoting "40 lines" —
 # the numbers a document quotes are compared against this constant by "declared ↔ real" (evaluation v6 · E-25).
@@ -316,6 +329,55 @@ run_fast() {
     bad "non-ASCII after \$name: $(grep -c . <<<"$ub") places" "$(head -3 <<<"$ub" | tr '\n' ' ')— unbound variable under bash 3.2 + UTF-8. Wrap it as \${name}"
   else
     ok "every variable expansion ends on ASCII (bash 3.2 safe)"
+  fi
+
+  # A hook that sets ORANGEKIT_ROOT itself must pass it through orangekit_slashes (or take it from orangekit_root): on Windows a
+  # C:\ root never prefixes the normalized C:/ file paths, and the knowledge gate then finds no owner (fail-open)
+  local rr; rr=$(grep -nE '^[[:space:]]*ORANGEKIT_ROOT=' scripts/*.sh 2>/dev/null | grep -v '^scripts/doctor.sh:' | grep -vE 'orangekit_slashes|orangekit_root' || true)
+  [ -z "$rr" ] && ok "every hook root goes through orangekit_slashes / orangekit_root (Windows C:\\ paths)" \
+    || bad "hook root not normalized: $(printf '%s' "$rr" | cut -d: -f1,2 | tr '\n' ' ')" "wrap it: ORANGEKIT_ROOT=\$(orangekit_slashes \"…\")"
+
+  # Windows shims live in scripts/lib/win-compat.sh. Every shipped script that calls jq or python3 must load it — directly,
+  # or through common.sh — or on Windows its values carry a \r (measured on windows-latest: doctor read every graph path
+  # as "missing"). The orangekit-harness plugin ships without scripts/, so its copies must equal the canonical block
+  local wr0 wr wrf="" wmiss="" f
+  wr0=$(awk '/resolve Python, strip CRLF/{f=1} f{print} f&&/^esac$/{exit}' scripts/lib/win-compat.sh 2>/dev/null)
+  while IFS= read -r f; do
+    # the canonical file, this checker, and profiles (sourced by pack-smoke, which loads the shims) are not callers
+    case "$f" in scripts/lib/win-compat.sh|scripts/doctor.sh|*/scripts/profiles/*) continue ;; esac
+    grep -qE '(^|[^a-z_-])(jq|python3)( |$)' "$f" 2>/dev/null || continue
+    if grep -qE 'win-compat\.sh|lib/common\.sh' "$f" 2>/dev/null; then
+      if grep -q 'a COPY of orangekit-product' "$f" 2>/dev/null; then
+        wr=$(awk '/resolve Python, strip CRLF/{f=1} f{print} f&&/^esac$/{exit}' "$f" 2>/dev/null)
+        [ "$wr" = "$wr0" ] || wrf="$wrf $f"
+      fi
+    else
+      wmiss="$wmiss $f"
+    fi
+  done < <({ git ls-files '*.sh' 2>/dev/null || find scripts skills harness marketing -name '*.sh' -type f 2>/dev/null; } | grep -v '/fixtures/')
+  [ -n "$wr0" ] || wrf=" scripts/lib/win-compat.sh(no block)"
+  if [ -z "$wrf$wmiss" ]; then ok "every jq/python3 script loads the Windows shims; harness copies match the canonical block"
+  else
+    [ -n "$wmiss" ] && bad "jq/python3 without the Windows shims:$wmiss" "source scripts/lib/win-compat.sh (or lib/common.sh) — on Windows every value ends in \\r"
+    [ -n "$wrf" ] && bad "Windows shim copies drifted:$wrf" "keep harness copies identical to scripts/lib/win-compat.sh"
+  fi
+
+  # CRLF line endings in a shipped text file — Git for Windows defaults to core.autocrlf=true, and a checkout made that
+  # way turns `fi` into `fi\r`: every hook dies with "command not found" and an agent's frontmatter stops parsing.
+  # Measured on a fork checked out on Windows and run on macOS: self-test 54 pass · 50 fail, security-check exit 2 on
+  # every call. .gitattributes pins eol=lf for checkouts; this proves no file slipped past it (an archive, a copy, an editor).
+  # Counted with tr, byte for byte: grep on Git Bash strips a trailing CR in text mode, so a grep-based guard saw no CRLF
+  # on Windows — the one platform where it matters (measured on windows-latest)
+  local crlf=""
+  while IFS= read -r f; do
+    [ "$(LC_ALL=C tr -dc '\r' < "$f" 2>/dev/null | wc -c | tr -d ' ')" -gt 0 ] && crlf="$crlf$f"$'\n'
+  done < <(find scripts hooks agents rules skills harness marketing templates presets schema references \
+             \( -name '*.sh' -o -name '*.md' -o -name '*.json' -o -name '*.jsonl' -o -name '*.py' -o -name '*.hbs' \) \
+             -type f 2>/dev/null || true)
+  if [ -n "$crlf" ]; then
+    bad "CRLF line endings: $(grep -c . <<<"$crlf") files" "$(head -3 <<<"$crlf" | tr '\n' ' ')— bash dies on the \\r. Convert to LF (git add --renormalize .)"
+  else
+    ok "every shipped script and document uses LF line endings"
   fi
 
   # git calls that do not verify HEAD — exit 128 in a repo with 0 commits (right after git init).
@@ -1774,6 +1836,11 @@ run_self_test() {
     "PreToolUse-bash-filter-branch.json:git history rewrite:git history rewrite / mirror push"
     "PreToolUse-bash-force-push-main.json:force push to a shared branch:force push to a shared branch"
     "PreToolUse-bash-force-push-plus.json:+refspec force push (bypass attempt):force push to a shared branch"
+    "PreToolUse-bash-force-push-upper.json:GIT push (case-insensitive filesystem runs it; the hook used to exit 1 and not block):force push to a shared branch"
+    # A command handed to a shell with -c runs as typed, but the gate read the target as `main"` and passed (exit 0)
+    "PreToolUse-bash-shc-force-push.json:bash -c payload (bypass attempt):force push to a shared branch"
+    "PreToolUse-bash-shc-single-quoted.json:sh -c single-quoted payload after cd (bypass attempt):force push to a shared branch"
+    "PreToolUse-bash-shc-zsh-lc-plus.json:/bin/zsh -lc +refspec payload (bypass attempt):force push to a shared branch"
     "PreToolUse-bash-push-delete-main.json:remote deletion of a shared branch:remote deletion of a shared branch"
     "PreToolUse-secret-github-pat.json:GitHub PAT:hardcoded GitHub Personal Access Token"
     "PreToolUse-secret-github-oauth.json:GitHub OAuth token:hardcoded GitHub token"
@@ -1896,7 +1963,7 @@ run_self_test() {
       sdcode=0
       # Look at stderr too — even when the verdict is right, if the ERR trap rang the hook tripped midway
       sderr=$(jq -nc --arg c "$sdcmd" '{tool_name:"Bash",tool_input:{command:$c}}' \
-        | env -i PATH="$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$sddir" ORANGEKIT_STATE_DIR="$sddir/.state" \
+        | _envi PATH="$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$sddir" ORANGEKIT_STATE_DIR="$sddir/.state" \
             ${sdenv:+DATABASE_URL="$sdenv"} bash "$ROOT/scripts/security-check.sh" 2>&1 >/dev/null) || sdcode=$?
       if [ "$sdcode" = "$sdwant" ] && ! printf '%s' "$sderr" | grep -q 'ERROR line'; then
         sdok=$((sdok+1))
@@ -1954,7 +2021,7 @@ STUB
       tdpath="$td/bin:$PATH"; [ "$3" = nostub ] && tdpath="$PATH"; [ "$3" = noenvurl ] && tdurl=""
       tdcode=0
       tderr=$(jq -nc --arg c "$4" '{tool_name:"Bash",tool_input:{command:$c}}' \
-        | env -i PATH="$tdpath" HOME="$HOME" CLAUDE_PROJECT_DIR="$td/proj" ORANGEKIT_STATE_DIR="$td/proj/.state" FAKE_PSQL_DIR="$td/tbl" ${tdurl:+DATABASE_URL="$tdurl"} \
+        | _envi PATH="$tdpath" HOME="$HOME" CLAUDE_PROJECT_DIR="$td/proj" ORANGEKIT_STATE_DIR="$td/proj/.state" FAKE_PSQL_DIR="$td/tbl" ${tdurl:+DATABASE_URL="$tdurl"} \
             bash "$ROOT/scripts/security-check.sh" 2>&1 >/dev/null) || tdcode=$?
       # Even when the verdict is right, an ERR trap that fired means the hook tripped midway, and a block must come for the **intended reason** (data destruction)
       if [ "$tdcode" = "$1" ] && ! printf '%s' "$tderr" | grep -q 'ERROR line' \
@@ -2081,7 +2148,7 @@ CASES
       [ -n "$skkind" ] || continue
       skcode=0
       skerr=$(jq -nc --arg c "$skc" '{tool_name:"Bash",tool_input:{command:$c}}' \
-        | env -i PATH="$sk/$skkind:$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$sk/proj" ORANGEKIT_STATE_DIR="$sk/proj/.state" \
+        | _envi PATH="$sk/$skkind:$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$sk/proj" ORANGEKIT_STATE_DIR="$sk/proj/.state" \
             bash "$ROOT/scripts/security-check.sh" 2>&1 >/dev/null) || skcode=$?
       if [ "$skcode" = "$skw" ] && ! printf '%s' "$skerr" | grep -q 'ERROR line' \
          && { [ "$skw" = 0 ] || printf '%s' "$skerr" | grep -q 'own shell'; }; then skok=$((skok+1))
@@ -2119,7 +2186,7 @@ SKCASES
     chmod +x "$psd/procps/pkill" "$psd/bsd/pkill"
     for ps_t in procps bsd; do
       : > "$psd/env-$ps_t"
-      printf '{"session_id":"s-a"}' | env -i PATH="$psd/$ps_t:$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$psd/proj" ORANGEKIT_STATE_DIR="$psd/proj/.state-$ps_t" \
+      printf '{"session_id":"s-a"}' | _envi PATH="$psd/$ps_t:$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$psd/proj" ORANGEKIT_STATE_DIR="$psd/proj/.state-$ps_t" \
         CLAUDE_ENV_FILE="$psd/env-$ps_t" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ROOT/scripts/session-brief.sh" >/dev/null 2>&1
     done
     if grep -qxF "export PATH=\"$ROOT/bin:\$PATH\"" "$psd/env-procps" && [ "$(cat "$psd/proj/.state-procps/proc-shim/s-a" 2>/dev/null)" = "$ROOT/bin" ] \
@@ -2130,7 +2197,7 @@ SKCASES
     for ps_case in "s-a 0 still blocks although this session's marker and wrappers exist" "s-b 2 another session's marker switches the check off (parallel sessions)" "s-old 2 a marker pointing at vanished wrappers switches the check off (plugin update)"; do
       ps_sid=${ps_case%% *}; ps_want=${ps_case#* }; ps_want=${ps_want%% *}; ps_code=0
       ps_err=$(jq -nc --arg s "$ps_sid" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pkill -f \"node server.mjs\"; npm run build"}}' \
-        | env -i PATH="$psd/procps:$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$psd/proj" ORANGEKIT_STATE_DIR="$psd/proj/.state-procps" \
+        | _envi PATH="$psd/procps:$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$psd/proj" ORANGEKIT_STATE_DIR="$psd/proj/.state-procps" \
             bash "$ROOT/scripts/security-check.sh" 2>&1 >/dev/null) || ps_code=$?
       # When it blocks, it must block for the intended reason
       if [ "$ps_code" != "$ps_want" ] || { [ "$ps_want" = 2 ] && ! grep -q 'kills its own shell' <<<"$ps_err"; }; then
@@ -2140,7 +2207,10 @@ SKCASES
   }
   rm -rf "${psd:-/nonexistent}"
   ps_ver=$(pkill --version 2>&1) || true
+  # Git Bash ships a procps pkill too, but the proof fixture is Linux process semantics (/proc, exec -a) — not applicable there
+  case "${OSTYPE:-}" in msys*|cygwin*|win*) ps_ver="windows" ;; esac
   case "$ps_ver" in
+    windows) ps_proof="" ;;
     *procps*) ps_out=$(bash "$ROOT/scripts/fixtures/proc-shim-linux.sh" "$ROOT" 2>&1) && ps_proof="this host (procps)" || ps_proof=fail ;;
     *) # run both paths — a version with `--ignore-ancestors` (debian bookworm 4.0.2) and one without (ubuntu 22.04 3.3.17, filtered here)
        if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
@@ -2153,6 +2223,8 @@ SKCASES
   esac
   if [ "$ps_proof" = fail ]; then
     ps_bad=1; bad "proc-shim: Linux procps proof failed — $(printf '%s' "$ps_out" | grep -E 'FAIL|pass [0-9]' | head -3 | tr '\n' ' ')" "run scripts/fixtures/proc-shim-linux.sh directly"
+  elif [ -z "$ps_proof" ] && [ "$ps_ver" = windows ]; then
+    warn "proc-shim: Linux procps proof not applicable on Windows — unverified here" "the wrappers target Linux procps; run the proof on Linux: bash scripts/fixtures/proc-shim-linux.sh \"\$PWD\""
   elif [ -z "$ps_proof" ]; then
     warn "proc-shim: Linux procps proof unverified — no procps host and no docker" "on Linux: bash scripts/fixtures/proc-shim-linux.sh \"\$PWD\""
   fi
@@ -2173,13 +2245,17 @@ SKCASES
     mkdir -p "$nd/.claude/rules" "$nd/migrations" "$nd/tr"
     for glabel in data-modeling ui-design code-change workflow-routing; do cp "$ROOT/rules/$glabel.md" "$nd/.claude/rules/"; done
     : > "$nd/migrations/0001_init.sql"
+    # Git Bash rewrites /tmp/… arguments to C:/Users/…/Temp/… when it calls a native program (jq.exe), so the fixture JSON
+    # said C:/… while CLAUDE_PROJECT_DIR stayed /tmp/… — no file was ever inside the root and all 12 gate cases passed
+    # silently on windows-latest. The JSON is built with conversion off (ignored on macOS and Linux)
+    _jqraw() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
     _tl() {   # one transcript line: C | R path [limit] | B command | S skill | U user sentence
       case "$1" in
         C) jq -nc '{type:"system",subtype:"compact_boundary"}' ;;
-        R) jq -nc --arg v "$2" --arg l "${3:-}" '{type:"assistant",message:{content:[{type:"tool_use",name:"Read",input:({file_path:$v} + (if $l=="" then {} else {limit:($l|tonumber)} end))}]}}' ;;
-        B) jq -nc --arg v "$2" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$v}}]}}' ;;
-        S) jq -nc --arg v "$2" '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:{skill:$v}}]}}' ;;
-        U) jq -nc --arg v "$2" '{type:"user",message:{content:$v}}' ;;
+        R) _jqraw -nc --arg v "$2" --arg l "${3:-}" '{type:"assistant",message:{content:[{type:"tool_use",name:"Read",input:({file_path:$v} + (if $l=="" then {} else {limit:($l|tonumber)} end))}]}}' ;;
+        B) _jqraw -nc --arg v "$2" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$v}}]}}' ;;
+        S) _jqraw -nc --arg v "$2" '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:{skill:$v}}]}}' ;;
+        U) _jqraw -nc --arg v "$2" '{type:"user",message:{content:$v}}' ;;
       esac; }
     local rr="$nd/.claude/rules"
     : > "$nd/tr/none.jsonl"
@@ -2195,11 +2271,11 @@ SKCASES
     _tl U "<command-name>/dev-docs-generator</command-name> feature 1" > "$nd/tr/docs-cmd.jsonl"
     _gate() {   # $1 tool $2 path or command (\n allowed) $3 transcript (-=none) $4 session
       local a; a=$(printf '%b' "$2")
-      jq -nc --arg t "$1" --arg a "$a" --arg tp "$3" --arg s "$4" --arg cwd "$nd" \
+      _jqraw -nc --arg t "$1" --arg a "$a" --arg tp "$3" --arg s "$4" --arg cwd "$nd" \
         '{session_id:$s,cwd:$cwd,tool_name:$t,hook_event_name:"PreToolUse"}
          + (if $t=="Bash" then {tool_input:{command:$a}} else {tool_input:{file_path:$a,content:"x",old_string:"a",new_string:"b"}} end)
          + (if $tp=="-" then {} else {transcript_path:$tp} end)' \
-        | env -i PATH="$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$nd" ORANGEKIT_STATE_DIR="$nd/.state" CLAUDE_PLUGIN_ROOT="$ROOT" \
+        | _envi PATH="$PATH" HOME="$HOME" CLAUDE_PROJECT_DIR="$nd" ORANGEKIT_STATE_DIR="$nd/.state" CLAUDE_PLUGIN_ROOT="$ROOT" \
             bash "$ROOT/scripts/security-check.sh" >"$nd/out" 2>"$nd/err"
     }
     _gcase() {
@@ -2211,7 +2287,7 @@ SKCASES
       if [ "$gcode" -eq "$gwant" ] && { [ "$gexp" = "-" ] || printf '%s' "$gerr" | grep -qF -- "$gexp"; }; then
         gok=$((gok+1))
       else
-        gbad=$((gbad+1)); bad "prior-knowledge gate: $glabel → exit $gcode (expected $gwant, reason \"$gexp\")" "$(printf '%s' "$gerr" | head -3)"
+        gbad=$((gbad+1)); bad "prior-knowledge gate: $glabel → exit $gcode (expected $gwant, reason \"$gexp\")" "$(printf '%s' "$gerr" | head -3)$(case "${OSTYPE:-}" in msys*|cygwin*|win*) printf ' [windows: root=%s · fixture path as jq sees it=%s]' "$nd" "$(_jqraw -nr --arg a "$nd/x" '$a' 2>&1 | head -1)" ;; esac)"
       fi
     }
     for gphase in norunner runner; do
@@ -2244,6 +2320,10 @@ SKCASES
 0|-|Bash|cat > notes.txt <<'EOF'\nsee > migrations/0010_y.sql later\nEOF|none|s20|[norunner] a `>` inside a heredoc body is not a write → pass
 0|-|Bash|npm test > /tmp/test.log 2>&1|none|s21|[norunner] a log outside the project → pass
 0|-|Bash|cat > migrations/0009_x.sql <<'EOF'\nCREATE TABLE a (id int);\nEOF|read|s22|[norunner] Bash heredoc after reading the card → pass
+0|-|Bash|cd /tmp; sed -i '' 's/int/bigint/' migrations/0001_init.sql|none|s23|[norunner] B12 sed after `cd` out of the project → the target is not the project's file, pass
+2|data-modeling.md|Bash|cd migrations && sed -i '' 's/int/bigint/' 0001_init.sql|none|s24|[norunner] B12 sed after `cd` into the project → resolved against that cd, blocked
+2|data-modeling.md|Bash|cd src/.. && sed -i '' 's/int/bigint/' migrations/0001_init.sql|none|s25|[norunner] B12 `..` in a cd is folded → still the project's file, blocked
+0|-|Bash|cd "$D" && sed -i '' 's/int/bigint/' migrations/0001_init.sql|none|s26|[norunner] B12 a cd that cannot be followed → skipped, not guessed
 2|test-driven-development|Write|src/server/points.ts|code|s1|[runner] test runner present · new behavior code · TDD not called → blocked
 0|-|Write|src/server/points.ts|code-tdd|s2|[runner] TDD skill called → pass
 0|-|Write|src/server/points.test.ts|code|s3|[runner] a test file → TDD not required
@@ -2381,6 +2461,8 @@ FXP
         'unguarded grep -c' 'cat "$T/../plant-grepc" >> "$T/scripts/guarded.sh"'
       _fx_static_case "$sfx" var-nonascii 'scripts/guarded.sh' 'a→' \
         'non-ASCII after' 'cat "$T/../plant-arrow" >> "$T/scripts/guarded.sh"'
+      _fx_static_case "$sfx" crlf-script 'scripts/crlf.sh' '^exit 0' \
+        'CRLF line endings' 'printf "#!/bin/bash\\r\\nexit 0\\r\\n" > "$T/scripts/crlf.sh"'
 
       _fx_static_case "$sfx" always-rule   'rules/workflow-routing.md' '^paths:' \
         "no always-loaded rule card" 'printf -- "---\npaths:\n  - \"src/**\"\n---\n" | cat - "$T/rules/workflow-routing.md" > "$T/r.tmp" && mv "$T/r.tmp" "$T/rules/workflow-routing.md"'
@@ -2535,6 +2617,40 @@ FXP
     fi
   fi
 
+  # ── hook edge cases (transcript · gate order · Windows paths) — cases a one-line JSON fixture cannot express ──
+  sec "hook edge cases (unparseable transcript · gate order · cost per target · Windows path · -c payload)"
+  local hec_out
+  if hec_out=$(bash "$ROOT/scripts/fixtures/hook-edge-cases.sh" "$ROOT" 2>&1); then
+    ok "hook edge cases: $(printf '%s\n' "$hec_out" | tail -1)"
+  else
+    bad "hook edge cases: $(printf '%s\n' "$hec_out" | tail -1)" "$(printf '%s\n' "$hec_out" | grep '^FAIL' | head -3 | cut -c1-160)"
+  fi
+
+  # ── process budget per hook call — on Windows each exec costs ~15–30 ms, so the count is the cost (CI run 7: 3.1–3.7 s per call) ──
+  sec "process budget per hook call (fixed inputs, PATH shim)"
+  local pb_out
+  if pb_out=$(bash "$ROOT/scripts/fixtures/proc-budget.sh" "$ROOT" 2>&1); then
+    ok "process budget: $(printf '%s\n' "$pb_out" | tail -1) · $(printf '%s\n' "$pb_out" | grep -c '^ok') calls within budget"
+  else
+    bad "process budget: $(printf '%s\n' "$pb_out" | tail -1)" "$(printf '%s\n' "$pb_out" | grep '^FAIL' | head -3 | cut -c1-160)"
+  fi
+
+  local compat_out warm_out
+  if compat_out=$(bash "$ROOT/scripts/fixtures/win-compat.sh" "$ROOT" 2>&1); then
+    ok "Windows shim simulation: $(printf '%s\n' "$compat_out" | tail -1)"
+  else
+    bad "Windows shim simulation" "$compat_out"
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    if warm_out=$(python3 "$ROOT/scripts/fixtures/session-warmup.py" "$ROOT" 2>&1); then
+      ok "SessionStart worker lifecycle: $(printf '%s\n' "$warm_out" | tail -1)"
+    else
+      bad "SessionStart worker lifecycle" "$warm_out"
+    fi
+  else
+    warn "SessionStart worker lifecycle: unverified (Python unavailable)"
+  fi
+
   # ── orphan fixtures ────────────────────────────────────────────────
   # Compare what was **actually fed** above against the directory. Because which fixture is used is not re-derived
   # (the ${event}.json interpolation + the literal references are not reimplemented), it stays in agreement forever
@@ -2566,10 +2682,13 @@ FXP
     { printf 'ghost-hook|2026-01-01T00:00:00Z|x|0\n'
       awk 'BEGIN{ for (i = 0; i < 2100; i++) print "noisy-hook|2026-01-02T00:00:00Z|x|0" }'
     } > "$rt/hookrun.log"
+    # Rotation runs in session-brief (orangekit_rotate_logs), not in every heartbeat — the heartbeat appends, then the rotation
     ORANGEKIT_STATE_DIR="$rt" ORANGEKIT_ROOT="$rt" ORANGEKIT_HOOK_NAME="noisy-hook" \
-      bash -c '. "$1/scripts/lib/common.sh"; orangekit_heartbeat 0' _ "$ROOT" >/dev/null 2>&1
+      bash -c '. "$1/scripts/lib/common.sh"; orangekit_heartbeat 0; orangekit_rotate_logs' _ "$ROOT" >/dev/null 2>&1
     rn=$(num "$(wc -l < "$rt/hookrun.log" 2>/dev/null | tr -d ' ')")
-    if awk -F'|' '{print $1}' "$rt/hookrun.log" 2>/dev/null | grep -qx 'ghost-hook'; then
+    # One awk, no pipe: `awk | grep -qx` under pipefail read SIGPIPE as "not found" — ghost-hook is the first line, grep
+    # exits on it while awk still writes ~1000 lines (measured on ubuntu:24.04: 2/400 false "erased"; every ubuntu-latest run)
+    if awk -F'|' '$1 == "ghost-hook" { f = 1 } END { exit !f }' "$rt/hookrun.log" 2>/dev/null; then
       ok "the last evidence of a pushed-out hook survives rotation (${rn} lines)"
     else
       bad "rotation erased the evidence of a pushed-out hook (${rn} lines)" \
@@ -2583,7 +2702,7 @@ FXP
     # graph.log — of the three logs, only this one had no rotation (evaluation v6 · E-28). Same approach: look at behaviour.
     awk 'BEGIN{ for (i = 0; i < 5100; i++) print "2026-01-01T00:00:00Z|build|security-check" }' > "$rt/graph.log"
     ORANGEKIT_STATE_DIR="$rt" ORANGEKIT_ROOT="$rt" \
-      bash -c '. "$1/scripts/lib/common.sh"; orangekit_edge build handoff' _ "$ROOT" >/dev/null 2>&1
+      bash -c '. "$1/scripts/lib/common.sh"; orangekit_edge build handoff; orangekit_rotate_logs' _ "$ROOT" >/dev/null 2>&1
     rn=$(num "$(wc -l < "$rt/graph.log" 2>/dev/null | tr -d ' ')")
     if [ "$rn" -gt 0 ] && [ "$rn" -le 2600 ] && tail -1 "$rt/graph.log" | grep -q '|build|handoff$'; then
       ok "graph.log size after rotation is bounded (${rn} lines ≤ 2600) · last edge preserved"
@@ -2593,7 +2712,173 @@ FXP
     rm -rf "$rt"
   fi
 
+  sec "error record for /orangekit-feedback"
+  local ef efl efr
+  ef=$(mktemp -d 2>/dev/null) || ef=""
+  if [ -z "$ef" ]; then
+    warn "failed to create a temporary directory" "error record fixture skipped"
+  else
+    # ① a failing hook writes where it failed (line + command), not only the exit code
+    ORANGEKIT_STATE_DIR="$ef" ORANGEKIT_ROOT="$ef" bash -c \
+      'source "$1"; ORANGEKIT_HOOK_NAME=fx-hook; false' _ "$ROOT/scripts/lib/common.sh" >/dev/null 2>&1 || true
+    efl=$(grep '^fx-hook|' "$ef/hookrun.log" 2>/dev/null | tail -1)
+    case "$efl" in
+      *'|1|line '*': false') ok "a failing hook records its line and command for the report" ;;
+      *) bad "a failing hook left no usable error record (got '${efl}')" "/orangekit-feedback would have nothing to fill in" ;;
+    esac
+    # ② only failures after the previous session are reported — an old, fixed failure does not come back
+    {
+      printf 'session-brief|t1|r|0\n'
+      printf 'build-gate|t2|r|1|line 5: old-failure\n'
+      printf 'session-brief|t3|r|0\n'
+      printf 'handoff|t4|r|3|line 9: new-failure\n'
+      printf 'session-brief|t5|r|0\n'
+    } > "$ef/window.log"
+    efr=$(bash -c 'source "$1"; orangekit_recent_failures "$2"' _ "$ROOT/scripts/lib/common.sh" "$ef/window.log" 2>/dev/null || true)
+    case "$efr" in
+      *new-failure*) case "$efr" in
+                       *old-failure*) bad "an error from an earlier session is reported again" "the warning would never clear" ;;
+                       *) ok "only errors since the last session are reported (an old one does not come back)" ;;
+                     esac ;;
+      *) bad "a new error since the last session is not reported (got '${efr}')" ;;
+    esac
+    rm -rf "$ef"
+  fi
+
+  sec "feedback drafts at session start"
+  # ③ a new hook error is drafted as a report; one already sent is not drafted again (one run proves both)
+  local fdp fdo fds fdn
+  fdp=$(mktemp -d 2>/dev/null) || fdp=""
+  if [ -z "$fdp" ]; then
+    warn "failed to create a temporary directory" "feedback draft fixture skipped"
+  else
+    mkdir -p "$fdp/.claude/.orangekit/feedback-drafts/sent"
+    printf 'session-brief|t1|x|0\nhandoff|t2|x|3|line 9: sent-before\nbuild-gate|t3|x|1|line 40: brand-new\n' \
+      > "$fdp/.claude/.orangekit/hookrun.log"
+    fds=$(printf '%s' 'handoff (exit 3: line 9: sent-before)' | cksum | cut -d' ' -f1)
+    : > "$fdp/.claude/.orangekit/feedback-drafts/sent/$fds.md"
+    # The self-test exports its own ORANGEKIT_STATE_DIR — point this run at the fixture's state folder instead
+    fdo=$(ORANGEKIT_STATE_DIR="$fdp/.claude/.orangekit" ORANGEKIT_ROOT="$fdp" CLAUDE_PROJECT_DIR="$fdp" \
+          bash scripts/session-brief.sh <<< '{}' 2>/dev/null || true)
+    fdn=$(num "$(ls "$fdp/.claude/.orangekit/feedback-drafts"/*.md 2>/dev/null | wc -l)")
+    if [ "$fdn" -eq 1 ] && grep -q 'brand-new' "$fdp/.claude/.orangekit/feedback-drafts"/*.md 2>/dev/null \
+       && grep -q 'Bug report drafted: build-gate' <<< "$fdo"; then
+      ok "a new hook error is drafted and announced; one already sent is not drafted again"
+    else
+      bad "feedback drafts: $fdn draft(s), banner $(grep -c 'Bug report drafted' <<< "$fdo")" \
+          "expected exactly the new error drafted and announced, and the sent one skipped"
+    fi
+    rm -rf "$fdp"
+  fi
+
+  sec "jq discovery after a winget install"
+  local wj wgot wdir
+  wj=$(mktemp -d 2>/dev/null) || wj=""
+  if [ -z "$wj" ]; then
+    warn "failed to create a temporary directory" "jq discovery fixture skipped"
+  else
+    wdir="$wj/Microsoft/WinGet/Packages/jqlang.jq_fixture"
+    mkdir -p "$wdir" && : > "$wdir/jq.exe"
+    wgot=$(bash -c 'source "$1" >/dev/null 2>&1; orangekit_winget_jq_dir "$2"' _ "$ROOT/scripts/lib/common.sh" "$wj" 2>/dev/null || true)
+    [ "$wgot" = "$wdir" ] && ok "a jq installed by winget is found without a shell restart" \
+      || bad "winget jq not found (got '${wgot}')" "hooks stay degraded until Claude Code restarts"
+    rm -f "$wdir/jq.exe"
+    wgot=$(bash -c 'source "$1" >/dev/null 2>&1; orangekit_winget_jq_dir "$2"' _ "$ROOT/scripts/lib/common.sh" "$wj" 2>/dev/null || true)
+    [ -z "$wgot" ] && ok "  …and nothing is reported when winget has no jq" \
+      || bad "a jq directory was reported where none exists: $wgot"
+    rm -rf "$wj"
+  fi
+
   # Root resolution check
+  sec "worktree snapshot shape (GNU · BSD stat)"
+  # One line per changed file: path<TAB>mtime<TAB>size. GNU stat once read `stat -f` as file-system status and the
+  # snapshot filled with free-block counts that change by the second (Linux · Git Bash) — the Stop gate's baseline
+  local ws wsout wsbad
+  ws=$(mktemp -d 2>/dev/null) || ws=""
+  if [ -n "$ws" ]; then
+    ( cd "$ws" && git init -q && printf 'a\n' > a.ts && printf 'b\n' > b.ts && git add -A \
+      && git -c user.email=t@t -c user.name=t commit -qm x && printf 'a2\n' > a.ts && printf 'b2\n' > b.ts ) >/dev/null 2>&1
+    wsout=$(cd "$ws" && bash -c 'source "$1" >/dev/null 2>&1; orangekit_worktree_snapshot' _ "$ROOT/scripts/lib/common.sh" 2>/dev/null || true)
+    wsbad=$(printf '%s\n' "$wsout" | awk -F'\t' 'NF != 3 || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/' | head -1)
+    if [ "$(printf '%s\n' "$wsout" | grep -c .)" = 2 ] && [ -z "$wsbad" ]; then
+      ok "2 changed files → 2 lines of path·mtime·size"
+    else
+      bad "worktree snapshot malformed" "expected 2 lines path<TAB>mtime<TAB>size — first bad line: ${wsbad:-(line count $(printf '%s\n' "$wsout" | grep -c .))}"
+    fi
+    rm -rf "$ws"
+  fi
+
+  case "${OSTYPE:-}" in
+    msys*|cygwin*|win*)
+      # On a real Windows shell a simulation proves nothing — check the real jq.exe / python through the shims
+      sec "Windows: Python and jq through the shims (this host)"
+      local wj wpy2
+      wj=$(bash -c 'source "$1" >/dev/null 2>&1; printf "{\"a\":\"x\"}" | jq -r .a' _ "$ROOT/scripts/lib/common.sh" 2>/dev/null || true)
+      [ "$wj" = x ] && ok "jq output carries no \\r on this Windows host" || bad "jq output on Windows still carries a CR (got '$(printf '%s' "$wj" | od -c | head -1)')"
+      wpy2=$(bash -c 'source "$1" >/dev/null 2>&1; python3 -c "print(6*7)"' _ "$ROOT/scripts/lib/common.sh" 2>/dev/null || true)
+      wpy3=$(bash -c 'source "$1" >/dev/null 2>&1; python3 -c "print(chr(0x2260))"' _ "$ROOT/scripts/lib/common.sh" 2>/dev/null || true)
+      [ "$wpy3" = "$(printf '\342\211\240')" ] && ok "Python prints ≠ on this Windows host (UTF-8, no cp1252 crash)" || bad "Python output on Windows is not UTF-8 (got '${wpy3}')" "a check message holding ≠ or → would vanish"
+      if [ "$wpy2" = 42 ]; then ok "python3 resolves to a working Python with no \\r on this Windows host"
+      elif ! python -c 'import sys' >/dev/null 2>&1 && ! py -3 -c 'import sys' >/dev/null 2>&1; then warn "no Python installed on this Windows host — resolution unverified"
+      else bad "python3 does not resolve to a working Python on Windows (got '$(printf '%s' "$wpy2" | od -c | head -1)')"; fi ;;
+  esac
+  case "${OSTYPE:-}" in msys*|cygwin*|win*) ;; *)
+  sec "Windows: Python and jq resolution (simulated Git Bash)"
+  # OSTYPE=msys + a python3 that behaves like the Microsoft Store alias (exit 9009) + a python and a jq that end lines with
+  # CRLF, as native Windows builds do. The resolver must pick the working python and strip the \r from both
+  local wb wpy wjq realpy
+  realpy=$(command -v python3 2>/dev/null || true)
+  wb=$(mktemp -d 2>/dev/null) || wb=""
+  if [ -z "$wb" ] || [ -z "$realpy" ] || ! command -v jq >/dev/null 2>&1; then
+    warn "Windows resolution simulation skipped" "needs python3, jq and a temp directory on this host"
+  else
+    printf '#!/bin/bash\nexit 9009\n' > "$wb/python3"
+    printf '#!/bin/bash\n"%s" "$@" | sed "s/$/\\r/"\n' "$realpy" > "$wb/python"
+    printf '#!/bin/bash\n"%s" "$@" | sed "s/$/\\r/"\n' "$(command -v jq)" > "$wb/jq"
+    chmod +x "$wb/python3" "$wb/python" "$wb/jq"
+    wpy=$(OSTYPE=msys PATH="$wb:$PATH" bash -c 'source "$1" >/dev/null 2>&1; python3 -c "print(6*7)"' _ "$ROOT/scripts/lib/common.sh" 2>/dev/null || true)
+    [ "$wpy" = 42 ] && ok "Store-alias python3 skipped → python used, CRLF stripped" \
+      || bad "Windows python resolution failed (got '$(printf '%s' "$wpy" | od -c | head -1)')" "init, update and the session brief would run no Python or read values ending in \\r"
+    wjq=$(OSTYPE=msys PATH="$wb:$PATH" bash -c 'source "$1" >/dev/null 2>&1; printf "{\"a\":\"x\"}" | jq -r .a' _ "$ROOT/scripts/lib/common.sh" 2>/dev/null || true)
+    [ "$wjq" = x ] && ok "  …native jq.exe CRLF stripped" || bad "jq CRLF not stripped on a Windows shell (got '$(printf '%s' "$wjq" | od -c | head -1)')"
+    wpy=$(OSTYPE=darwin PATH="$wb:$PATH" bash -c 'source "$1" >/dev/null 2>&1; type -t python3' _ "$ROOT/scripts/lib/common.sh" 2>/dev/null || true)
+    [ "$wpy" = file ] && ok "  …and outside a Windows shell nothing is wrapped" || bad "the Windows resolver ran on a non-Windows shell (python3 is a $wpy)"
+    # A Windows console encodes Python's stdout as cp1252: "≠" or "→" in a check message raised UnicodeEncodeError and the
+    # FAIL never printed (guide-gate on windows-latest, CI run 6). The shims switch Python to UTF-8 on Windows shells
+    wpy=$(PYTHONIOENCODING=cp1252 OSTYPE=msys bash -c 'source "$1" >/dev/null 2>&1; python3 -c "print(chr(0x2260) + chr(0x2192))"' _ "$ROOT/scripts/lib/common.sh" 2>/dev/null || true)
+    [ "$wpy" = "$(printf '\342\211\240\342\206\222')" ] && ok "  …Python output stays UTF-8 under a cp1252 console (≠ → printed, no crash)" \
+      || bad "Python output under a cp1252 console lost a check message (got '${wpy}')" "a FAIL holding ≠ or → would vanish on Windows"
+    rm -rf "$wb"
+  fi ;;
+  esac
+
+  sec "rule-card drift counts only older copies"
+  local dp dbo
+  dp=$(mktemp -d 2>/dev/null) || dp=""
+  if [ -n "$dp" ]; then
+    printf '{}\n' > "$dp/orangekit.config.json"; ( cd "$dp" && git init -q ) >/dev/null 2>&1
+    CLAUDE_PROJECT_DIR="$dp" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ROOT/scripts/install-rules.sh" --quiet >/dev/null 2>&1
+    sed 's/orangekit-rule-version: [0-9.]*/orangekit-rule-version: 99.0.0/' "$dp/.claude/rules/security.md" > "$dp/x" && mv "$dp/x" "$dp/.claude/rules/security.md"
+    sed 's/orangekit-rule-version: [0-9.]*/orangekit-rule-version: 0.0.1/' "$dp/.claude/rules/lessons.md" > "$dp/x" && mv "$dp/x" "$dp/.claude/rules/lessons.md"
+    dbo=$(printf '{}' | ORANGEKIT_STATE_DIR="$dp/.st" CLAUDE_PLUGIN_ROOT="$ROOT" CLAUDE_PROJECT_DIR="$dp" bash "$ROOT/scripts/session-brief.sh" 2>/dev/null || true)
+    if grep -q '1 T1 rule cards are on an old version' <<< "$dbo"; then ok "one newer + one older card → 1 reported (a newer copy is kept, not nagged about)"
+    else bad "drift count wrong: $(grep -o '[0-9]* T1 rule cards are on an old version' <<< "$dbo" || echo none)" "a card newer than the plugin's would be nagged about every session"; fi
+    rm -rf "$dp"
+  fi
+
+  sec "Windows paths (Git Bash)"
+  # Claude Code on Windows hands hooks C:\… paths; every comparison in the hooks splits on "/" (orangekit_slashes)
+  local wp
+  wp=$(bash -c 'source "$1" >/dev/null 2>&1; orangekit_slashes "$2"' _ "$ROOT/scripts/lib/common.sh" 'C:\Users\me\proj\src\a.ts' 2>/dev/null || true)
+  [ "$wp" = 'C:/Users/me/proj/src/a.ts' ] && ok "a Windows path from Claude Code becomes C:/… (prefix strips and paths: globs meet)" \
+    || bad "Windows path not normalized (got '${wp}')" "the knowledge gate and the API-route checks never match on Windows"
+  wp=$(OSTYPE=darwin bash -c 'source "$1" >/dev/null 2>&1; orangekit_slashes "$2"' _ "$ROOT/scripts/lib/common.sh" '/tmp/a\b' 2>/dev/null || true)
+  [ "$wp" = '/tmp/a\b' ] && ok "  …a backslash in a macOS/Linux file name is left alone" \
+    || bad "a POSIX file name with a backslash was rewritten (got '${wp}')"
+  wp=$(OSTYPE=msys bash -c 'source "$1" >/dev/null 2>&1; orangekit_slashes "$2"' _ "$ROOT/scripts/lib/common.sh" 'src\a.ts' 2>/dev/null || true)
+  [ "$wp" = 'src/a.ts' ] && ok "  …and a relative path on a Windows shell is normalized too" \
+    || bad "relative Windows path not normalized (got '${wp}')"
+
   sec "root resolution"
   local resolved
   resolved=$(cd "$(dirname scripts/doctor.sh)/.." 2>/dev/null && pwd)
@@ -3045,8 +3330,10 @@ run_consumer() {
     local bk="AKI""A""IOSFODNN7""EXAMPLE" bfill berr
     bfill=$(yes '// filler' 2>/dev/null | head -30000)
     code=0
-    berr=$(jq -nc --arg c "export const id = '$bk';
-$bfill" --arg p "$up/src/cfg.ts" '{hook_event_name:"PreToolUse",tool_name:"Write",tool_input:{file_path:$p,content:$c}}' \
+    # The content goes to jq on stdin, not as --arg: Linux caps one argument at 128 KB (MAX_ARG_STRLEN), so a 300 KB
+    # --arg made jq itself fail with exit 126 there and this case reported a hook defect that did not exist (macOS has no such cap)
+    berr=$({ printf "export const id = '%s';\n" "$bk"; printf '%s\n' "$bfill"; } \
+      | jq -Rsc --arg p "$up/src/cfg.ts" '{hook_event_name:"PreToolUse",tool_name:"Write",tool_input:{file_path:$p,content:.}}' \
       | CLAUDE_PLUGIN_ROOT="$cache" CLAUDE_PROJECT_DIR="$up" bash "$cache/scripts/security-check.sh" 2>&1 >/dev/null) || code=$?
     if [ "$code" = 2 ] && printf '%s' "$berr" | grep -q 'AWS'; then
       ok "security-check: secret on the first line of a 300KB Write → blocked (AWS reason)"
@@ -3258,7 +3545,7 @@ run_usage() {
     local unseen="" un=0 sname
     while IFS= read -r sname; do
       [ -z "$sname" ] && continue
-      awk -F'|' '{n=$2; sub(/^[^:]*:/,"",n); print n}' "$d/skilluse.log" 2>/dev/null | grep -qx "$sname" \
+      awk -F'|' -v s="$sname" '{n=$2; sub(/^[^:]*:/,"",n); if (n == s) f = 1} END {exit !f}' "$d/skilluse.log" 2>/dev/null \
         || { un=$((un+1)); unseen="$unseen $sname"; }
     done < <(ls -1 "$PLUGIN_ROOT/skills" 2>/dev/null)
     if [ "$un" -gt 0 ]; then
